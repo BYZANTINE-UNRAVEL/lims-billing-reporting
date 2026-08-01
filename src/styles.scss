@@ -1,0 +1,2630 @@
+@use '@angular/material' as mat;
+@include mat.core();
+
+html, body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  font-family: Inter, "Segoe UI", system-ui, sans-serif;
+}
+
+:root {
+  --bg: #eef3fb;
+  --sidebar: rgba(255, 255, 255, 0.80);
+  --topbar: rgba(255, 255, 255, 0.76);
+  --panel: rgba(255, 255, 255, 0.90);
+  --row: rgba(255, 255, 255, 0.76);
+  --input: rgba(255, 255, 255, 0.82);
+  --code: #f8fafc;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: rgba(15, 23, 42, 0.10);
+  --shadow: 0 18px 55px rgba(15, 23, 42, 0.10);
+  --accent: #4f46e5;
+  --accent-soft: rgba(79, 70, 229, 0.12);
+  --accent-gradient: linear-gradient(135deg, #4f46e5, #8b5cf6);
+  --glow: 0 16px 34px rgba(79, 70, 229, 0.28);
+  --success: #059669;
+  --danger: #dc2626;
+  --scroll: rgba(79, 70, 229, 0.35);
+}
+
+body.dark-theme {
+  --bg: #070b12;
+  --sidebar: rgba(10, 15, 25, 0.86);
+  --topbar: rgba(8, 12, 20, 0.78);
+  --panel: rgba(17, 24, 39, 0.86);
+  --row: rgba(15, 23, 42, 0.74);
+  --input: rgba(15, 23, 42, 0.90);
+  --code: #020617;
+  --text: #f8fafc;
+  --muted: #94a3b8;
+  --border: rgba(255, 255, 255, 0.08);
+  --shadow: 0 18px 60px rgba(0, 0, 0, 0.42);
+  --accent: #8b5cf6;
+  --accent-soft: rgba(139, 92, 246, 0.15);
+  --accent-gradient: linear-gradient(135deg, #6366f1, #a855f7);
+  --glow: 0 16px 34px rgba(139, 92, 246, 0.35);
+  --success: #34d399;
+  --danger: #fb7185;
+  --scroll: rgba(139, 92, 246, 0.45);
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(99, 102, 241, 0.18), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.12), transparent 28%),
+    var(--bg);
+  color: var(--text);
+}
+
+* { box-sizing: border-box; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--scroll);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+button { font-family: inherit; }
+
+.mat-mdc-button,
+.mat-mdc-raised-button,
+.mat-mdc-outlined-button,
+.mat-mdc-stroked-button {
+  border-radius: 14px !important;
+}
+
+.mat-mdc-raised-button.mat-primary {
+  background: var(--accent-gradient) !important;
+  color: white !important;
+  box-shadow: var(--glow) !important;
+}
+
+mat-card { color: var(--text) !important; }
+
+app-icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.1;
+  vertical-align: middle;
+}
+
+
+.ico {
+  width: 18px;
+  height: 18px;
+  display: inline-block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: 0 0 auto;
+  vertical-align: -3px;
+}
+
+button .ico,
+.nav .ico,
+.status-line .ico,
+.connection-pill .ico,
+.theme-button .ico {
+  margin-right: 8px;
+}
+
+
+/* Local inline SVG icons - no fonts, no CDN, no ligature dependency */
+.svg-icon,
+.ico {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  display: inline-block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: -3px;
+}
+
+button .svg-icon,
+button .ico,
+.side-nav .svg-icon,
+.theme-button .svg-icon,
+.search-box .svg-icon,
+.empty-state .svg-icon,
+.empty-table .svg-icon {
+  margin-right: 8px;
+}
+
+.side-nav .svg-icon,
+.theme-button .svg-icon {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+}
+
+.empty-state .svg-icon,
+.empty-table .svg-icon {
+  width: 48px;
+  height: 48px;
+  margin-right: 0;
+  color: var(--accent);
+}
+
+
+/* Collapsible sidebar UX */
+.app-shell {
+  grid-template-columns: 84px 1fr !important;
+  transition: grid-template-columns 0.24s cubic-bezier(.2,.8,.2,1);
+}
+
+.app-shell.sidebar-expanded {
+  grid-template-columns: 280px 1fr !important;
+}
+
+.sidebar {
+  width: 84px !important;
+  overflow: hidden;
+  transition: width 0.24s cubic-bezier(.2,.8,.2,1), box-shadow 0.24s ease;
+  position: relative;
+  z-index: 20;
+}
+
+.sidebar.expanded {
+  width: 280px !important;
+  box-shadow: 16px 0 45px rgba(0, 0, 0, 0.16);
+}
+
+.sidebar-toggle {
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  margin-bottom: 6px;
+  transition: background 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+}
+
+.sidebar-toggle:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.sidebar .brand {
+  min-width: 236px;
+}
+
+.sidebar .brand-title,
+.sidebar .brand-subtitle,
+.sidebar .nav span,
+.sidebar .side-nav span,
+.sidebar .sidebar-footer span,
+.sidebar .connection-pill span,
+.sidebar .theme-button span {
+  opacity: 0;
+  transform: translateX(-8px);
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: opacity 0.16s ease, transform 0.16s ease, max-width 0.16s ease;
+}
+
+.sidebar.expanded .brand-title,
+.sidebar.expanded .brand-subtitle,
+.sidebar.expanded .nav span,
+.sidebar.expanded .side-nav span,
+.sidebar.expanded .sidebar-footer span,
+.sidebar.expanded .connection-pill span,
+.sidebar.expanded .theme-button span {
+  opacity: 1;
+  transform: translateX(0);
+  max-width: 180px;
+}
+
+.sidebar .brand {
+  gap: 12px;
+}
+
+.sidebar:not(.expanded) .brand {
+  justify-content: center;
+}
+
+.sidebar:not(.expanded) .brand-icon,
+.sidebar:not(.expanded) .nav button,
+.sidebar:not(.expanded) .side-nav button,
+.sidebar:not(.expanded) .theme-button,
+.sidebar:not(.expanded) .connection-pill {
+  justify-content: center;
+}
+
+.sidebar:not(.expanded) .nav button,
+.sidebar:not(.expanded) .side-nav button,
+.sidebar:not(.expanded) .theme-button,
+.sidebar:not(.expanded) .connection-pill {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.sidebar:not(.expanded) .sidebar-footer {
+  align-items: center;
+}
+
+.sidebar:not(.expanded) .svg-icon,
+.sidebar:not(.expanded) .ico {
+  margin-right: 0 !important;
+}
+
+.sidebar.expanded .svg-icon,
+.sidebar.expanded .ico {
+  margin-right: 8px;
+}
+
+@media (max-width: 1100px) {
+  .app-shell,
+  .app-shell.sidebar-expanded {
+    grid-template-columns: 84px 1fr !important;
+  }
+
+  .sidebar.expanded {
+    width: 260px !important;
+    position: absolute;
+    inset: 0 auto 0 0;
+  }
+}
+
+
+/* Deep fixed collapsible sidebar */
+.shell {
+  grid-template-columns: 84px 1fr !important;
+  transition: grid-template-columns 0.24s cubic-bezier(.2,.8,.2,1);
+}
+
+.shell.sidebar-expanded {
+  grid-template-columns: 280px 1fr !important;
+}
+
+.sidebar {
+  width: 84px !important;
+  overflow: hidden !important;
+  transition: width 0.24s cubic-bezier(.2,.8,.2,1), box-shadow 0.24s ease;
+}
+
+.sidebar.expanded {
+  width: 280px !important;
+  box-shadow: 16px 0 45px rgba(0, 0, 0, 0.16);
+}
+
+.sidebar-toggle {
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.sidebar-toggle:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.sidebar .brand h1,
+.sidebar .brand p,
+.sidebar .nav-item span,
+.sidebar .side-nav span,
+.sidebar .theme-button span,
+.sidebar .connection-card b,
+.sidebar .connection-card small,
+.sidebar .connection-pill span {
+  opacity: 0;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transform: translateX(-8px);
+  transition: opacity 0.16s ease, max-width 0.16s ease, transform 0.16s ease;
+}
+
+.sidebar.expanded .brand h1,
+.sidebar.expanded .brand p,
+.sidebar.expanded .nav-item span,
+.sidebar.expanded .side-nav span,
+.sidebar.expanded .theme-button span,
+.sidebar.expanded .connection-card b,
+.sidebar.expanded .connection-card small,
+.sidebar.expanded .connection-pill span {
+  opacity: 1;
+  max-width: 190px;
+  transform: translateX(0);
+}
+
+.sidebar:not(.expanded) .brand,
+.sidebar:not(.expanded) .nav-item,
+.sidebar:not(.expanded) .side-nav button,
+.sidebar:not(.expanded) .theme-button,
+.sidebar:not(.expanded) .connection-card,
+.sidebar:not(.expanded) .connection-pill {
+  justify-content: center !important;
+}
+
+.sidebar:not(.expanded) .svg-icon,
+.sidebar:not(.expanded) .ico {
+  margin-right: 0 !important;
+}
+
+.sidebar.expanded .svg-icon,
+.sidebar.expanded .ico {
+  margin-right: 8px;
+}
+
+/* LIMS modular shell + rich billing stepper update */
+html, body { height: 100%; overflow: hidden; }
+body.light { --bg:#f3f6fb; --panel:#ffffff; --panel2:#f8fafc; --sidebar:#ffffff; --text:#0f172a; --muted:#64748b; --border:rgba(15,23,42,.12); --accent:#2563eb; --accent2:#7c3aed; --accent-soft:rgba(37,99,235,.12); --danger-soft:rgba(239,68,68,.12); }
+body.dark-theme, body:not(.light) { --bg:#07111f; --panel:#101827; --panel2:#0b1220; --sidebar:#0a1220; --text:#f8fafc; --muted:#94a3b8; --border:rgba(255,255,255,.10); --accent:#3b82f6; --accent2:#8b5cf6; --accent-soft:rgba(59,130,246,.15); --danger-soft:rgba(239,68,68,.14); }
+
+.lims-shell.app { height:100vh; width:100vw; display:grid; grid-template-columns:280px minmax(0,1fr); background:var(--bg); color:var(--text); overflow:hidden; }
+.lims-shell.side-collapsed { grid-template-columns:84px minmax(0,1fr); }
+.main-scroll { min-width:0; min-height:0; height:100vh; overflow-y:auto; overflow-x:hidden; padding:24px 28px 40px; }
+.page-section { min-height:0; }
+.topbar { position:sticky; top:0; z-index:8; display:flex; justify-content:space-between; align-items:center; gap:16px; padding:0 0 18px; margin-bottom:8px; background:linear-gradient(to bottom,var(--bg) 72%,transparent); }
+.eyebrow { margin:0 0 4px; text-transform:uppercase; letter-spacing:.16em; color:#60a5fa; font-size:12px; font-weight:800; }
+h1,h2,h3,h4,p { margin-top:0; }
+h2 { font-size:28px; margin-bottom:0; }
+
+.side { height:100vh; min-height:0; overflow-y:auto; overflow-x:hidden; padding:18px 14px; background:var(--sidebar); border-right:1px solid var(--border); display:flex; flex-direction:column; gap:14px; transition:width .22s ease, box-shadow .22s ease; width:280px; z-index:20; }
+.side-collapsed .side { width:84px; }
+.side-collapsed .side:hover { width:280px; box-shadow:18px 0 42px rgba(0,0,0,.28); }
+.side-collapsed .side:not(:hover) .brand-text,
+.side-collapsed .side:not(:hover) .nav-label,
+.side-collapsed .side:not(:hover) .side-card b,
+.side-collapsed .side:not(:hover) .side-card span,
+.side-collapsed .side:not(:hover) .side-card small { opacity:0; width:0; overflow:hidden; pointer-events:none; }
+.side-toggle,.theme-toggle,.nav-button { border:1px solid var(--border); border-radius:16px; background:var(--panel); color:var(--text); cursor:pointer; transition:.18s ease; }
+.side-toggle,.theme-toggle { min-height:46px; display:flex; align-items:center; gap:12px; padding:0 14px; font-weight:800; }
+.brand { display:flex; align-items:center; gap:12px; min-width:240px; }
+.logo { width:48px; height:48px; min-width:48px; display:grid; place-items:center; border-radius:18px; background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; font-weight:900; font-size:22px; box-shadow:0 14px 28px rgba(59,130,246,.28); }
+.brand-text h1 { font-size:17px; margin:0; white-space:nowrap; }
+.brand-text p { margin:2px 0 0; color:var(--muted); font-size:12px; }
+.side-nav { display:grid; gap:8px; }
+.nav-button { min-height:48px; display:flex; align-items:center; gap:12px; padding:0 14px; font-weight:800; text-align:left; }
+.nav-button:hover,.side-toggle:hover,.theme-toggle:hover { border-color:#60a5fa; background:var(--accent-soft); transform:translateY(-1px); }
+.nav-button.active { color:#fff; border-color:transparent; background:linear-gradient(135deg,var(--accent),var(--accent2)); box-shadow:0 14px 28px rgba(59,130,246,.24); }
+.nav-icon,.hamburger { width:24px; min-width:24px; text-align:center; display:inline-grid; place-items:center; }
+.side-card { margin-top:auto; min-width:240px; display:grid; gap:4px; background:var(--panel); border:1px solid var(--border); border-radius:20px; padding:14px; box-shadow:0 18px 45px rgba(0,0,0,.16); }
+.side-card span { font-size:24px; font-weight:900; }
+.side-card small { color:var(--muted); }
+
+.actions,.inline,.quick-actions,.step-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.btn { border:1px solid var(--border); border-radius:14px; padding:10px 16px; background:var(--panel2); color:var(--text); font-weight:900; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:8px; line-height:1; }
+.btn:hover:not(:disabled) { transform:translateY(-1px); border-color:#60a5fa; box-shadow:0 12px 26px rgba(15,23,42,.18); }
+.btn:disabled { opacity:.45; cursor:not-allowed; }
+.btn.primary { border-color:transparent; color:#fff; background:linear-gradient(135deg,var(--accent),#2563eb); box-shadow:0 12px 28px rgba(59,130,246,.26); }
+.btn.secondary { background:var(--panel); }
+.btn.pill { border-radius:999px; padding:10px 18px; }
+.btn.small { padding:8px 12px; border-radius:12px; font-size:13px; }
+.btn.big { padding:13px 20px; }
+.btn.danger-soft,.danger-outline { background:var(--danger-soft); border-color:rgba(239,68,68,.35); color:#fecaca; }
+body.light .btn.danger-soft, body.light .danger-outline { color:#991b1b; }
+.primary-action { width:100%; border:0; border-radius:18px; padding:16px 18px; background:linear-gradient(135deg,var(--accent),#2563eb); color:white; font-weight:900; font-size:16px; cursor:pointer; box-shadow:0 16px 34px rgba(59,130,246,.30); }
+.primary-action:disabled { opacity:.5; cursor:not-allowed; }
+
+mat-card,.shell-card { background:var(--panel)!important; color:var(--text)!important; border:1px solid var(--border)!important; border-radius:24px!important; padding:22px!important; box-shadow:0 20px 55px rgba(0,0,0,.16)!important; }
+mat-card>b { display:block; font-size:30px; margin:8px 0; }
+input,select,textarea { box-sizing:border-box; width:100%; background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:14px; padding:12px 14px; min-width:0; outline:none; }
+input:focus,select:focus,textarea:focus { border-color:#60a5fa; box-shadow:0 0 0 3px rgba(96,165,250,.15); }
+textarea { min-height:82px; resize:vertical; }
+.form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:12px 0; }
+.form-grid textarea { grid-column:span 2; }
+.grid4 { display:grid; grid-template-columns:repeat(4,minmax(160px,1fr)); gap:16px; }
+.two { display:grid; grid-template-columns:minmax(420px,.95fr) 1.05fr; gap:16px; }
+.stack { display:grid; gap:16px; }
+.wide { grid-column:span 4; }
+table { width:100%; border-collapse:collapse; margin-top:12px; }
+th,td { padding:11px; border-bottom:1px solid rgba(148,163,184,.18); text-align:left; vertical-align:top; }
+tr.selected { background:rgba(96,165,250,.14); }
+.chip { border:1px solid var(--border); border-radius:999px; background:var(--panel2); padding:7px 11px; display:inline-flex; gap:6px; align-items:center; }
+.catalog { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.settings-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+
+.billing-stepper { height:calc(100vh - 118px); min-height:640px; display:grid; grid-template-rows:auto minmax(0,1fr); padding:0!important; overflow:hidden; }
+.stepper-head { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; padding:18px; border-bottom:1px solid var(--border); background:linear-gradient(135deg,rgba(59,130,246,.08),transparent); }
+.step-tab { border:1px solid var(--border); border-radius:20px; background:var(--panel2); color:var(--text); padding:14px; display:grid; grid-template-columns:auto 1fr; grid-template-areas:'num title' 'num sub'; column-gap:12px; text-align:left; cursor:pointer; }
+.step-tab:disabled { opacity:.45; cursor:not-allowed; }
+.step-tab span { grid-area:num; width:38px; height:38px; border-radius:14px; background:var(--panel); display:grid; place-items:center; font-weight:900; }
+.step-tab b { grid-area:title; }
+.step-tab small { grid-area:sub; color:var(--muted); }
+.step-tab.active { border-color:#60a5fa; background:var(--accent-soft); box-shadow:0 14px 30px rgba(59,130,246,.15); }
+.step-tab.done span { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; }
+.billing-scroll { min-height:0; overflow:auto; padding:20px; }
+.step-panel { display:grid; gap:18px; }
+.panel-title,.selected-head { display:flex; justify-content:space-between; align-items:flex-start; gap:14px; }
+.status-pill { background:var(--accent-soft); color:var(--text); border:1px solid var(--border); border-radius:999px; padding:8px 12px; font-weight:800; }
+.rich-box { background:var(--panel2); border:1px solid var(--border); border-radius:22px; padding:16px; }
+.patient-search { display:grid; gap:8px; }
+.patient-search label,.bill-item label,.billing-summary label { font-size:13px; color:var(--muted); font-weight:800; }
+.patient-results { display:grid; gap:8px; max-height:180px; overflow:auto; }
+.patient-results button { border:1px solid var(--border); border-radius:14px; background:var(--panel); color:var(--text); padding:12px; display:flex; justify-content:space-between; gap:12px; text-align:left; cursor:pointer; }
+.patient-results button:hover { border-color:#60a5fa; }
+.item-selection-grid,.payment-grid { display:grid; grid-template-columns:minmax(420px,.95fr) minmax(520px,1.05fr); gap:18px; align-items:start; }
+.catalog-pane,.selected-pane,.payment-form,.receipt-preview { background:var(--panel2); border:1px solid var(--border); border-radius:22px; padding:16px; min-width:0; }
+.search-wrap { display:grid; grid-template-columns:1fr auto; gap:12px; align-items:center; }
+.search-wrap span,.section-title span { color:var(--muted); }
+.catalog-list { display:grid; gap:10px; max-height:430px; overflow:auto; padding-right:6px; }
+.catalog-row { width:100%; display:flex; justify-content:space-between; align-items:center; gap:14px; border:1px solid var(--border); border-radius:18px; background:var(--panel); color:var(--text); padding:14px; text-align:left; cursor:pointer; }
+.catalog-row.profile { border-color:#3b82f6; background:rgba(59,130,246,.13); }
+.catalog-row:hover { transform:translateY(-1px); border-color:#60a5fa; }
+.catalog-row span { display:grid; gap:4px; }
+.catalog-row small { color:var(--muted); }
+.empty-state { display:grid; gap:6px; border:1px dashed var(--border); border-radius:18px; padding:16px; margin:12px 0; color:var(--muted); }
+.bill-item-list { display:grid; gap:12px; max-height:430px; overflow:auto; padding-right:6px; }
+.bill-item { display:grid; grid-template-columns:minmax(170px,1.4fr) repeat(4,minmax(76px,.65fr)) minmax(70px,.45fr) auto; gap:10px; align-items:end; border:1px solid var(--border); border-radius:20px; padding:14px; background:var(--panel); }
+.bill-item-main { display:grid; gap:5px; align-self:center; }
+.bill-item input,.bill-item select,.billing-summary input,.billing-summary select { padding:9px 10px; border-radius:12px; }
+.bill-item strong { align-self:center; font-size:17px; }
+.billing-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.receipt-preview { display:grid; align-content:start; gap:10px; }
+.summary-line { display:flex; justify-content:space-between; gap:14px; border-bottom:1px solid var(--border); padding:10px 0; }
+.summary-line span { color:var(--muted); }
+.summary-line.total { font-size:22px; color:#60a5fa; }
+.bill-success { margin-top:14px; border:1px solid rgba(34,197,94,.35); background:rgba(34,197,94,.10); border-radius:18px; padding:14px; display:flex; justify-content:space-between; gap:12px; align-items:center; }
+.bill-success div { display:grid; gap:4px; }
+.bill-success span { color:var(--muted); font-size:13px; }
+.step-actions { justify-content:flex-end; padding-top:2px; }
+
+@media(max-width:1300px){ .item-selection-grid,.payment-grid,.two{grid-template-columns:1fr}.bill-item{grid-template-columns:1fr repeat(2,minmax(86px,1fr));}.billing-stepper{height:auto;min-height:0}.billing-scroll{overflow:visible}.catalog-list,.bill-item-list{max-height:none} }
+@media(max-width:900px){ .lims-shell.app,.lims-shell.side-collapsed{grid-template-columns:1fr}.side{position:relative;height:auto;width:auto!important}.side-collapsed .side:not(:hover) .brand-text,.side-collapsed .side:not(:hover) .nav-label,.side-collapsed .side:not(:hover) .side-card b,.side-collapsed .side:not(:hover) .side-card span,.side-collapsed .side:not(:hover) .side-card small{opacity:1;width:auto}.side-nav{grid-template-columns:repeat(2,minmax(0,1fr))}.main-scroll{height:auto;overflow:visible}.grid4,.settings-grid{grid-template-columns:1fr}.wide{grid-column:auto}.form-grid,.billing-summary,.stepper-head{grid-template-columns:1fr}.form-grid textarea{grid-column:auto}.topbar{position:relative;align-items:flex-start;flex-direction:column} }
+
+/* Professional refactor final layout fixes */
+.pro-shell.lims-shell {
+  height: 100vh !important;
+  width: 100vw !important;
+  display: grid !important;
+  grid-template-columns: 280px minmax(0, 1fr) !important;
+  overflow: hidden !important;
+  position: relative !important;
+}
+.pro-shell.lims-shell.side-collapsed {
+  grid-template-columns: 84px minmax(0, 1fr) !important;
+}
+.pro-shell .side {
+  position: relative !important;
+  z-index: 1000 !important;
+  height: 100vh !important;
+  width: 280px !important;
+  min-width: 84px !important;
+  max-width: 280px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  isolation: isolate !important;
+}
+.pro-shell.side-collapsed .side {
+  width: 84px !important;
+  box-shadow: none !important;
+}
+.pro-shell.side-collapsed .side:hover {
+  width: 280px !important;
+  box-shadow: 24px 0 60px rgba(0,0,0,.38) !important;
+}
+.pro-shell .pro-main {
+  position: relative !important;
+  z-index: 1 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: 100vh !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding: 24px 28px 40px !important;
+}
+.pro-shell.side-collapsed .side:not(:hover) .brand-text,
+.pro-shell.side-collapsed .side:not(:hover) .nav-label,
+.pro-shell.side-collapsed .side:not(:hover) .side-card b,
+.pro-shell.side-collapsed .side:not(:hover) .side-card span,
+.pro-shell.side-collapsed .side:not(:hover) .side-card small {
+  opacity: 0 !important;
+  width: 0 !important;
+  max-width: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
+.pro-shell.side-collapsed .side:hover .brand-text,
+.pro-shell.side-collapsed .side:hover .nav-label,
+.pro-shell.side-collapsed .side:hover .side-card b,
+.pro-shell.side-collapsed .side:hover .side-card span,
+.pro-shell.side-collapsed .side:hover .side-card small,
+.pro-shell:not(.side-collapsed) .brand-text,
+.pro-shell:not(.side-collapsed) .nav-label,
+.pro-shell:not(.side-collapsed) .side-card b,
+.pro-shell:not(.side-collapsed) .side-card span,
+.pro-shell:not(.side-collapsed) .side-card small {
+  opacity: 1 !important;
+  width: auto !important;
+  max-width: 190px !important;
+  pointer-events: auto !important;
+}
+.pro-shell.side-collapsed .side:not(:hover) .side-toggle,
+.pro-shell.side-collapsed .side:not(:hover) .brand,
+.pro-shell.side-collapsed .side:not(:hover) .nav-button,
+.pro-shell.side-collapsed .side:not(:hover) .theme-toggle,
+.pro-shell.side-collapsed .side:not(:hover) .side-card {
+  justify-content: center !important;
+}
+.pro-shell .side-nav {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  padding-right: 2px !important;
+}
+.pro-shell .side-card,
+.pro-shell .theme-toggle {
+  flex: 0 0 auto !important;
+}
+.pro-topbar {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 10 !important;
+  backdrop-filter: blur(16px);
+}
+.wrap-actions { flex-wrap: wrap; }
+.table-scroll { overflow:auto; max-height: calc(100vh - 360px); }
+.check-line { display:flex; align-items:center; gap:8px; color:var(--muted); font-weight:800; }
+.check-line input { width:auto; }
+.compact-filter select { max-width: 180px; }
+.profile-test-list { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.profile-test-list .chip { gap:8px; border-radius:18px; }
+.profile-test-list input { max-width:120px; padding:8px 10px; }
+.statement-filter-row input { min-width: 180px; }
+
+@media(max-width:900px){
+  .pro-shell.lims-shell,
+  .pro-shell.lims-shell.side-collapsed { grid-template-columns: 1fr !important; overflow:auto !important; height:auto !important; }
+  .pro-shell .side { position: relative !important; width: 100% !important; max-width:none !important; height:auto !important; }
+  .pro-shell .pro-main { height:auto !important; overflow:visible !important; }
+}
+
+
+/* Build patch: stable overlay sidebar, active navigation, and true search suggestions */
+.pro-shell.lims-shell,
+.pro-shell.lims-shell.side-collapsed {
+  display: block !important;
+  position: relative !important;
+  height: 100vh !important;
+  width: 100vw !important;
+  overflow: hidden !important;
+}
+.pro-shell .side {
+  position: fixed !important;
+  inset: 0 auto 0 0 !important;
+  z-index: 5000 !important;
+  width: 280px !important;
+  max-width: 280px !important;
+  height: 100vh !important;
+  border-right: 1px solid var(--border) !important;
+  background: var(--sidebar) !important;
+  backdrop-filter: blur(18px) !important;
+}
+.pro-shell.side-collapsed .side {
+  width: 84px !important;
+}
+.pro-shell.side-collapsed .side:hover {
+  width: 280px !important;
+  box-shadow: 28px 0 70px rgba(0, 0, 0, .48) !important;
+}
+.pro-shell .pro-main {
+  margin-left: 280px !important;
+  width: calc(100vw - 280px) !important;
+  height: 100vh !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  position: relative !important;
+  z-index: 1 !important;
+}
+.pro-shell.side-collapsed .pro-main {
+  margin-left: 84px !important;
+  width: calc(100vw - 84px) !important;
+}
+.pro-shell .nav-button.active {
+  background: linear-gradient(135deg, var(--accent), var(--accent2)) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+  box-shadow: 0 12px 26px rgba(59, 130, 246, .28) !important;
+}
+.pro-shell.side-collapsed .side:not(:hover) .nav-button.active {
+  box-shadow: inset 4px 0 0 rgba(255,255,255,.48), 0 10px 26px rgba(59,130,246,.24) !important;
+}
+.catalog-list.suggestions {
+  max-height: 360px !important;
+}
+.search-empty {
+  margin-top: 14px !important;
+}
+.suggestion-search span {
+  min-width: 132px;
+  text-align: right;
+}
+.pro-topbar .eyebrow:empty { display: none !important; }
+@media(max-width:900px){
+  .pro-shell .side { position: relative !important; width: 100% !important; max-width: none !important; height: auto !important; inset: auto !important; }
+  .pro-shell .pro-main, .pro-shell.side-collapsed .pro-main { margin-left: 0 !important; width: 100% !important; height: auto !important; overflow: visible !important; }
+}
+
+/* Pro billing compact item-selection refresh */
+.pro-billing .compact-items-step {
+  gap: 16px;
+}
+
+.pro-billing .selection-toolbar {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.8fr) minmax(360px, 1.2fr);
+  gap: 16px;
+  align-items: start;
+  position: relative;
+  z-index: 20;
+}
+
+.pro-billing .item-search-column,
+.pro-billing .recent-column {
+  min-width: 0;
+}
+
+.pro-billing .item-search-column label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-weight: 900;
+  font-size: 13px;
+}
+
+.pro-billing .item-search-line {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.pro-billing .item-search-line input {
+  min-height: 48px;
+}
+
+.pro-billing .mini-suggestions {
+  position: absolute;
+  left: 16px;
+  top: 82px;
+  width: min(520px, calc(100% - 32px));
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--panel);
+  box-shadow: 0 26px 70px rgba(0,0,0,.28);
+  z-index: 60;
+  max-height: 340px;
+  overflow: auto;
+}
+
+.pro-billing .mini-suggestions button,
+.pro-billing .mini-suggestions .suggestion-row {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel2);
+  color: var(--text);
+  padding: 11px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+
+
+.pro-billing .mini-suggestions button:hover,
+.pro-billing .mini-suggestions .suggestion-row:hover,
+.pro-billing .mini-suggestions .suggestion-row:focus {
+  border-color: #60a5fa;
+  background: var(--accent-soft);
+}
+
+.pro-billing .mini-suggestions span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pro-billing .mini-suggestions small,
+.pro-billing .recent-head small {
+  color: var(--muted);
+}
+
+.pro-billing .mini-empty {
+  color: var(--muted);
+  padding: 12px;
+  text-align: center;
+}
+
+.pro-billing .recent-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-weight: 900;
+}
+
+.pro-billing .recent-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pro-billing .recent-chip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 9px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 900;
+  max-width: 210px;
+}
+
+.pro-billing .recent-chip:hover {
+  transform: translateY(-1px);
+  border-color: #60a5fa;
+  background: var(--accent-soft);
+}
+
+.pro-billing .recent-chip span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.pro-billing .wide-selected-pane {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  padding: 16px;
+}
+
+.pro-billing .selected-compact-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(48vh, 520px);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.pro-billing .selected-list-head,
+.pro-billing .selected-compact-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 110px 82px 92px 110px 100px 44px;
+  gap: 10px;
+  align-items: center;
+}
+
+.pro-billing .selected-list-head {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 0 10px;
+}
+
+.pro-billing .selected-compact-row {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+  padding: 10px;
+}
+
+.pro-billing .selected-name {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.pro-billing .selected-name b,
+.pro-billing .selected-name small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pro-billing .selected-name small {
+  color: var(--muted);
+}
+
+.pro-billing .selected-compact-row input,
+.pro-billing .selected-compact-row select {
+  padding: 8px 10px;
+  border-radius: 12px;
+  min-height: 38px;
+}
+
+.pro-billing .selected-compact-row strong {
+  font-size: 16px;
+  white-space: nowrap;
+}
+
+.pro-billing .icon-danger {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border: 1px solid rgba(239, 68, 68, .35);
+  background: var(--danger-soft);
+  color: #fb7185;
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 900;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.pro-billing .icon-danger:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+@media (max-width: 1350px) {
+  .pro-billing .selection-toolbar {
+    grid-template-columns: 1fr;
+  }
+  .pro-billing .mini-suggestions {
+    width: calc(100% - 32px);
+  }
+  .pro-billing .selected-list-head {
+    display: none;
+  }
+  .pro-billing .selected-compact-row {
+    grid-template-columns: minmax(220px, 1fr) 90px 70px 80px 90px 80px 40px;
+  }
+}
+
+@media (max-width: 900px) {
+  .pro-billing .selected-compact-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .pro-billing .selected-name,
+  .pro-billing .selected-compact-row strong {
+    grid-column: 1 / -1;
+  }
+  .pro-billing .icon-danger {
+    width: 100%;
+  }
+}
+
+/* Billing UX refinement: smart dropdown suggestions + split payment cards */
+.pro-billing .smart-search-panel {
+  display: block !important;
+  max-width: 980px;
+  padding: 16px !important;
+}
+
+.pro-billing .smart-search-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.pro-billing .smart-search-head span {
+  color: var(--muted);
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.pro-billing .compact-search-line {
+  grid-template-columns: minmax(260px, 640px) 110px !important;
+  max-width: 780px;
+}
+
+.pro-billing .compact-search-line input {
+  min-height: 46px !important;
+}
+
+.pro-billing .smart-suggestions {
+  top: 78px !important;
+  left: 16px !important;
+  width: min(640px, calc(100% - 32px)) !important;
+  max-height: 310px !important;
+}
+
+.pro-billing .recent-column,
+.pro-billing .recent-head,
+.pro-billing .recent-chips {
+  display: none !important;
+}
+
+.pro-billing .selected-compact-row {
+  grid-template-columns: minmax(260px, 1fr) 100px 76px 82px 100px 96px 42px !important;
+  min-height: 58px;
+}
+
+.pro-billing .split-payment-view {
+  grid-template-columns: minmax(440px, 1fr) minmax(420px, .85fr) !important;
+  gap: 18px !important;
+  align-items: start !important;
+}
+
+.pro-billing .bill-summary-card,
+.pro-billing .final-discount-card {
+  min-height: 0 !important;
+}
+
+.pro-billing .summary-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.pro-billing .summary-card-head h4,
+.pro-billing .final-discount-card h4 {
+  margin: 0;
+}
+
+.pro-billing .summary-card-head span {
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.pro-billing .split-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.pro-billing .final-discount-card .primary-action {
+  margin-top: 18px;
+}
+
+@media (max-width: 1200px) {
+  .pro-billing .split-payment-view {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .pro-billing .compact-search-line,
+  .pro-billing .split-form-grid {
+    grid-template-columns: 1fr !important;
+    max-width: none;
+  }
+  .pro-billing .selected-compact-row {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+/* Professional billing top command bar */
+.pro-topbar.fixed-billing-topbar {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 120 !important;
+  min-height: 78px !important;
+  padding: 14px 0 16px !important;
+  margin: -24px 0 18px !important;
+  background:
+    linear-gradient(to bottom, var(--bg) 0%, var(--bg) 74%, rgba(0,0,0,0) 100%) !important;
+  backdrop-filter: blur(18px) !important;
+}
+.topbar-title { min-width: 190px; display: grid; gap: 2px; }
+.topbar-title h2 { margin: 0; font-size: clamp(24px, 2.2vw, 34px); letter-spacing: -0.04em; }
+.topbar-title small { color: var(--muted); font-weight: 800; }
+
+/* Compact module header for Masters */
+.topbar-title.masters-topbar-title {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-width: 260px !important;
+}
+.masters-topbar-mark {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+  padding: 7px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #2563eb, #60a5fa);
+  box-shadow: 0 10px 24px rgba(37, 99, 235, .22);
+  flex: 0 0 auto;
+}
+.masters-topbar-mark span {
+  border-radius: 999px;
+  background: #dbeafe;
+}
+.masters-topbar-copy { display: grid; gap: 2px; min-width: 0; }
+.topbar-title.masters-topbar-title h2 {
+  font-size: 24px !important;
+  line-height: 1.05 !important;
+  letter-spacing: -.035em !important;
+}
+.topbar-title.masters-topbar-title small {
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+  color: var(--muted) !important;
+  font-weight: 750 !important;
+}
+
+
+/* Collection topbar: icon, title and refresh live in the main page header */
+.topbar-title.collection-topbar-title {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  min-width: 260px !important;
+}
+.collection-topbar-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 22px;
+  font-weight: 900;
+  flex: 0 0 auto;
+}
+.topbar-title.collection-topbar-title h2 {
+  font-size: clamp(28px, 2.4vw, 40px) !important;
+  line-height: 1 !important;
+  letter-spacing: -.045em !important;
+}
+.topbar-refresh-btn {
+  margin-left: auto;
+  height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 0 18px;
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, .12);
+}
+.topbar-refresh-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: var(--accent-soft);
+}
+
+.bill-top-tools { display:flex; align-items:center; justify-content:flex-end; gap:10px; flex: 1; min-width: 0; }
+.top-bill-search { position: relative; width: min(520px, 42vw); min-width: 280px; }
+.top-bill-search .tool-ico { position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--muted); pointer-events:none; }
+.top-bill-search input { min-height: 48px; padding-left: 44px; border-radius: 999px; background: var(--panel); font-weight: 800; }
+.tool-ico { width: 20px; height: 20px; fill:none; stroke:currentColor; stroke-width:2.25; stroke-linecap:round; stroke-linejoin:round; }
+.icon-action { width:52px; height:52px; border-radius:18px; border:1px solid var(--border); background:var(--panel); color:var(--text); display:grid; place-items:center; cursor:pointer; transition:.18s ease; }
+.icon-action:hover:not(:disabled) { transform:translateY(-1px); border-color:#60a5fa; background:var(--accent-soft); box-shadow:0 12px 30px rgba(15,23,42,.22); }
+.icon-action:disabled { opacity:.35; cursor:not-allowed; }
+.icon-action.primary-icon { border-color:transparent; color:#fff; background:linear-gradient(135deg,var(--accent),#2563eb); box-shadow:0 14px 30px rgba(59,130,246,.30); }
+.top-search-results { position:absolute; top:58px; right:0; left:0; z-index:9000; display:grid; gap:8px; max-height:320px; overflow:auto; padding:10px; border:1px solid var(--border); border-radius:20px; background:var(--panel); box-shadow:0 24px 60px rgba(0,0,0,.42); }
+.top-search-results button { display:grid; grid-template-columns:auto 1fr; gap:8px 12px; text-align:left; border:1px solid var(--border); border-radius:14px; background:var(--panel2); color:var(--text); padding:12px; cursor:pointer; }
+.top-search-results button:hover { border-color:#60a5fa; background:var(--accent-soft); }
+.top-search-results b { font-weight:900; }
+.top-search-results span { color:var(--muted); font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+@media (max-width: 980px) {
+  .pro-topbar.fixed-billing-topbar { align-items: stretch !important; flex-direction: column !important; }
+  .bill-top-tools { justify-content:flex-start; }
+  .top-bill-search { width:100%; min-width:0; }
+}
+
+.pro-billing .receipt-history {
+  margin: 14px 0;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+.pro-billing .receipt-history-head,
+.pro-billing .receipt-history-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 12px;
+  align-items: center;
+}
+.pro-billing .receipt-history-head { color: var(--muted); margin-bottom: 8px; }
+.pro-billing .receipt-history-row {
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.pro-billing .btn.tiny { min-height: 34px; padding: 6px 12px; font-size: 12px; }
+.pro-billing .pro-print-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.pro-billing .pro-print-actions > div { flex: 1 1 220px; }
+
+/* Patch: billing finalisation, manual receipts, snackbar */
+.named-section {
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--panel);
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.section-title-line,
+.receipt-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.section-title-line h4 { margin: 0; }
+.section-title-line span,
+.receipt-history-head span { color: var(--muted); font-weight: 800; }
+.receipt-payment-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.receipt-payment-row label,
+.named-section label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+.inline-warning {
+  margin: 0;
+  color: #fca5a5;
+  font-weight: 800;
+}
+.wide-btn { width: 100%; justify-content: center; }
+.lims-snackbar {
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  z-index: 9000;
+  border: 1px solid rgba(34,197,94,.45);
+  background: linear-gradient(135deg, rgba(34,197,94,.22), rgba(15,23,42,.96));
+  color: var(--text);
+  border-radius: 18px;
+  padding: 14px 18px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.42);
+  font-weight: 900;
+  max-width: 440px;
+}
+.lims-snackbar.error {
+  border-color: rgba(248,113,113,.55);
+  background: linear-gradient(135deg, rgba(248,113,113,.22), rgba(15,23,42,.96));
+}
+.print-choice-dialog { max-width: 520px; }
+.receipt-section { border-color: rgba(96,165,250,.32); }
+.bill-detail-section { border-color: rgba(148,163,184,.26); }
+@media(max-width:900px){ .receipt-payment-row { grid-template-columns: 1fr; } }
+
+/* Patch: professional modal for bill/receipt workflow and payment states */
+.pro-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(2, 6, 23, 0.62);
+  backdrop-filter: blur(14px);
+}
+.pro-modal-card {
+  width: min(560px, 94vw);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 26px;
+  box-shadow: 0 30px 100px rgba(0, 0, 0, 0.45);
+  padding: 24px;
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 16px;
+  animation: popIn .16s ease-out;
+}
+.modal-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 20px;
+  display: grid;
+  place-items: center;
+  font-weight: 950;
+  font-size: 24px;
+  border: 1px solid var(--border);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.modal-icon.danger { background: rgba(239, 68, 68, .16); color: #f87171; border-color: rgba(248, 113, 113, .35); }
+.modal-icon.warning { background: rgba(245, 158, 11, .16); color: #f59e0b; border-color: rgba(245, 158, 11, .35); }
+.modal-content h3 { margin: 0 0 8px; font-size: 22px; }
+.modal-content p { margin: 0; color: var(--muted); line-height: 1.55; }
+.modal-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 12px; padding-top: 10px; }
+.receipt-history-row { grid-template-columns: minmax(110px, 1fr) auto auto auto auto; }
+.status-excess { color: #f59e0b !important; }
+.status-due { color: #f87171 !important; }
+.summary-line.status b { text-transform: uppercase; letter-spacing: .04em; }
+@keyframes popIn { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+/* Billing & Statements professional register */
+.clean-dashboard-card { grid-column: 1 / -1; padding: 26px !important; }
+.billing-statement-page .table-scroll { max-height: calc(100vh - 360px); overflow: auto; }
+.pro-table { width: 100%; border-collapse: collapse; }
+.pro-table th, .pro-table td { padding: 14px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+.pro-table th { color: var(--muted); font-size: 13px; letter-spacing: .03em; text-transform: uppercase; }
+.action-cell { white-space: nowrap; display: flex; gap: 8px; align-items: center; }
+.icon-action { width: 40px; height: 40px; border-radius: 14px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); cursor: pointer; font-size: 17px; display: inline-flex; align-items: center; justify-content: center; }
+.icon-action:hover:not(:disabled) { border-color: var(--accent); transform: translateY(-1px); }
+.icon-action.danger { color: #ff8b94; border-color: rgba(255, 122, 130, .35); }
+.icon-action:disabled { opacity: .35; cursor: not-allowed; }
+.status-pill.warn { background: rgba(245, 158, 11, .16); color: #fbbf24; border-color: rgba(245,158,11,.3); }
+.status-pill.danger { background: rgba(239,68,68,.16); color: #fca5a5; border-color: rgba(239,68,68,.3); }
+.cancelled-row { opacity: .72; }
+.empty-cell { text-align: center !important; color: var(--muted); padding: 35px !important; }
+.pager-tools { gap: 10px; align-items: center; }
+.icon-only { min-width: 44px; padding-inline: 0 !important; }
+.icon-label { min-width: 50px; }
+.modal-backdrop { position: fixed; inset: 0; z-index: 5000; background: rgba(3, 7, 18, .72); backdrop-filter: blur(14px); display: grid; place-items: center; padding: 24px; }
+.pro-modal { width: min(560px, 96vw); background: var(--panel); border: 1px solid var(--border); border-radius: 28px; box-shadow: 0 24px 80px rgba(0,0,0,.45); padding: 28px; }
+.pro-modal .modal-icon { width: 48px; height: 48px; border-radius: 16px; display: grid; place-items: center; font-weight: 900; margin-bottom: 14px; }
+.pro-modal .modal-icon.danger { background: rgba(239,68,68,.16); color: #fca5a5; border: 1px solid rgba(239,68,68,.3); }
+.pro-modal label { display: block; margin: 14px 0 8px; color: var(--muted); font-weight: 800; }
+.pro-modal textarea { min-height: 90px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px; }
+.btn.danger { background: rgba(239,68,68,.18); color: #fecaca; border: 1px solid rgba(239,68,68,.4); }
+
+/* Cancelled bill read-only workflow */
+.cancelled-banner {
+  margin: 16px 26px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  border: 1px solid rgba(244, 63, 94, .45);
+  background: linear-gradient(135deg, rgba(127, 29, 29, .28), rgba(15, 23, 42, .82));
+  color: #fecdd3;
+  border-radius: 24px;
+  padding: 16px 20px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .18);
+}
+.cancelled-banner b { display: block; color: #fff; font-weight: 950; font-size: 16px; }
+.cancelled-banner span { display: block; color: #fda4af; font-weight: 700; margin-top: 3px; }
+.cancelled-banner strong {
+  letter-spacing: .18em;
+  color: #fb7185;
+  font-size: 13px;
+  border: 1px solid rgba(248, 113, 113, .45);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(244, 63, 94, .12);
+}
+.cancelled-mode input,
+.cancelled-mode select,
+.cancelled-mode textarea { pointer-events: none; opacity: .78; }
+.cancelled-mode .patient-step button:not(.safe-action),
+.cancelled-mode .items-step button:not(.safe-action),
+.cancelled-mode .receipt-section button:not(.safe-action),
+.cancelled-mode .bill-detail-section button:not(.safe-action),
+.cancelled-mode .selected-compact-row button { pointer-events: none; opacity: .45; }
+.cancelled-mode .primary-action {
+  background: linear-gradient(135deg, rgba(244, 63, 94, .35), rgba(127, 29, 29, .35));
+  color: #fecdd3;
+  border: 1px solid rgba(244, 63, 94, .35);
+}
+.cancelled-mode .summary-line.status b { color: #fb7185 !important; }
+
+/* Patient demographic refinement */
+.patient-card-grid {
+  display:grid;
+  grid-template-columns: 150px minmax(240px,1.4fr) 180px 110px 130px minmax(180px,.8fr);
+  gap:12px;
+  margin:12px 0;
+  align-items:end;
+}
+.patient-card-grid .field { display:grid; gap:6px; min-width:0; }
+.patient-card-grid label { font-size:12px; color:var(--muted); font-weight:900; letter-spacing:.02em; }
+.patient-card-grid label b { color:#f87171; }
+.patient-card-grid .name-field { grid-column:span 2; }
+.patient-card-grid .guardian-field { grid-column:span 2; }
+.patient-card-grid .wide-field { grid-column:span 3; }
+.patient-card-grid input,
+.patient-card-grid select,
+.patient-card-grid textarea { padding:10px 12px; border-radius:13px; font-size:13px; }
+.patient-card-grid textarea { min-height:72px; }
+body.light .patient-card-grid label { color:#64748b; }
+@media(max-width:1250px){ .patient-card-grid{grid-template-columns:repeat(3,minmax(0,1fr));}.patient-card-grid .name-field,.patient-card-grid .guardian-field,.patient-card-grid .wide-field{grid-column:span 2;} }
+@media(max-width:820px){ .patient-card-grid{grid-template-columns:1fr}.patient-card-grid .name-field,.patient-card-grid .guardian-field,.patient-card-grid .wide-field{grid-column:auto;} }
+
+/* Operations modal must sit above the hover side menu/sidebar */
+body.operations-modal-open .side { z-index: 0 !important; box-shadow: none !important; }
+body.operations-modal-open .pro-main { position: relative; z-index: 2147483000 !important; }
+body.operations-modal-open .side-collapsed .side:hover { width: 84px; box-shadow: none !important; }
+
+/* LIMS action mat-menu: used by Collection and Reporting three-dot menus. Rendered in CDK overlay so it cannot be clipped by tables/cards/steppers. */
+.cdk-overlay-container, .cdk-global-overlay-wrapper, .cdk-overlay-pane {
+  z-index: 10000000 !important;
+}
+.lims-action-mat-menu.mat-mdc-menu-panel {
+  border: 1px solid var(--border) !important;
+  border-radius: 14px !important;
+  background: var(--panel) !important;
+  box-shadow: 0 22px 60px rgba(2, 6, 23, .62) !important;
+  min-width: 230px !important;
+  max-height: min(420px, calc(100vh - 24px)) !important;
+  overflow: auto !important;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent) 55%, var(--border)) transparent;
+}
+.lims-action-mat-menu .mat-mdc-menu-content {
+  padding: 6px !important;
+  background: transparent !important;
+}
+
+.lims-action-mat-menu .mat-mdc-menu-item {
+  min-height: 38px !important;
+  color: var(--text) !important;
+  font-weight: 850 !important;
+  border-radius: 11px !important;
+}
+.lims-action-mat-menu .mat-mdc-menu-item:hover {
+  background: var(--input) !important;
+}
+.lims-action-mat-menu .mat-mdc-menu-item span:first-child {
+  width: 24px;
+  display: inline-block;
+  text-align: center;
+  color: var(--accent);
+  margin-right: 8px;
+}
+.lims-action-mat-menu .mat-mdc-menu-item.danger-menu-item {
+  color: var(--danger, #ef4444) !important;
+}
+.lims-action-mat-menu .mat-mdc-menu-item.danger-menu-item span:first-child {
+  color: var(--danger, #ef4444) !important;
+}
+
+
+/* Reporting snackbar polish */
+.reporting-snack.mat-mdc-snack-bar-container {
+  --mdc-snackbar-container-shape: 16px;
+  --mdc-snackbar-supporting-text-weight: 800;
+  --mat-snack-bar-button-color: #ffffff;
+  margin-top: 14px !important;
+}
+.reporting-snack .mdc-snackbar__surface {
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .35) !important;
+  border: 1px solid rgba(255, 255, 255, .14) !important;
+}
+.reporting-snack-error.mat-mdc-snack-bar-container {
+  --mdc-snackbar-container-color: #7f1d1d;
+  --mdc-snackbar-supporting-text-color: #fff7f7;
+}
+.reporting-snack-success.mat-mdc-snack-bar-container {
+  --mdc-snackbar-container-color: #064e3b;
+  --mdc-snackbar-supporting-text-color: #ecfdf5;
+}
+.reporting-snack-info.mat-mdc-snack-bar-container {
+  --mdc-snackbar-container-color: #1e1b4b;
+  --mdc-snackbar-supporting-text-color: #eef2ff;
+}
+
+/* Compact billing command bar: New Bill icon/title and adjacent previous/next controls */
+.topbar-title:has(.billing-title-mark) {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  min-width: 250px !important;
+}
+.billing-title-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  color: #eff6ff;
+  background: linear-gradient(135deg, #2563eb, #38bdf8);
+  box-shadow: 0 14px 32px rgba(37, 99, 235, .28);
+  flex: 0 0 auto;
+}
+.billing-title-mark .tool-ico { width: 22px; height: 22px; }
+.billing-title-copy { display: grid; gap: 2px; min-width: 0; }
+.billing-title-copy h2 {
+  margin: 0 !important;
+  font-size: 26px !important;
+  line-height: 1 !important;
+  letter-spacing: -.04em !important;
+}
+.billing-title-copy small {
+  margin: 0 !important;
+  font-size: 12px !important;
+  color: var(--muted) !important;
+  font-weight: 850 !important;
+}
+.pro-topbar.fixed-billing-topbar { min-height: 66px !important; padding: 10px 0 12px !important; margin: -24px 0 12px !important; }
+.bill-top-tools { gap: 8px !important; }
+.top-bill-search { width: min(480px, 40vw) !important; }
+.top-bill-search input { min-height: 42px !important; height: 42px !important; }
+.icon-action { width: 42px !important; height: 42px !important; border-radius: 15px !important; }
+.icon-action .tool-ico { width: 18px !important; height: 18px !important; }
+@media (max-width: 980px) {
+  .topbar-title:has(.billing-title-mark) { min-width: 0 !important; }
+  .top-bill-search { width: 100% !important; }
+}
+
+/* Final compact Billing topbar: no overlap with stepper, smaller New Bill icon/title. */
+.pro-topbar.fixed-billing-topbar {
+  min-height: 54px !important;
+  padding: 6px 0 8px !important;
+  margin: 0 0 8px !important;
+  top: 0 !important;
+}
+.topbar-title:has(.billing-title-mark) {
+  gap: 9px !important;
+  min-width: 220px !important;
+}
+.billing-title-mark {
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 11px !important;
+  box-shadow: none !important;
+}
+.billing-title-mark .tool-ico {
+  width: 17px !important;
+  height: 17px !important;
+}
+.billing-title-copy h2 {
+  font-size: 22px !important;
+  line-height: 1 !important;
+}
+.billing-title-copy small {
+  font-size: 10.5px !important;
+  line-height: 1.1 !important;
+}
+.bill-top-tools {
+  gap: 7px !important;
+}
+.top-bill-search {
+  width: min(440px, 38vw) !important;
+}
+.top-bill-search input {
+  height: 38px !important;
+  min-height: 38px !important;
+  padding-left: 38px !important;
+  font-size: 12.5px !important;
+}
+.top-bill-search .tool-ico {
+  width: 17px !important;
+  height: 17px !important;
+  left: 13px !important;
+}
+.icon-action {
+  width: 38px !important;
+  height: 38px !important;
+  border-radius: 12px !important;
+}
+.icon-action .tool-ico {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* Billing topbar full patch v5 - keep header compact and prevent stepper overlap */
+.pro-topbar.fixed-billing-topbar {
+  min-height: 52px !important;
+  height: auto !important;
+  padding: 6px 0 8px !important;
+  margin: 0 0 10px !important;
+  top: 0 !important;
+  align-items: center !important;
+}
+.topbar-title:has(.billing-title-mark) {
+  gap: 8px !important;
+  min-width: 210px !important;
+}
+.billing-title-mark {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+.billing-title-mark .tool-ico {
+  width: 16px !important;
+  height: 16px !important;
+}
+.billing-title-copy h2 {
+  font-size: 21px !important;
+  line-height: 1 !important;
+}
+.billing-title-copy small {
+  font-size: 10.5px !important;
+  line-height: 1.05 !important;
+}
+.bill-top-tools {
+  gap: 7px !important;
+  align-items: center !important;
+}
+.top-bill-search {
+  width: min(430px, 38vw) !important;
+}
+.top-bill-search input {
+  height: 38px !important;
+  min-height: 38px !important;
+  padding-left: 38px !important;
+  font-size: 12.5px !important;
+}
+.top-bill-search .tool-ico {
+  width: 16px !important;
+  height: 16px !important;
+  left: 13px !important;
+}
+.icon-action {
+  width: 38px !important;
+  height: 38px !important;
+  border-radius: 12px !important;
+}
+.icon-action .tool-ico {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+
+/* Billing footer uses the same shell layout as the top header.
+   Header and footer are siblings of the scrolling content; only the middle content scrolls. */
+.pro-shell .pro-main.billing-main-layout {
+  height: 100vh !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 24px 28px 0 !important;
+}
+.pro-shell .pro-main:not(.billing-main-layout) .app-content-scroll {
+  display: contents;
+}
+.pro-shell .pro-main.billing-main-layout > .fixed-billing-topbar {
+  flex: 0 0 auto !important;
+}
+.pro-shell .pro-main.billing-main-layout > .app-content-scroll {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding: 0 0 18px !important;
+}
+.pro-shell .pro-main.billing-main-layout > .billing-page-footer {
+  flex: 0 0 66px !important;
+  height: 66px !important;
+  min-height: 66px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+  margin: 0 -28px !important;
+  padding: 0 28px !important;
+  border-top: 1px solid var(--border) !important;
+  background: linear-gradient(to top, var(--bg) 0%, color-mix(in srgb, var(--bg) 94%, transparent) 100%) !important;
+  backdrop-filter: blur(18px) !important;
+  box-shadow: 0 -14px 36px rgba(0, 0, 0, .18) !important;
+  z-index: 120 !important;
+}
+.pro-shell .pro-main.billing-main-layout > .billing-page-footer .btn {
+  height: 42px !important;
+  min-height: 42px !important;
+  border-radius: 14px !important;
+  padding: 0 18px !important;
+}
+.pro-shell .pro-main.billing-main-layout > .billing-page-footer .btn.primary {
+  min-width: 180px !important;
+}
+body.light .pro-shell .pro-main.billing-main-layout > .billing-page-footer,
+.pro-shell.light .pro-main.billing-main-layout > .billing-page-footer {
+  background: linear-gradient(to top, #f8fafc 0%, rgba(248, 250, 252, .94) 100%) !important;
+  box-shadow: 0 -10px 28px rgba(15, 23, 42, .10) !important;
+}
+@media (max-width: 900px) {
+  .pro-shell .pro-main.billing-main-layout {
+    height: auto !important;
+    overflow: visible !important;
+    padding: 16px 14px 0 !important;
+  }
+  .pro-shell .pro-main.billing-main-layout > .app-content-scroll {
+    overflow: visible !important;
+  }
+  .pro-shell .pro-main.billing-main-layout > .billing-page-footer {
+    margin: 0 -14px !important;
+    padding: 10px 14px !important;
+    height: auto !important;
+    min-height: 64px !important;
+    flex-wrap: wrap !important;
+  }
+}
+
+
+/* BILLING UI V14 - parent header/footer shell: footer uses same flex logic as topbar */
+.pro-main.billing-main-layout {
+  height: 100vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+.pro-main.billing-main-layout > .fixed-billing-topbar {
+  flex: 0 0 86px !important;
+  height: 86px !important;
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  right: auto !important;
+  z-index: 40 !important;
+}
+.pro-main.billing-main-layout > .app-content-scroll {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  padding-bottom: 14px !important;
+}
+.pro-main.billing-main-layout > .billing-page-footer {
+  flex: 0 0 68px !important;
+  height: 68px !important;
+  min-height: 68px !important;
+  position: relative !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  z-index: 40 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 18px !important;
+  padding: 10px 28px !important;
+  border-top: 1px solid rgba(148, 163, 184, .18) !important;
+  border-radius: 0 !important;
+  background: rgba(7, 17, 31, .98) !important;
+  box-shadow: 0 -14px 30px rgba(2, 6, 23, .26) !important;
+}
+.pro-main.billing-main-layout > .billing-page-footer .btn {
+  height: 44px !important;
+  min-height: 44px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 12px !important;
+}
+.pro-main.billing-main-layout > .billing-page-footer .btn.big {
+  min-width: 240px !important;
+}
+.light .pro-main.billing-main-layout > .billing-page-footer,
+body.light .pro-main.billing-main-layout > .billing-page-footer,
+.light-mode .pro-main.billing-main-layout > .billing-page-footer {
+  background: rgba(255, 255, 255, .98) !important;
+  border-top-color: rgba(15, 23, 42, .12) !important;
+  box-shadow: 0 -12px 24px rgba(15, 23, 42, .08) !important;
+}
+
+/* BILLING FOOTER TASKBAR-SAFE PATCH
+   Keeps the billing action footer inside the billing workspace and lifts it
+   above the Windows taskbar / OS overlay instead of pinning it to screen edge. */
+:root {
+  --billing-shell-max-width: 1320px;
+  --billing-footer-height: 64px;
+  --billing-footer-side-gap: 28px;
+  --billing-footer-taskbar-gap: 64px;
+}
+
+.pro-shell .pro-main.billing-main-layout,
+.pro-main.billing-main-layout {
+  height: 100dvh !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  padding-bottom: 0 !important;
+}
+
+.pro-shell .pro-main.billing-main-layout > .app-content-scroll,
+.pro-main.billing-main-layout > .app-content-scroll {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-bottom: 24px !important;
+}
+
+.pro-shell .pro-main.billing-main-layout > .billing-page-footer,
+.pro-main.billing-main-layout > .billing-page-footer {
+  position: relative !important;
+  flex: 0 0 var(--billing-footer-height) !important;
+  height: var(--billing-footer-height) !important;
+  min-height: var(--billing-footer-height) !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+
+  width: min(calc(100% - (var(--billing-footer-side-gap) * 2)), var(--billing-shell-max-width)) !important;
+  max-width: var(--billing-shell-max-width) !important;
+  margin: 0 auto calc(var(--billing-footer-taskbar-gap) + env(safe-area-inset-bottom)) !important;
+  padding: 10px 18px !important;
+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent) !important;
+  border-radius: 18px !important;
+  background: color-mix(in srgb, var(--surface) 96%, transparent) !important;
+  backdrop-filter: blur(18px) !important;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, .16) !important;
+  z-index: 120 !important;
+}
+
+.pro-shell .pro-main.billing-main-layout > .billing-page-footer .btn,
+.pro-main.billing-main-layout > .billing-page-footer .btn {
+  height: 42px !important;
+  min-height: 42px !important;
+  border-radius: 14px !important;
+  padding: 0 18px !important;
+}
+
+.pro-shell .pro-main.billing-main-layout > .billing-page-footer .btn.primary,
+.pro-main.billing-main-layout > .billing-page-footer .btn.primary,
+.pro-shell .pro-main.billing-main-layout > .billing-page-footer .btn.big,
+.pro-main.billing-main-layout > .billing-page-footer .btn.big {
+  min-width: 220px !important;
+}
+
+body.light .pro-shell .pro-main.billing-main-layout > .billing-page-footer,
+.pro-shell.light .pro-main.billing-main-layout > .billing-page-footer,
+.light .pro-main.billing-main-layout > .billing-page-footer,
+body.light .pro-main.billing-main-layout > .billing-page-footer,
+.light-mode .pro-main.billing-main-layout > .billing-page-footer {
+  background: rgba(255, 255, 255, .98) !important;
+  border-color: rgba(148, 163, 184, .28) !important;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, .14) !important;
+}
+
+@media (max-width: 900px) {
+  :root {
+    --billing-footer-side-gap: 14px;
+    --billing-footer-taskbar-gap: 18px;
+  }
+
+  .pro-shell .pro-main.billing-main-layout,
+  .pro-main.billing-main-layout {
+    height: 100dvh !important;
+    overflow: hidden !important;
+  }
+
+  .pro-shell .pro-main.billing-main-layout > .billing-page-footer,
+  .pro-main.billing-main-layout > .billing-page-footer {
+    height: auto !important;
+    min-height: 64px !important;
+    flex: 0 0 auto !important;
+    flex-wrap: wrap !important;
+    padding: 10px 12px !important;
+    margin-bottom: calc(18px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .pro-shell .pro-main.billing-main-layout > .billing-page-footer .btn,
+  .pro-main.billing-main-layout > .billing-page-footer .btn {
+    flex: 1 1 140px !important;
+    min-width: 0 !important;
+  }
+}
+
+/* BILLING FOOTER V26 - footer lives inside scroll viewport and is lifted above Windows taskbar.
+   This replaces the separate bottom flex footer behavior that stayed hidden behind the taskbar. */
+:root {
+  --billing-shell-max-width: 1320px;
+  --billing-footer-height: 58px;
+  --billing-footer-taskbar-clearance: 92px;
+  --billing-footer-side-gap: 28px;
+}
+
+.pro-shell .pro-main.billing-main-layout,
+.pro-main.billing-main-layout {
+  height: 100dvh !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  padding-bottom: 0 !important;
+}
+
+.pro-shell .pro-main.billing-main-layout > .app-content-scroll,
+.pro-main.billing-main-layout > .app-content-scroll {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+.pro-shell .pro-main.billing-main-layout > .app-content-scroll.has-billing-footer,
+.pro-main.billing-main-layout > .app-content-scroll.has-billing-footer {
+  padding-bottom: calc(var(--billing-footer-taskbar-clearance) + 24px + env(safe-area-inset-bottom)) !important;
+}
+
+/* Important: footer is no longer a direct flex child at the bottom of the app window. */
+.pro-shell .pro-main.billing-main-layout > .billing-page-footer,
+.pro-main.billing-main-layout > .billing-page-footer {
+  display: none !important;
+}
+
+.pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer,
+.pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer {
+  position: sticky !important;
+  bottom: var(--billing-footer-taskbar-clearance) !important;
+  z-index: 200 !important;
+
+  width: min(calc(100% - (var(--billing-footer-side-gap) * 2)), var(--billing-shell-max-width)) !important;
+  max-width: var(--billing-shell-max-width) !important;
+  min-height: var(--billing-footer-height) !important;
+  height: var(--billing-footer-height) !important;
+  margin: 14px auto 0 !important;
+  padding: 8px 18px !important;
+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+
+  border: 1px solid rgba(148, 163, 184, .24) !important;
+  border-radius: 18px !important;
+  background: rgba(255, 255, 255, .98) !important;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, .12) !important;
+  backdrop-filter: blur(16px) !important;
+}
+
+body.dark-theme .pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer,
+.dark-theme .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer {
+  background: rgba(15, 23, 42, .96) !important;
+  border-color: rgba(148, 163, 184, .22) !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .28) !important;
+}
+
+.pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn,
+.pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn {
+  height: 38px !important;
+  min-height: 38px !important;
+  border-radius: 13px !important;
+  padding: 0 18px !important;
+}
+
+.pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn.primary,
+.pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn.primary,
+.pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn.big,
+.pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn.big {
+  min-width: 220px !important;
+}
+
+@media (max-width: 900px) {
+  :root {
+    --billing-footer-taskbar-clearance: 20px;
+    --billing-footer-side-gap: 14px;
+  }
+
+  .pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer,
+  .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer {
+    height: auto !important;
+    min-height: 58px !important;
+    flex-wrap: wrap !important;
+    padding: 9px 12px !important;
+  }
+
+  .pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn,
+  .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn {
+    flex: 1 1 140px !important;
+    min-width: 0 !important;
+  }
+}
+
+/* BILLING FOOTER V27 - non-fixed inline footer with real bottom space.
+   The footer is no longer sticky/fixed. It stays in normal document flow,
+   spans with the billing content width, and leaves vertical space above the
+   Windows taskbar/OS bottom area by using bottom margin instead of bottom: fixed. */
+:root {
+  --billing-shell-side-gap: 28px;
+  --billing-footer-height: 58px;
+  --billing-footer-bottom-space: 112px;
+}
+
+.pro-shell .pro-main.billing-main-layout,
+.pro-main.billing-main-layout {
+  height: 100dvh !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.pro-shell .pro-main.billing-main-layout > .app-content-scroll,
+.pro-main.billing-main-layout > .app-content-scroll {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-bottom: 0 !important;
+}
+
+.pro-shell .pro-main.billing-main-layout > .app-content-scroll.has-billing-footer,
+.pro-main.billing-main-layout > .app-content-scroll.has-billing-footer {
+  padding-bottom: 0 !important;
+}
+
+.pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer,
+.pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer {
+  position: relative !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  z-index: 30 !important;
+
+  width: calc(100% - (var(--billing-shell-side-gap) * 2)) !important;
+  max-width: none !important;
+  min-height: var(--billing-footer-height) !important;
+  height: var(--billing-footer-height) !important;
+  margin: 18px auto calc(var(--billing-footer-bottom-space) + env(safe-area-inset-bottom)) !important;
+  padding: 8px 18px !important;
+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+
+  border: 1px solid rgba(148, 163, 184, .22) !important;
+  border-radius: 18px !important;
+  background: rgba(255, 255, 255, .98) !important;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, .10) !important;
+  backdrop-filter: blur(14px) !important;
+}
+
+body.dark-theme .pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer,
+.dark-theme .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer {
+  background: rgba(15, 23, 42, .96) !important;
+  border-color: rgba(148, 163, 184, .22) !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .24) !important;
+}
+
+.pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn,
+.pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn {
+  height: 38px !important;
+  min-height: 38px !important;
+  border-radius: 13px !important;
+  padding: 0 18px !important;
+}
+
+.pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn.primary,
+.pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn.primary,
+.pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn.big,
+.pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn.big {
+  min-width: 220px !important;
+}
+
+@media (max-width: 900px) {
+  :root {
+    --billing-shell-side-gap: 14px;
+    --billing-footer-bottom-space: 72px;
+  }
+
+  .pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer,
+  .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer {
+    height: auto !important;
+    min-height: 60px !important;
+    flex-wrap: wrap !important;
+    padding: 10px 12px !important;
+  }
+
+  .pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn,
+  .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn {
+    flex: 1 1 140px !important;
+    min-width: 0 !important;
+  }
+}
+
+/* BILLING FOOTER V28 - plain inline action buttons only.
+   No footer background/container. Buttons align to the billing content width.
+   Footer remains in normal document flow with small bottom breathing room, so
+   the Windows taskbar does not cover it and no forced scrollbar is added. */
+:root {
+  --billing-footer-inline-bottom-space: 36px;
+  --billing-footer-inline-top-gap: 14px;
+  --billing-footer-inline-side-gap: 28px;
+}
+
+.pro-shell .pro-main.billing-main-layout > .app-content-scroll,
+.pro-main.billing-main-layout > .app-content-scroll {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-bottom: 0 !important;
+  scrollbar-gutter: auto !important;
+}
+
+.pro-shell .pro-main.billing-main-layout > .app-content-scroll.has-billing-footer,
+.pro-main.billing-main-layout > .app-content-scroll.has-billing-footer {
+  padding-bottom: 0 !important;
+}
+
+.pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer,
+.pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer {
+  position: relative !important;
+  inset: auto !important;
+  z-index: 1 !important;
+
+  width: calc(100% - (var(--billing-footer-inline-side-gap) * 2)) !important;
+  max-width: none !important;
+  height: auto !important;
+  min-height: 48px !important;
+  margin: var(--billing-footer-inline-top-gap) auto calc(var(--billing-footer-inline-bottom-space) + env(safe-area-inset-bottom)) !important;
+  padding: 0 !important;
+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+body.dark-theme .pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer,
+.dark-theme .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn,
+.pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn {
+  height: 42px !important;
+  min-height: 42px !important;
+  border-radius: 14px !important;
+  padding: 0 22px !important;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, .08) !important;
+}
+
+.pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn.primary,
+.pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn.primary,
+.pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn.big,
+.pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn.big {
+  min-width: 240px !important;
+}
+
+@media (max-width: 900px) {
+  :root {
+    --billing-footer-inline-side-gap: 14px;
+    --billing-footer-inline-bottom-space: 28px;
+    --billing-footer-inline-top-gap: 12px;
+  }
+
+  .pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer,
+  .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer {
+    flex-wrap: nowrap !important;
+    gap: 10px !important;
+  }
+
+  .pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn,
+  .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    padding: 0 14px !important;
+  }
+}
+
+/* BILLING FOOTER V29 - plain action buttons, no backdrop panel.
+   The earlier versions correctly removed the footer card, but the actions still
+   sat on the grey app scroll background. For Billing only, make the action area
+   share the clean page surface and keep the footer as a normal inline row. */
+:root {
+  --billing-footer-inline-bottom-space: 22px;
+  --billing-footer-inline-top-gap: 8px;
+  --billing-footer-inline-side-gap: 28px;
+}
+
+.pro-shell .pro-main.billing-main-layout,
+.pro-main.billing-main-layout,
+.pro-shell .pro-main.billing-main-layout > .app-content-scroll,
+.pro-main.billing-main-layout > .app-content-scroll {
+  background: #fff !important;
+}
+
+body.dark-theme .pro-shell .pro-main.billing-main-layout,
+body.dark-theme .pro-main.billing-main-layout,
+body.dark-theme .pro-shell .pro-main.billing-main-layout > .app-content-scroll,
+body.dark-theme .pro-main.billing-main-layout > .app-content-scroll,
+.dark-theme .pro-shell .pro-main.billing-main-layout,
+.dark-theme .pro-main.billing-main-layout,
+.dark-theme .pro-shell .pro-main.billing-main-layout > .app-content-scroll,
+.dark-theme .pro-main.billing-main-layout > .app-content-scroll {
+  background: var(--bg) !important;
+}
+
+.pro-shell .pro-main.billing-main-layout > .app-content-scroll,
+.pro-main.billing-main-layout > .app-content-scroll,
+.pro-shell .pro-main.billing-main-layout > .app-content-scroll.has-billing-footer,
+.pro-main.billing-main-layout > .app-content-scroll.has-billing-footer {
+  padding-bottom: 0 !important;
+  overflow-x: hidden !important;
+  scrollbar-gutter: auto !important;
+}
+
+.pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer,
+.pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer {
+  position: relative !important;
+  inset: auto !important;
+  width: calc(100% - (var(--billing-footer-inline-side-gap) * 2)) !important;
+  max-width: none !important;
+  margin: var(--billing-footer-inline-top-gap) auto calc(var(--billing-footer-inline-bottom-space) + env(safe-area-inset-bottom)) !important;
+  padding: 0 !important;
+  min-height: 44px !important;
+  height: auto !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer::before,
+.pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer::after,
+.pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer::before,
+.pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer::after {
+  display: none !important;
+  content: none !important;
+}
+
+.pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn,
+.pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn {
+  height: 44px !important;
+  min-height: 44px !important;
+  border-radius: 14px !important;
+  padding: 0 22px !important;
+}
+
+.pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn.primary,
+.pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn.primary,
+.pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn.big,
+.pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn.big {
+  min-width: 260px !important;
+}
+
+@media (max-width: 900px) {
+  :root {
+    --billing-footer-inline-side-gap: 14px;
+    --billing-footer-inline-bottom-space: 18px;
+    --billing-footer-inline-top-gap: 8px;
+  }
+
+  .pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer,
+  .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer {
+    gap: 10px !important;
+  }
+
+  .pro-shell .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn,
+  .pro-main.billing-main-layout .app-content-scroll > .billing-page-footer.inline-billing-footer .btn {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    padding: 0 14px !important;
+  }
+}
+
+/* V34: Global overlay styling for Billing Registration Reference mat-autocomplete. */
+.registration-reference-panel.mat-mdc-autocomplete-panel {
+  padding: 5px !important;
+  border-radius: 10px !important;
+  border: 1px solid color-mix(in srgb, var(--primary, #3b82f6) 38%, var(--border, rgba(148,163,184,.28))) !important;
+  background: var(--panel, #0b1220) !important;
+  box-shadow: 0 18px 44px rgba(2, 6, 23, .38) !important;
+  max-height: 230px !important;
+}
+
+.registration-reference-panel .mat-mdc-option {
+  min-height: 46px !important;
+  border-radius: 8px !important;
+  padding: 6px 10px !important;
+  color: var(--text, #f8fafc) !important;
+  font-size: 12px !important;
+}
+
+.registration-reference-panel .mat-mdc-option:hover,
+.registration-reference-panel .mat-mdc-option.mdc-list-item--selected,
+.registration-reference-panel .mat-mdc-option.mat-mdc-option-active {
+  background: color-mix(in srgb, var(--primary, #3b82f6) 72%, #111827) !important;
+  color: #fff !important;
+}
+
+.registration-reference-panel .mat-mdc-option .mdc-list-item__primary-text {
+  width: 100% !important;
+  color: inherit !important;
+}
+
+.registration-reference-panel .reference-option-content {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  line-height: 1.2 !important;
+  color: inherit !important;
+}
+
+.registration-reference-panel .reference-option-content b {
+  font-size: 12.5px !important;
+  font-weight: 850 !important;
+  color: inherit !important;
+}
+
+.registration-reference-panel .reference-option-content span,
+.registration-reference-panel .reference-option-content .reference-meta-line {
+  font-size: 10.8px !important;
+  font-weight: 650 !important;
+  color: color-mix(in srgb, currentColor 72%, transparent) !important;
+}
+
+.registration-reference-panel .reference-match-highlight {
+  padding: 0 2px !important;
+  border-radius: 4px !important;
+  background: color-mix(in srgb, var(--primary, #3b82f6) 24%, transparent) !important;
+  color: inherit !important;
+  font-weight: 950 !important;
+}
+
+.registration-reference-panel .mat-mdc-option:hover .reference-match-highlight,
+.registration-reference-panel .mat-mdc-option.mdc-list-item--selected .reference-match-highlight,
+.registration-reference-panel .mat-mdc-option.mat-mdc-option-active .reference-match-highlight {
+  background: rgba(255,255,255,.22) !important;
+  color: #fff !important;
+}
+
+.registration-reference-panel .registration-reference-empty {
+  opacity: .72 !important;
+}
+
+body:not(.dark-theme) .registration-reference-panel.mat-mdc-autocomplete-panel {
+  background: #fff !important;
+  border-color: #bfdbfe !important;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, .18) !important;
+}
+
+body:not(.dark-theme) .registration-reference-panel .mat-mdc-option {
+  color: #0f172a !important;
+}
+
+body:not(.dark-theme) .registration-reference-panel .mat-mdc-option:hover,
+body:not(.dark-theme) .registration-reference-panel .mat-mdc-option.mdc-list-item--selected,
+body:not(.dark-theme) .registration-reference-panel .mat-mdc-option.mat-mdc-option-active {
+  background: #2563eb !important;
+  color: #fff !important;
+}
+
+body:not(.dark-theme) .registration-reference-panel .reference-match-highlight {
+  background: #dbeafe !important;
+  color: #1d4ed8 !important;
+}
+
+body:not(.dark-theme) .registration-reference-panel .mat-mdc-option:hover .reference-match-highlight,
+body:not(.dark-theme) .registration-reference-panel .mat-mdc-option.mdc-list-item--selected .reference-match-highlight,
+body:not(.dark-theme) .registration-reference-panel .mat-mdc-option.mat-mdc-option-active .reference-match-highlight {
+  background: rgba(255,255,255,.28) !important;
+  color: #fff !important;
+}
+
+/* V35: Reuse the Billing mat-autocomplete panel for patient lookup and consultant search.
+   No suggestions are shown on focus until the user types the required search text. */
+.registration-reference-panel .patient-option-content {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+.registration-reference-panel .patient-option-content b {
+  font-weight: 1000;
+  color: inherit;
+}
+.registration-reference-panel .patient-option-content span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: color-mix(in srgb, currentColor 76%, transparent);
+  font-weight: 800;
+}
+.registration-reference-panel.patient-lookup-panel.mat-mdc-autocomplete-panel,
+.registration-reference-panel.patient-consultant-panel.mat-mdc-autocomplete-panel {
+  min-width: min(560px, calc(100vw - 40px));
+}
+
+
+/* v-report-settings-reference: compact crisp sidebar, no collection card */
+.pro-shell.lims-shell,
+.pro-shell.lims-shell.side-collapsed { display:block !important; }
+.pro-shell .side {
+  width: 236px !important;
+  max-width: 236px !important;
+  min-width: 64px !important;
+  padding: 12px 10px !important;
+  gap: 10px !important;
+}
+.pro-shell.side-collapsed .side { width: 64px !important; }
+.pro-shell.side-collapsed .side:hover { width: 236px !important; box-shadow: 20px 0 52px rgba(0,0,0,.42) !important; }
+.pro-shell .pro-main { margin-left: 236px !important; width: calc(100vw - 236px) !important; }
+.pro-shell.side-collapsed .pro-main { margin-left: 64px !important; width: calc(100vw - 64px) !important; }
+.pro-shell .side-card { display:none !important; }
+.pro-shell .side-toggle, .pro-shell .theme-toggle { min-height: 38px !important; border-radius: 14px !important; padding: 0 10px !important; gap: 10px !important; font-size: 13px !important; }
+.pro-shell .brand { min-width: 0 !important; gap: 10px !important; padding: 4px 2px 8px !important; }
+.pro-shell .logo { width: 42px !important; height: 42px !important; min-width: 42px !important; border-radius: 16px !important; font-size: 20px !important; }
+.pro-shell .brand-text h1 { font-size: 15px !important; line-height: 1.1 !important; }
+.pro-shell .brand-text p { font-size: 11px !important; }
+.pro-shell .side-nav { gap: 7px !important; padding-right: 0 !important; }
+.pro-shell .nav-button { min-height: 42px !important; border-radius: 15px !important; padding: 0 11px !important; gap: 10px !important; font-size: 13px !important; }
+.pro-shell .nav-icon, .pro-shell .hamburger { width: 22px !important; min-width: 22px !important; font-size: 15px !important; }
+.pro-shell.side-collapsed .side:not(:hover) .side-toggle,
+.pro-shell.side-collapsed .side:not(:hover) .brand,
+.pro-shell.side-collapsed .side:not(:hover) .nav-button,
+.pro-shell.side-collapsed .side:not(:hover) .theme-toggle { justify-content: center !important; padding-left: 0 !important; padding-right: 0 !important; }
+.pro-shell.side-collapsed .side:not(:hover) .logo { width: 40px !important; height: 40px !important; min-width: 40px !important; }
+@media(max-width:900px){ .pro-shell .pro-main, .pro-shell.side-collapsed .pro-main { margin-left:0 !important; width:100% !important; } }
+
+/* v-report-settings-menu-stepper: separate Report Settings menu + slimmer crisp sidebar pills */
+.pro-shell .side {
+  width: 218px !important;
+  max-width: 218px !important;
+  min-width: 58px !important;
+  padding: 10px 9px !important;
+  gap: 8px !important;
+}
+.pro-shell.side-collapsed .side { width: 58px !important; }
+.pro-shell.side-collapsed .side:hover { width: 218px !important; }
+.pro-shell .pro-main { margin-left: 218px !important; width: calc(100vw - 218px) !important; }
+.pro-shell.side-collapsed .pro-main { margin-left: 58px !important; width: calc(100vw - 58px) !important; }
+.pro-shell .side-toggle,
+.pro-shell .theme-toggle {
+  min-height: 34px !important;
+  border-radius: 12px !important;
+  padding: 0 10px !important;
+  gap: 9px !important;
+  font-size: 12.5px !important;
+}
+.pro-shell .brand {
+  padding: 4px 2px 6px !important;
+  gap: 9px !important;
+}
+.pro-shell .logo {
+  width: 38px !important;
+  height: 38px !important;
+  min-width: 38px !important;
+  border-radius: 14px !important;
+  font-size: 19px !important;
+}
+.pro-shell .brand-text h1 { font-size: 14px !important; }
+.pro-shell .brand-text p { font-size: 10.5px !important; }
+.pro-shell .side-nav { gap: 6px !important; }
+.pro-shell .nav-button {
+  min-height: 36px !important;
+  border-radius: 12px !important;
+  padding: 0 10px !important;
+  gap: 9px !important;
+  font-size: 12.5px !important;
+  font-weight: 900 !important;
+}
+.pro-shell .nav-icon,
+.pro-shell .hamburger {
+  width: 20px !important;
+  min-width: 20px !important;
+  font-size: 14px !important;
+}
+.pro-shell.side-collapsed .side:not(:hover) .logo {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+}
+@media(max-width:900px){
+  .pro-shell .pro-main,
+  .pro-shell.side-collapsed .pro-main { margin-left:0 !important; width:100% !important; }
+}
+
+
+/* Topbar live date/time: uses existing header space only, no extra strip/height */
+.pro-shell .topbar-live-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  margin-right: 8px;
+  min-width: 0;
+  max-width: min(330px, 32vw);
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+  color: var(--text);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, .07);
+  backdrop-filter: blur(12px);
+}
+
+.pro-shell .live-clock-icon {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.pro-shell .topbar-live-copy {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.pro-shell .topbar-live-copy strong {
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: .01em;
+  white-space: nowrap;
+}
+
+.pro-shell .topbar-live-copy small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body.light .pro-shell .topbar-live-clock {
+  background: rgba(255, 255, 255, .72);
+}
+
+body.dark-theme .pro-shell .topbar-live-clock,
+body:not(.light) .pro-shell .topbar-live-clock {
+  background: rgba(15, 23, 42, .56);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .18);
+}
+
+.pro-shell .pro-topbar.fixed-billing-topbar .topbar-live-clock {
+  margin-left: 8px;
+}
+
+@media (max-width: 1100px) {
+  .pro-shell .topbar-live-clock {
+    max-width: 230px;
+  }
+
+  .pro-shell .topbar-live-copy small {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .pro-shell .topbar-live-clock {
+    order: 2;
+    margin-left: 0;
+    margin-right: 0;
+    max-width: 100%;
+  }
+}
+
+/* Sidebar layout contract:
+   - Collapsed sidebar may hover-expand as a temporary overlay.
+   - Pinned/open sidebar must reserve its 280px grid column and never float above page dialogs. */
+.lims-shell.app {
+  grid-template-columns: 280px minmax(0, 1fr);
+}
+.lims-shell.app.side-collapsed {
+  grid-template-columns: 84px minmax(0, 1fr);
+}
+.lims-shell.app:not(.side-collapsed) .side,
+.lims-shell.app:not(.side-collapsed) .side.pinned-open {
+  width: 280px;
+  box-shadow: none;
+  z-index: 10;
+}
+.lims-shell.app.side-collapsed .side {
+  width: 84px;
+  z-index: 30;
+}
+.lims-shell.app.side-collapsed .side:hover {
+  width: 280px;
+  box-shadow: 18px 0 42px rgba(0,0,0,.28);
+  z-index: 40;
+}
+.lims-shell.app:not(.side-collapsed) .modal-backdrop,
+.lims-shell.app:not(.side-collapsed) .pdf-backdrop,
+.lims-shell.app:not(.side-collapsed) .confirm-backdrop {
+  left: 280px;
+  width: auto;
+}
+.lims-shell.app.side-collapsed .modal-backdrop,
+.lims-shell.app.side-collapsed .pdf-backdrop,
+.lims-shell.app.side-collapsed .confirm-backdrop {
+  left: 84px;
+  width: auto;
+}
+@media (max-width: 900px) {
+  .lims-shell.app:not(.side-collapsed) .modal-backdrop,
+  .lims-shell.app:not(.side-collapsed) .pdf-backdrop,
+  .lims-shell.app:not(.side-collapsed) .confirm-backdrop,
+  .lims-shell.app.side-collapsed .modal-backdrop,
+  .lims-shell.app.side-collapsed .pdf-backdrop,
+  .lims-shell.app.side-collapsed .confirm-backdrop {
+    left: 0;
+    width: auto;
+  }
+}
+
+/* Quick barcode modal stacking fix only.
+   Do not change sidebar sizing, pinned layout, collapsed layout, or hover behavior. */
+body:has(.quick-barcode-backdrop) .quick-barcode-backdrop,
+body:has(.quick-barcode-backdrop) .modal-backdrop.quick-barcode-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 2147483400 !important;
+}
+
+body:has(.quick-barcode-backdrop) .quick-barcode-modal {
+  position: relative !important;
+  z-index: 2147483401 !important;
+}
+
+body:has(.quick-barcode-backdrop) .pro-main,
+body:has(.quick-barcode-backdrop) main {
+  position: relative !important;
+  z-index: 2147483300 !important;
+}
+
+body:has(.quick-barcode-backdrop) .side,
+body:has(.quick-barcode-backdrop) .pro-side,
+body:has(.quick-barcode-backdrop) .sidebar,
+body:has(.quick-barcode-backdrop) .app-sidebar,
+body:has(.quick-barcode-backdrop) .side-menu {
+  z-index: 1000 !important;
+}
+
+
+/* Rich PDF background merge progress */
+.report-process-overlay{position:fixed;inset:0;z-index:100000;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at top,rgba(37,99,235,.18),transparent 38%),rgba(2,6,23,.74);backdrop-filter:blur(12px);animation:reportOverlayIn .18s ease-out}
+.report-process-card{width:min(520px,calc(100vw - 32px));padding:28px;border:1px solid rgba(148,163,184,.24);border-radius:24px;background:linear-gradient(145deg,rgba(255,255,255,.99),rgba(248,250,252,.97));box-shadow:0 32px 90px rgba(2,6,23,.4),0 8px 24px rgba(2,6,23,.18);color:#0f172a;animation:reportCardIn .22s ease-out}
+.process-visual{position:relative;width:94px;height:94px;margin:0 auto 18px;display:grid;place-items:center}.pdf-document{position:relative;z-index:2;width:54px;height:68px;display:grid;place-items:end center;padding-bottom:12px;border-radius:10px;background:linear-gradient(145deg,#2563eb,#1d4ed8);box-shadow:0 12px 28px rgba(37,99,235,.3),inset 0 1px 0 rgba(255,255,255,.28);color:#fff;font-size:12px;font-weight:900;letter-spacing:.08em}.pdf-fold{position:absolute;top:0;right:0;width:18px;height:18px;border-radius:0 10px 0 6px;background:rgba(255,255,255,.84);clip-path:polygon(0 0,100% 100%,0 100%)}
+.process-orbit{position:absolute;inset:0;border:2px solid rgba(37,99,235,.15);border-radius:50%;animation:reportOrbit 2.2s linear infinite}.process-orbit span{position:absolute;width:9px;height:9px;border-radius:50%;background:#2563eb;box-shadow:0 0 14px rgba(37,99,235,.52)}.process-orbit span:nth-child(1){top:5px;left:50%}.process-orbit span:nth-child(2){right:4px;bottom:21px}.process-orbit span:nth-child(3){left:8px;bottom:18px}.process-success,.process-error-mark{position:absolute;z-index:3;display:grid;place-items:center;width:54px;height:54px;border-radius:50%;color:#fff;font-size:30px;font-weight:900}.process-success{background:#16a34a;box-shadow:0 12px 28px rgba(22,163,74,.3)}.process-error-mark{background:#dc2626;box-shadow:0 12px 28px rgba(220,38,38,.3)}.report-process-card.is-complete .pdf-document,.report-process-card.is-error .pdf-document{opacity:0}
+.process-copy{text-align:center}.process-eyebrow{margin-bottom:8px;color:#2563eb;font-size:11px;font-weight:900;letter-spacing:.16em}.process-copy h2{margin:0;font-size:24px;line-height:1.2}.process-copy p{min-height:42px;margin:10px 0 22px;color:#64748b;font-size:14px;line-height:1.55}
+.process-progress{padding:18px;border:1px solid #e2e8f0;border-radius:16px;background:rgba(248,250,252,.85)}.progress-meta,.progress-footer{display:flex;align-items:center;justify-content:space-between;gap:16px}.progress-meta{margin-bottom:10px;color:#334155;font-size:13px;font-weight:800}.progress-meta strong{color:#2563eb}.progress-track{height:9px;overflow:hidden;border-radius:999px;background:#dbe4f0}.progress-fill{position:relative;height:100%;min-width:2%;border-radius:inherit;background:linear-gradient(90deg,#2563eb,#3b82f6,#60a5fa);transition:width .26s ease}.progress-fill:after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 20%,rgba(255,255,255,.48) 45%,transparent 70%);animation:reportShine 1.2s linear infinite}.progress-footer{margin-top:10px;color:#64748b;font-size:12px}.progress-status{font-weight:800;color:#475569}
+.process-steps{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:18px}.process-step{min-width:0;padding:12px 8px;border:1px solid #e2e8f0;border-radius:14px;text-align:center;opacity:.5;transition:.18s ease}.process-step.active{opacity:1;border-color:rgba(37,99,235,.44);background:rgba(37,99,235,.07);transform:translateY(-2px)}.process-step.complete{opacity:1;border-color:rgba(34,197,94,.36);background:rgba(34,197,94,.07)}.step-dot{width:28px;height:28px;margin:0 auto 8px;display:grid;place-items:center;border-radius:50%;background:#e2e8f0;color:#475569;font-size:12px;font-weight:900}.process-step.active .step-dot{background:#2563eb;color:#fff;box-shadow:0 6px 16px rgba(37,99,235,.28)}.process-step.complete .step-dot{background:#22c55e;color:#fff}.process-step strong,.process-step small{display:block}.process-step strong{color:#1e293b;font-size:12px}.process-step small{margin-top:4px;color:#64748b;font-size:10px;line-height:1.25}
+.dark-theme .report-process-card,body.dark .report-process-card{border-color:rgba(148,163,184,.18);background:linear-gradient(145deg,rgba(15,23,42,.99),rgba(17,24,39,.99));color:#f8fafc}.dark-theme .process-copy p,.dark-theme .progress-footer,.dark-theme .process-step small,body.dark .process-copy p,body.dark .progress-footer,body.dark .process-step small{color:#94a3b8}.dark-theme .process-progress,.dark-theme .process-step,body.dark .process-progress,body.dark .process-step{border-color:rgba(148,163,184,.18);background:rgba(30,41,59,.66)}.dark-theme .process-step strong,.dark-theme .progress-meta,body.dark .process-step strong,body.dark .progress-meta{color:#e2e8f0}
+@keyframes reportOrbit{to{transform:rotate(360deg)}}@keyframes reportShine{from{transform:translateX(-120%)}to{transform:translateX(120%)}}@keyframes reportOverlayIn{from{opacity:0}to{opacity:1}}@keyframes reportCardIn{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
+@media(max-width:620px){.report-process-card{padding:22px;border-radius:20px}.process-steps{grid-template-columns:repeat(2,1fr)}}

@@ -1,0 +1,96 @@
+{
+  "name": "lims-billing-reporting",
+  "version": "2.0.0",
+  "description": "LIMS 2.0 - Offline laboratory information management, billing, reporting, and backup application.",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "start": "npm run dev",
+    "dev": "concurrently -k \"ng serve --host 127.0.0.1 --port 4500\" \"wait-on http://127.0.0.1:4500 && tsc -p tsconfig.electron.json && electron .\"",
+    "build": "ng build --configuration production && tsc -p tsconfig.electron.json",
+    "dist": "npm run build && electron-builder --win nsis",
+    "postinstall": "electron-rebuild -f -w better-sqlite3",
+    "test:e2e": "npm run build:electron && playwright test",
+    "test:e2e:ui": "npm run build:electron && playwright test --ui",
+    "test:e2e:headed": "npm run build:electron && playwright test --headed",
+    "test:e2e:debug": "npm run build:electron && playwright test --debug",
+    "test:e2e:codegen": "npm run build:electron && playwright codegen http://127.0.0.1:4500",
+    "serve:e2e": "ng serve --host 127.0.0.1 --port 4500",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "install:report-fonts": "node tools/install-report-fonts.mjs"
+  },
+  "dependencies": {
+    "@angular/animations": "^18.2.13",
+    "@angular/cdk": "^18.2.14",
+    "@angular/common": "^18.2.13",
+    "@angular/compiler": "^18.2.13",
+    "@angular/core": "^18.2.13",
+    "@angular/forms": "^18.2.13",
+    "@angular/material": "^18.2.14",
+    "@angular/platform-browser": "^18.2.13",
+    "@angular/platform-browser-dynamic": "^18.2.13",
+    "@angular/router": "^18.2.13",
+    "better-sqlite3": "^11.9.1",
+    "electron-log": "^5.4.1",
+    "exceljs": "^4.4.0",
+    "pdfmake": "^0.2.18",
+    "rxjs": "^7.8.1",
+    "tslib": "^2.8.1",
+    "zone.js": "^0.14.10",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "4.10.38",
+    "@napi-rs/canvas": "^0.1.80"
+  },
+  "devDependencies": {
+    "@angular-devkit/build-angular": "^18.2.14",
+    "@angular/cli": "^18.2.14",
+    "@angular/compiler-cli": "^18.2.13",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.15.18",
+    "concurrently": "^9.1.2",
+    "electron": "^33.4.11",
+    "electron-builder": "^26.0.12",
+    "electron-rebuild": "^3.2.9",
+    "typescript": "^5.5.4",
+    "wait-on": "^8.0.3",
+    "@playwright/test": "^1.49.1"
+  },
+  "build": {
+    "appId": "com.lims.professional.billing.reporting",
+    "productName": "LIMS",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json",
+      "build/**"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
+    },
+    "extraResources": [
+      {
+        "from": "electron-main/assets/fonts",
+        "to": "fonts",
+        "filter": [
+          "**/*.ttf"
+        ]
+      }
+    ],
+    "asarUnpack": [
+      "node_modules/@napi-rs/canvas/**/*"
+    ]
+  }
+}

@@ -1,0 +1,4258 @@
+.select-plus-row{display:grid;grid-template-columns:1fr 38px;gap:8px}
+    .patient-title-bar{display:grid;grid-template-columns:minmax(180px,260px) minmax(300px,1fr) auto;gap:16px;align-items:end}.patient-title-main{min-width:0}.top-patient-search{position:relative;margin:0;padding:0;border:0;background:transparent;box-shadow:none;min-width:0}.top-patient-search label{display:block;color:var(--muted);font-size:12px;font-weight:900;margin-bottom:7px}.top-patient-search input{height:46px}.top-patient-search .patient-results{position:absolute;left:0;right:0;top:100%;margin-top:8px;z-index:40;background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:8px;box-shadow:0 22px 50px rgba(0,0,0,.35)}.patient-id-pill{align-self:center;white-space:nowrap}.patient-registration-layout{display:grid;grid-template-columns:1fr;gap:20px;align-items:start;position:relative}.patient-form-pro{display:grid;gap:16px;min-width:0;overflow:hidden}.patient-section-card{border:1px solid var(--border);background:color-mix(in srgb,var(--surface) 86%,transparent);border-radius:22px;padding:18px;box-shadow:0 12px 28px rgba(15,23,42,.08);min-width:0;overflow:visible}.section-heading{display:flex;align-items:center;gap:12px;margin-bottom:16px}.section-heading h4{margin:0;font-size:16px;font-weight:900;color:var(--text)}.section-heading p{margin:2px 0 0;color:var(--muted);font-size:12px;font-weight:700}.section-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:12px;background:rgba(59,130,246,.12);color:var(--primary);font-weight:900}.patient-grid{display:grid;gap:14px;min-width:0}.basic-grid{grid-template-columns:minmax(150px,.72fr) minmax(260px,1.45fr) minmax(170px,.9fr);align-items:start}.honorific-field{grid-column:1}.patient-name-field{grid-column:2}.gender-field{grid-column:3}.dob-field{grid-column:1}.age-number-field{grid-column:2}.age-unit-field{grid-column:3}.age-display-field{grid-column:1 / -1}.guardian-grid{grid-template-columns:minmax(230px,.8fr) minmax(260px,1fr) minmax(210px,.8fr)}.contact-grid{grid-template-columns:minmax(210px,.8fr) minmax(240px,.9fr) minmax(230px,.9fr)}.address-field{grid-column:1 / -1}.notes-field{grid-column:1 / -1}.patient-step .field{min-width:0}.patient-step .field label{font-size:12px;font-weight:900;letter-spacing:.01em;color:color-mix(in srgb,var(--text) 78%,var(--muted));margin-bottom:7px}.patient-step input,.patient-step select,.patient-step textarea{width:100%;min-height:46px;border-radius:14px;border:1px solid color-mix(in srgb,var(--border) 65%,var(--text));background:color-mix(in srgb,var(--surface-2) 88%,var(--text) 6%);color:var(--text);font-weight:800;font-size:14px;padding:0 14px;outline:none;transition:border-color .15s,box-shadow .15s,background .15s;color-scheme:dark}.light-mode .patient-step input,.light-mode .patient-step select,.light-mode .patient-step textarea{color-scheme:light;background:#fff;color:#0f172a}.patient-step select option{background:#0b1220;color:#e5eefc;font-weight:750}.patient-step select option:checked,.patient-step select option:hover{background:#1d4ed8;color:#fff}.light-mode .patient-step select option{background:#fff;color:#0f172a}.patient-step input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1) brightness(1.5);opacity:.9;cursor:pointer}.light-mode .patient-step input[type=date]::-webkit-calendar-picker-indicator{filter:none;opacity:.85}.patient-step textarea{min-height:86px;padding-top:12px;resize:vertical}.patient-step input::placeholder,.patient-step textarea::placeholder{color:color-mix(in srgb,var(--muted) 70%,var(--text));opacity:1;font-weight:750}.light-mode .patient-step input::placeholder,.light-mode .patient-step textarea::placeholder{color:#64748b}.patient-step input:focus,.patient-step select:focus,.patient-step textarea:focus{border-color:var(--primary);box-shadow:0 0 0 4px color-mix(in srgb,var(--primary) 18%,transparent);background:color-mix(in srgb,var(--surface) 88%,var(--primary) 4%)}.attached-plus{grid-template-columns:1fr 42px}.attached-plus select{border-top-right-radius:10px;border-bottom-right-radius:10px}.attached-plus .mini-plus{height:46px;border-radius:14px}.field-hint{display:block;margin-top:6px;color:#22c55e;font-weight:800;font-size:11px}.age-display-box{min-height:46px;display:flex;align-items:center;border-radius:14px;border:1px solid color-mix(in srgb,var(--primary) 35%,var(--border));background:rgba(59,130,246,.12);padding:0 14px;color:var(--text);font-weight:900}.soft-check{display:flex!important;align-items:center;gap:8px;margin-top:8px;font-size:12px!important;color:var(--muted)!important;text-transform:none!important;letter-spacing:0!important}.soft-check input{width:16px!important;min-height:16px!important;padding:0!important}.patient-summary-card{position:relative;top:auto;z-index:2;border:1px solid color-mix(in srgb,var(--primary) 40%,var(--border));background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 92%,var(--primary) 8%),var(--surface));border-radius:24px;overflow:hidden;box-shadow:0 18px 48px rgba(37,99,235,.12);min-width:0;width:100%;max-width:none}.summary-top{display:flex;gap:14px;align-items:center;padding:20px;border-bottom:1px solid var(--border)}.patient-avatar{width:62px;height:62px;border-radius:22px;display:grid;place-items:center;font-size:22px;font-weight:1000;background:linear-gradient(135deg,#60a5fa,#7c3aed);color:white}.summary-top h4{margin:0;font-size:18px;font-weight:1000;color:var(--text)}.summary-top p{margin:4px 0 0;color:var(--muted);font-size:13px;font-weight:750}.summary-list{display:grid;gap:0;padding:8px 20px}.summary-list div{display:flex;justify-content:space-between;gap:14px;padding:12px 0;border-bottom:1px solid color-mix(in srgb,var(--border) 70%,transparent)}.summary-list span{color:var(--muted);font-size:12px;font-weight:850}.summary-list b{text-align:right;color:var(--text);font-size:13px}.summary-actions{display:grid;gap:10px;padding:20px}.sticky-actions{position:sticky;bottom:0;z-index:5;margin-top:18px;padding:14px 0;background:linear-gradient(180deg,transparent,var(--bg) 35%)}.priority-patient-grid{grid-template-columns:minmax(220px,1.15fr) minmax(170px,.78fr) minmax(260px,1.35fr) minmax(185px,.82fr)!important;align-items:start}.consultant-priority-field{grid-column:1}.honorific-field{grid-column:2}.patient-name-field{grid-column:3}.gender-field{grid-column:4}.age-number-field{grid-column:1}.age-unit-field{grid-column:2}.dob-field{grid-column:3}.mobile-priority-field{grid-column:4}.age-display-field{grid-column:1 / -1}.summary-list div:nth-child(2) b{max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.duplicate-patient-list small+small{display:block;margin-top:3px;color:color-mix(in srgb,var(--primary) 70%,var(--muted));font-weight:850}.top-patient-search .patient-results button span{display:block;line-height:1.35}
+@media(max-width:1100px){.patient-title-bar{grid-template-columns:1fr}.patient-id-pill{justify-self:start}.top-patient-search{order:2}.patient-title-main{order:1}.patient-id-pill{order:3}}@media(max-width:1320px){.patient-registration-layout{grid-template-columns:1fr}.patient-summary-card{position:relative;top:auto;max-width:none}.priority-patient-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.consultant-priority-field,.honorific-field,.patient-name-field,.gender-field,.age-number-field,.age-unit-field,.dob-field,.mobile-priority-field{grid-column:auto}.age-display-field{grid-column:1 / -1}.guardian-grid,.contact-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.address-field,.notes-field{grid-column:1 / -1}}@media(max-width:760px){.basic-grid,.guardian-grid,.contact-grid{grid-template-columns:1fr}.consultant-priority-field,.honorific-field,.patient-name-field,.gender-field,.dob-field,.age-number-field,.age-unit-field,.mobile-priority-field,.age-display-field,.address-field,.notes-field{grid-column:auto}.patient-summary-card{max-width:none}}
+.duplicate-patient-dialog{max-width:680px}.duplicate-patient-list{display:grid;gap:10px;margin-top:14px;max-height:310px;overflow:auto}.duplicate-patient-list button{display:flex;align-items:center;justify-content:space-between;gap:14px;width:100%;border:1px solid var(--border);border-radius:16px;background:color-mix(in srgb,var(--surface-2) 88%,var(--primary) 4%);color:var(--text);padding:14px;text-align:left;cursor:pointer}.duplicate-patient-list button:hover{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 13%,var(--surface))}.duplicate-patient-list span{display:grid;gap:4px}.duplicate-patient-list small{color:var(--muted);font-weight:750}.duplicate-patient-list strong{color:var(--primary);font-weight:1000}.patient-summary-card .summary-list{padding-bottom:20px}.patient-summary-card{align-self:start}.patient-form-pro{max-width:100%}
+  .mini-plus{height:38px;border-radius:12px;border:1px solid var(--border);background:rgba(59,130,246,.12);color:var(--primary);font-weight:900;cursor:pointer}.mini-plus:disabled{opacity:.45;cursor:not-allowed}.small-modal{max-width:420px}.modal-input{width:100%;margin-top:12px}.modal-copy{color:var(--muted);font-size:13px;font-weight:700}.field label b{color:#ef4444}
+
+.basic-heading-with-consultant{display:grid;grid-template-columns:minmax(0,1fr) minmax(360px,430px);align-items:start;gap:18px;margin-bottom:18px}.heading-left{display:flex;align-items:center;gap:12px;min-width:0}.consultant-spotlight{position:relative;justify-self:end;width:min(430px,100%);border:1px solid color-mix(in srgb,var(--primary) 62%,var(--border));background:linear-gradient(135deg,color-mix(in srgb,var(--primary) 20%,var(--surface)),color-mix(in srgb,var(--surface-2) 92%,var(--primary) 8%));border-radius:20px;padding:12px;box-shadow:0 0 0 1px rgba(96,165,250,.18),0 18px 48px rgba(37,99,235,.22)}.consultant-spotlight::before{content:'Priority';position:absolute;right:14px;top:-12px;padding:3px 9px;border-radius:999px;background:var(--primary);color:#fff;font-size:10px;font-weight:1000;letter-spacing:.06em;text-transform:uppercase}.consultant-spotlight label{display:block;margin:0 0 8px!important;font-size:12px;font-weight:1000;color:color-mix(in srgb,var(--text) 90%,var(--primary))}.consultant-search-line{display:grid;grid-template-columns:1fr 46px;gap:10px}.consultant-search-line input{height:48px;border-radius:15px!important;font-size:14px!important;border-color:color-mix(in srgb,var(--primary) 72%,var(--border))!important;box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 16%,transparent);background:color-mix(in srgb,var(--surface-2) 96%,#000 4%)!important}.consultant-search-line input::placeholder{color:color-mix(in srgb,var(--text) 65%,var(--muted))!important;font-weight:850}.consultant-plus{height:48px!important;border-color:color-mix(in srgb,var(--primary) 58%,var(--border))!important;background:color-mix(in srgb,var(--primary) 20%,var(--surface-2))!important}.consultant-results{position:absolute;left:12px;right:12px;top:calc(100% + 8px);z-index:120;border:1px solid color-mix(in srgb,var(--primary) 35%,var(--border));border-radius:18px;background:#0b1220;padding:8px;box-shadow:0 26px 70px rgba(0,0,0,.72);max-height:280px;overflow:auto;opacity:1}.light-mode .consultant-results{background:#fff;box-shadow:0 26px 70px rgba(15,23,42,.22)}.consultant-option{width:100%;display:flex;align-items:center;justify-content:space-between;text-align:left;border:1px solid color-mix(in srgb,var(--border) 65%,transparent);background:#101827;color:#e5eefc;padding:11px 12px;border-radius:14px;cursor:pointer;margin-bottom:6px}.consultant-option:last-child{margin-bottom:0}.light-mode .consultant-option{background:#f8fafc;color:#0f172a}.consultant-option:hover{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 18%,#0b1220)}.light-mode .consultant-option:hover{background:#eaf2ff}.consultant-option span{display:grid;gap:3px}.consultant-option small,.consultant-empty{color:color-mix(in srgb,var(--muted) 82%,var(--text));font-size:12px;font-weight:800}.consultant-empty{padding:10px 12px;background:#101827;border-radius:14px}.light-mode .consultant-empty{background:#f8fafc}.priority-patient-grid{grid-template-columns:minmax(150px,.65fr) minmax(260px,1.25fr) minmax(170px,.75fr) minmax(160px,.72fr)!important}.honorific-field{grid-column:1}.patient-name-field{grid-column:2}.gender-field{grid-column:3}.age-number-field{grid-column:4}.age-unit-field{grid-column:1}.dob-field{grid-column:2}.mobile-priority-field{grid-column:3 / span 2}.contact-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}.contact-grid .address-field,.contact-grid .notes-field{grid-column:auto!important}.modal-form-grid{display:grid;gap:10px;margin-top:12px}.modal-form-grid label{display:grid;gap:6px;color:var(--muted);font-size:12px;font-weight:900}.modal-form-grid label b{color:#ef4444}
+
+/* Clean consultant priority field - normal form size, no oversized card */
+.consultant-priority-field{grid-column:1 / span 2;position:relative;z-index:18}
+.consultant-compact-row{display:grid;grid-template-columns:minmax(0,1fr) 46px;gap:10px;align-items:end}
+.consultant-compact-row input{height:46px;border-color:color-mix(in srgb,var(--primary) 55%,var(--border))!important;background:color-mix(in srgb,var(--surface-2) 92%,var(--primary) 5%)!important;box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 10%,transparent)}
+.consultant-compact-row input::placeholder{color:color-mix(in srgb,var(--text) 58%,var(--muted))!important;font-weight:850}
+.consultant-compact-row input:focus{border-color:var(--primary)!important;box-shadow:0 0 0 4px color-mix(in srgb,var(--primary) 18%,transparent)!important}
+.compact-consultant-results{left:0!important;right:56px!important;top:calc(100% + 8px)!important;z-index:500!important;background:#0b1220!important;opacity:1!important;backdrop-filter:none!important}
+.light-mode .compact-consultant-results{background:#fff!important}
+.priority-patient-grid{grid-template-columns:minmax(260px,1.15fr) minmax(160px,.65fr) minmax(260px,1.15fr) minmax(180px,.82fr)!important}
+.honorific-field{grid-column:3}.patient-name-field{grid-column:1}.gender-field{grid-column:2}.age-number-field{grid-column:3}.age-unit-field{grid-column:4}.dob-field{grid-column:1}.mobile-priority-field{grid-column:2 / span 2}.age-display-field{grid-column:1 / -1}
+
+@media(max-width:1320px){.basic-heading-with-consultant{grid-template-columns:1fr}.consultant-spotlight{justify-self:stretch;width:100%}.priority-patient-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.mobile-priority-field{grid-column:auto}.contact-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.contact-grid .notes-field{grid-column:1 / -1!important}}@media(max-width:760px){.priority-patient-grid,.contact-grid{grid-template-columns:1fr!important}.mobile-priority-field,.contact-grid .notes-field{grid-column:auto!important}}
+
+/* Latest patient registration layout: maximum 3 fields per row */
+.patient-grid.priority-patient-grid{
+  grid-template-columns:minmax(260px,.9fr) minmax(220px,.65fr) minmax(320px,1.1fr)!important;
+  gap:14px 16px!important;
+  align-items:start!important;
+}
+.priority-patient-grid .consultant-priority-field{grid-column:1!important;position:relative;z-index:20}
+.priority-patient-grid .honorific-field{grid-column:2!important}
+.priority-patient-grid .patient-name-field{grid-column:3!important}
+.priority-patient-grid .gender-field{grid-column:1!important}
+.priority-patient-grid .age-combo-field{grid-column:2!important}
+.priority-patient-grid .mobile-priority-field{grid-column:3!important}
+.priority-patient-grid .dob-field{grid-column:1!important}
+.priority-patient-grid .age-display-field{grid-column:2 / -1!important}
+.age-combo-row{display:grid;grid-template-columns:minmax(76px,.75fr) minmax(112px,1fr);gap:8px;align-items:end}
+.age-combo-row input,.age-combo-row select{min-width:0!important}
+.consultant-compact-row{grid-template-columns:minmax(0,1fr) 44px!important;gap:8px!important}
+.consultant-compact-row input{height:46px!important}
+.consultant-plus{height:46px!important}
+.priority-patient-grid .honorific-field .attached-plus{grid-template-columns:minmax(0,1fr) 44px!important;gap:8px!important}
+.compact-consultant-results{right:52px!important}
+@media(max-width:1120px){
+  .patient-grid.priority-patient-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .priority-patient-grid .consultant-priority-field,.priority-patient-grid .honorific-field,.priority-patient-grid .patient-name-field,.priority-patient-grid .gender-field,.priority-patient-grid .age-combo-field,.priority-patient-grid .mobile-priority-field,.priority-patient-grid .dob-field{grid-column:auto!important}
+  .priority-patient-grid .age-display-field{grid-column:1 / -1!important}
+}
+@media(max-width:760px){
+  .patient-grid.priority-patient-grid{grid-template-columns:1fr!important}
+  .priority-patient-grid .consultant-priority-field,.priority-patient-grid .honorific-field,.priority-patient-grid .patient-name-field,.priority-patient-grid .gender-field,.priority-patient-grid .age-combo-field,.priority-patient-grid .mobile-priority-field,.priority-patient-grid .dob-field,.priority-patient-grid .age-display-field{grid-column:auto!important}
+}
+
+/* Final compact patient registration layout: keep at most 3 fields per row, with smaller Honorific and Gender */
+.patient-grid.priority-patient-grid{
+  grid-template-columns:repeat(12,minmax(0,1fr))!important;
+  column-gap:16px!important;
+  row-gap:14px!important;
+  align-items:start!important;
+}
+.priority-patient-grid .consultant-priority-field{grid-column:1 / span 4!important;position:relative;z-index:20}
+.priority-patient-grid .honorific-field{grid-column:5 / span 2!important;max-width:none!important}
+.priority-patient-grid .patient-name-field{grid-column:7 / span 6!important}
+.priority-patient-grid .gender-field{grid-column:1 / span 3!important;max-width:none!important}
+.priority-patient-grid .age-combo-field{grid-column:4 / span 3!important}
+.priority-patient-grid .mobile-priority-field{grid-column:7 / span 6!important}
+.priority-patient-grid .dob-field{grid-column:1 / span 4!important}
+.priority-patient-grid .age-display-field{grid-column:5 / span 8!important}
+.priority-patient-grid .honorific-field .attached-plus{grid-template-columns:minmax(0,1fr) 44px!important;gap:8px!important}
+.priority-patient-grid .gender-field select{min-width:0!important}
+.consultant-compact-row{grid-template-columns:minmax(0,1fr) 44px!important;gap:8px!important}
+.consultant-compact-row input{height:46px!important;font-size:13px!important;text-overflow:ellipsis!important}
+.consultant-compact-row input::placeholder{font-size:13px!important;white-space:nowrap!important;text-overflow:ellipsis!important;overflow:hidden!important}
+.age-combo-row{display:grid;grid-template-columns:minmax(72px,.78fr) minmax(108px,1fr);gap:8px;align-items:end}
+.age-combo-row input,.age-combo-row select{min-width:0!important}
+.compact-consultant-results{right:52px!important}
+@media(max-width:1120px){
+  .patient-grid.priority-patient-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .priority-patient-grid .consultant-priority-field,.priority-patient-grid .honorific-field,.priority-patient-grid .patient-name-field,.priority-patient-grid .gender-field,.priority-patient-grid .age-combo-field,.priority-patient-grid .mobile-priority-field,.priority-patient-grid .dob-field{grid-column:auto!important}
+  .priority-patient-grid .age-display-field{grid-column:1 / -1!important}
+}
+@media(max-width:760px){
+  .patient-grid.priority-patient-grid{grid-template-columns:1fr!important}
+  .priority-patient-grid .consultant-priority-field,.priority-patient-grid .honorific-field,.priority-patient-grid .patient-name-field,.priority-patient-grid .gender-field,.priority-patient-grid .age-combo-field,.priority-patient-grid .mobile-priority-field,.priority-patient-grid .dob-field,.priority-patient-grid .age-display-field{grid-column:auto!important}
+}
+
+
+/* Premium patient identity layout - compact, dark/light friendly */
+.patient-step .patient-registration-layout{display:block!important}
+.patient-step .patient-form-pro{gap:16px!important}
+.patient-step .patient-form-pro > .patient-section-card:first-child{
+  position:relative;
+  overflow:visible;
+  border:1px solid color-mix(in srgb,var(--border) 68%,var(--accent) 18%)!important;
+  background:
+    radial-gradient(circle at 10% 0%,color-mix(in srgb,var(--accent) 12%,transparent),transparent 26%),
+    linear-gradient(180deg,color-mix(in srgb,var(--panel) 96%,var(--bg) 4%),color-mix(in srgb,var(--panel) 88%,var(--bg) 12%))!important;
+  border-radius:24px!important;
+  padding:24px 28px!important;
+  box-shadow:0 18px 48px rgba(15,23,42,.10),inset 0 1px 0 rgba(255,255,255,.05)!important;
+}
+body.dark-theme .patient-step .patient-form-pro > .patient-section-card:first-child{
+  background:
+    radial-gradient(circle at 10% 0%,rgba(37,99,235,.18),transparent 26%),
+    linear-gradient(180deg,rgba(15,23,42,.92),rgba(8,16,31,.96))!important;
+  box-shadow:0 22px 64px rgba(2,6,23,.34),inset 0 1px 0 rgba(255,255,255,.04)!important;
+}
+.patient-step .patient-form-pro > .patient-section-card:first-child .section-heading{
+  display:flex!important;
+  align-items:center!important;
+  gap:16px!important;
+  margin-bottom:24px!important;
+}
+.patient-step .patient-form-pro > .patient-section-card:first-child .section-icon{
+  width:56px!important;
+  height:56px!important;
+  border-radius:20px!important;
+  font-size:20px!important;
+  color:#fff!important;
+  background:linear-gradient(135deg,#2563eb,#1d4ed8)!important;
+  box-shadow:0 14px 30px rgba(37,99,235,.24)!important;
+}
+.patient-step .patient-form-pro > .patient-section-card:first-child .section-heading h4{
+  font-size:24px!important;
+  line-height:1.05!important;
+  letter-spacing:-.025em!important;
+  color:var(--text)!important;
+}
+.patient-step .patient-form-pro > .patient-section-card:first-child .section-heading p{
+  margin-top:6px!important;
+  color:var(--muted)!important;
+  font-size:14px!important;
+  font-weight:750!important;
+}
+.patient-grid.priority-patient-grid{
+  display:grid!important;
+  grid-template-columns:repeat(12,minmax(0,1fr))!important;
+  gap:22px 28px!important;
+  align-items:start!important;
+}
+.priority-patient-grid .consultant-priority-field{grid-column:1 / span 5!important;position:relative;z-index:30}
+.priority-patient-grid .honorific-field{grid-column:6 / span 3!important}
+.priority-patient-grid .patient-name-field{grid-column:9 / span 4!important}
+.priority-patient-grid .gender-field{grid-column:1 / span 4!important}
+.priority-patient-grid .age-combo-field{grid-column:5 / span 4!important}
+.priority-patient-grid .mobile-priority-field{grid-column:9 / span 4!important}
+.priority-patient-grid .dob-field{grid-column:1 / span 5!important}
+.priority-patient-grid .age-display-field{grid-column:6 / span 7!important}
+.patient-step .field label{
+  display:block!important;
+  font-size:13px!important;
+  font-weight:900!important;
+  color:color-mix(in srgb,var(--text) 88%,var(--muted))!important;
+  margin-bottom:8px!important;
+  letter-spacing:.01em!important;
+}
+.patient-step .field label b{color:#ef4444!important}
+.patient-step input,.patient-step select,.patient-step textarea{
+  width:100%!important;
+  min-height:52px!important;
+  height:52px!important;
+  border-radius:13px!important;
+  border:1px solid color-mix(in srgb,var(--border) 70%,var(--text) 14%)!important;
+  background:color-mix(in srgb,var(--input) 92%,var(--panel) 8%)!important;
+  color:var(--text)!important;
+  font-size:14px!important;
+  font-weight:750!important;
+  padding:0 16px!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04)!important;
+  outline:none!important;
+}
+body.dark-theme .patient-step input,body.dark-theme .patient-step select,body.dark-theme .patient-step textarea{
+  background:linear-gradient(180deg,rgba(15,23,42,.86),rgba(10,19,35,.94))!important;
+  border-color:rgba(148,163,184,.30)!important;
+  color:#eaf2ff!important;
+  color-scheme:dark!important;
+}
+body:not(.dark-theme) .patient-step input,body:not(.dark-theme) .patient-step select,body:not(.dark-theme) .patient-step textarea{
+  background:#fff!important;
+  color:#0f172a!important;
+  color-scheme:light!important;
+}
+.patient-step input::placeholder,.patient-step textarea::placeholder{color:color-mix(in srgb,var(--muted) 78%,var(--text))!important;font-weight:700!important}
+.patient-step input:focus,.patient-step select:focus,.patient-step textarea:focus{
+  border-color:#3b82f6!important;
+  box-shadow:0 0 0 3px rgba(59,130,246,.16)!important;
+}
+.patient-step select option{background:#0b1220;color:#e5eefc;font-weight:750}
+body:not(.dark-theme) .patient-step select option{background:#fff;color:#0f172a}
+.patient-step input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1) brightness(1.35);opacity:.88;cursor:pointer}
+body:not(.dark-theme) .patient-step input[type=date]::-webkit-calendar-picker-indicator{filter:none;opacity:.75}
+.select-plus-row.attached-plus,.consultant-compact-row{display:grid!important;grid-template-columns:minmax(0,1fr) 54px!important;gap:10px!important}
+.mini-plus,.consultant-plus{
+  width:54px!important;
+  height:52px!important;
+  border-radius:14px!important;
+  border:1px solid color-mix(in srgb,#3b82f6 55%,var(--border))!important;
+  background:color-mix(in srgb,#2563eb 12%,var(--panel))!important;
+  color:#3b82f6!important;
+  font-size:24px!important;
+  box-shadow:0 10px 24px rgba(37,99,235,.14)!important;
+}
+body.dark-theme .mini-plus,body.dark-theme .consultant-plus{
+  background:linear-gradient(180deg,rgba(37,99,235,.25),rgba(23,37,84,.72))!important;
+  color:#60a5fa!important;
+}
+.age-combo-row{
+  display:grid!important;
+  grid-template-columns:1fr 1.15fr!important;
+  gap:0!important;
+  border:1px solid color-mix(in srgb,var(--border) 70%,var(--text) 14%)!important;
+  border-radius:13px!important;
+  overflow:hidden!important;
+  background:color-mix(in srgb,var(--input) 92%,var(--panel) 8%)!important;
+}
+body.dark-theme .age-combo-row{background:rgba(15,23,42,.74)!important;border-color:rgba(148,163,184,.30)!important}
+body:not(.dark-theme) .age-combo-row{background:#fff!important}
+.age-combo-row input,.age-combo-row select{border:0!important;border-radius:0!important;box-shadow:none!important;background:transparent!important;min-height:52px!important;height:52px!important}
+.age-combo-row input{border-right:1px solid color-mix(in srgb,var(--border) 70%,var(--text) 12%)!important}
+.field-helper{display:flex!important;align-items:center;gap:6px;margin-top:8px;color:color-mix(in srgb,#2563eb 65%,var(--muted))!important;font-size:12px!important;font-weight:750!important}
+.field-helper::before{content:'ⓘ';font-weight:900}
+.age-display-box{
+  min-height:78px!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:14px!important;
+  border:1px dashed color-mix(in srgb,#0ea5e9 48%,var(--border))!important;
+  border-radius:16px!important;
+  background:color-mix(in srgb,#3b82f6 8%,var(--panel))!important;
+  color:var(--text)!important;
+  padding:16px 18px!important;
+}
+body.dark-theme .age-display-box{background:radial-gradient(circle at 12% 0%,rgba(20,184,166,.18),transparent 28%),linear-gradient(180deg,rgba(15,30,56,.75),rgba(12,22,40,.88))!important;color:#dbeafe!important}
+.age-display-box .age-display-icon{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;border:1px solid rgba(56,189,248,.68);background:rgba(37,99,235,.14);font-size:18px;color:#2563eb;flex:0 0 auto}
+body.dark-theme .age-display-box .age-display-icon{color:#93c5fd;background:rgba(37,99,235,.22)}
+.age-display-box span:last-child{display:grid;gap:3px}
+.age-display-box b{font-size:18px;line-height:1.15;color:var(--text)}
+body.dark-theme .age-display-box b{color:#dbeafe}
+.age-display-box small{font-size:12px;color:var(--muted);font-weight:750}
+body.dark-theme .age-display-box small{color:#9ebcff}
+.soft-check{margin-top:10px!important;color:var(--muted)!important;font-size:13px!important;font-weight:800!important}
+.soft-check input{width:18px!important;height:18px!important;min-height:18px!important;accent-color:#3b82f6!important}
+.patient-summary-card{
+  margin-top:24px!important;
+  border:1px solid color-mix(in srgb,#3b82f6 22%,var(--border))!important;
+  border-radius:20px!important;
+  background:linear-gradient(90deg,color-mix(in srgb,#2563eb 8%,var(--panel)),color-mix(in srgb,var(--panel) 92%,var(--bg) 8%))!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04)!important;
+  overflow:hidden!important;
+}
+body.dark-theme .patient-summary-card{background:linear-gradient(90deg,rgba(30,64,175,.20),rgba(15,23,42,.70))!important}
+.patient-summary-card .summary-top{display:flex!important;align-items:center!important;gap:16px!important;padding:18px 22px 8px!important;border:0!important}
+.patient-summary-card .patient-avatar{width:46px!important;height:46px!important;border-radius:14px!important;background:linear-gradient(135deg,#0ea5e9,#1d4ed8)!important;font-size:18px!important;color:#fff!important}
+.patient-summary-card h4{font-size:16px!important;color:var(--text)!important}
+.patient-summary-card p{font-size:13px!important;color:var(--muted)!important}
+.summary-list.preview-strip{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:0!important;padding:8px 22px 20px!important}
+.summary-list.preview-strip div{display:grid!important;justify-content:stretch!important;gap:5px!important;padding:10px 16px!important;border-bottom:0!important;border-right:1px solid color-mix(in srgb,var(--border) 82%,transparent)!important}
+.summary-list.preview-strip div:last-child{border-right:0!important}
+.summary-list.preview-strip div::before{content:'';width:32px;height:32px;border-radius:50%;background:color-mix(in srgb,#3b82f6 12%,var(--panel));display:block;margin-bottom:3px}
+.summary-list.preview-strip span{font-size:13px!important;color:var(--text)!important;font-weight:850!important}
+.summary-list.preview-strip b{text-align:left!important;color:var(--muted)!important;font-size:13px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+.basic-tip{margin:5px 22px 20px;padding:13px 15px;border:1px solid color-mix(in srgb,#3b82f6 18%,var(--border));border-radius:14px;background:color-mix(in srgb,#3b82f6 6%,var(--panel));color:var(--muted);font-size:13px;font-weight:650}
+.basic-tip b{color:var(--text)}
+body.dark-theme .basic-tip{background:rgba(15,34,64,.58);color:#bcd4ff}
+body.dark-theme .basic-tip b{color:#f8fafc}
+.compact-consultant-results{right:64px!important;top:calc(100% + 8px)!important;background:var(--panel)!important;border-color:color-mix(in srgb,#3b82f6 35%,var(--border))!important;border-radius:16px!important;box-shadow:0 22px 54px rgba(15,23,42,.24)!important}
+body.dark-theme .compact-consultant-results{background:#08111f!important;box-shadow:0 28px 70px rgba(0,0,0,.66)!important}
+.consultant-option{background:color-mix(in srgb,var(--panel) 86%,var(--bg) 14%)!important;border-color:color-mix(in srgb,var(--border) 78%,transparent)!important;color:var(--text)!important}
+body.dark-theme .consultant-option{background:#0f1c31!important;color:#eaf2ff!important;border-color:rgba(148,163,184,.24)!important}
+.consultant-option:hover{background:color-mix(in srgb,#3b82f6 12%,var(--panel))!important;border-color:#3b82f6!important}
+@media(max-width:1040px){
+  .patient-grid.priority-patient-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .priority-patient-grid .consultant-priority-field,.priority-patient-grid .honorific-field,.priority-patient-grid .patient-name-field,.priority-patient-grid .gender-field,.priority-patient-grid .age-combo-field,.priority-patient-grid .mobile-priority-field,.priority-patient-grid .dob-field,.priority-patient-grid .age-display-field{grid-column:auto!important}
+  .summary-list.preview-strip{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+@media(max-width:760px){
+  .patient-step .patient-form-pro > .patient-section-card:first-child{padding:20px 16px!important;border-radius:20px!important}
+  .patient-step .patient-form-pro > .patient-section-card:first-child .section-icon{width:48px!important;height:48px!important;border-radius:16px!important}
+  .patient-step .patient-form-pro > .patient-section-card:first-child .section-heading h4{font-size:21px!important}
+  .patient-grid.priority-patient-grid{grid-template-columns:1fr!important;gap:16px!important}
+  .select-plus-row.attached-plus,.consultant-compact-row{grid-template-columns:minmax(0,1fr) 50px!important;gap:9px!important}
+  .mini-plus,.consultant-plus{width:50px!important;height:50px!important}
+  .summary-list.preview-strip{grid-template-columns:1fr!important}
+  .summary-list.preview-strip div{border-right:0!important;border-bottom:1px solid color-mix(in srgb,var(--border) 80%,transparent)!important}
+}
+
+/* Final Basic Information sketch sizing/layout override */
+.patient-step .patient-form-pro > .patient-section-card:first-child{
+  padding:22px 24px!important;
+  border-radius:22px!important;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--panel) 96%,var(--primary) 4%),color-mix(in srgb,var(--panel) 92%,var(--bg) 8%))!important;
+  border:1px solid color-mix(in srgb,var(--primary) 24%,var(--border))!important;
+  box-shadow:0 18px 46px rgba(15,23,42,.10),inset 0 1px 0 rgba(255,255,255,.05)!important;
+}
+body.dark-theme .patient-step .patient-form-pro > .patient-section-card:first-child{
+  background:radial-gradient(circle at 8% -10%,rgba(37,99,235,.18),transparent 28%),linear-gradient(180deg,#0c1528,#08101f)!important;
+  border-color:rgba(96,165,250,.22)!important;
+  box-shadow:0 24px 60px rgba(2,6,23,.34),inset 0 1px 0 rgba(255,255,255,.04)!important;
+}
+body:not(.dark-theme) .patient-step .patient-form-pro > .patient-section-card:first-child{
+  background:radial-gradient(circle at 8% -10%,rgba(59,130,246,.10),transparent 28%),linear-gradient(180deg,#ffffff,#f8fbff)!important;
+  border-color:#d7e4f7!important;
+  box-shadow:0 18px 42px rgba(15,23,42,.08)!important;
+}
+.patient-step .patient-form-pro > .patient-section-card:first-child .section-heading{
+  margin-bottom:22px!important;
+  gap:14px!important;
+}
+.patient-step .patient-form-pro > .patient-section-card:first-child .section-icon{
+  width:50px!important;
+  height:50px!important;
+  border-radius:16px!important;
+  font-size:18px!important;
+  background:linear-gradient(135deg,#3b82f6,#1d4ed8)!important;
+  box-shadow:0 12px 26px rgba(37,99,235,.25)!important;
+}
+.patient-step .patient-form-pro > .patient-section-card:first-child .section-heading h4{
+  font-size:22px!important;
+  line-height:1.08!important;
+  letter-spacing:-.02em!important;
+}
+.patient-step .patient-form-pro > .patient-section-card:first-child .section-heading p{
+  font-size:13px!important;
+  margin-top:5px!important;
+}
+.patient-grid.priority-patient-grid{
+  grid-template-columns:repeat(12,minmax(0,1fr))!important;
+  column-gap:28px!important;
+  row-gap:22px!important;
+  align-items:start!important;
+}
+.priority-patient-grid .consultant-priority-field{grid-column:1 / span 4!important;position:relative!important;z-index:30!important}
+.priority-patient-grid .honorific-field{grid-column:5 / span 3!important;max-width:none!important}
+.priority-patient-grid .patient-name-field{grid-column:8 / span 5!important}
+.priority-patient-grid .gender-field{grid-column:1 / span 4!important;max-width:none!important}
+.priority-patient-grid .age-combo-field{grid-column:5 / span 4!important}
+.priority-patient-grid .mobile-priority-field{grid-column:9 / span 4!important}
+.priority-patient-grid .dob-field{grid-column:1 / span 4!important}
+.priority-patient-grid .age-display-field{grid-column:5 / span 8!important}
+.patient-step .field label{
+  font-size:13px!important;
+  line-height:1.15!important;
+  margin-bottom:8px!important;
+  color:color-mix(in srgb,var(--text) 90%,var(--muted))!important;
+}
+.patient-step input,.patient-step select,.patient-step textarea{
+  height:46px!important;
+  min-height:46px!important;
+  border-radius:12px!important;
+  font-size:13.5px!important;
+  font-weight:750!important;
+  padding:0 14px!important;
+}
+.consultant-compact-row,.select-plus-row.attached-plus{
+  grid-template-columns:minmax(0,1fr) 46px!important;
+  gap:8px!important;
+}
+.mini-plus,.consultant-plus{
+  width:46px!important;
+  height:46px!important;
+  min-height:46px!important;
+  border-radius:12px!important;
+  font-size:24px!important;
+  line-height:1!important;
+}
+.age-combo-row{
+  height:46px!important;
+  min-height:46px!important;
+  grid-template-columns:1.05fr 1fr!important;
+  border-radius:12px!important;
+}
+.age-combo-row input,.age-combo-row select{
+  height:44px!important;
+  min-height:44px!important;
+  padding:0 14px!important;
+}
+.field-helper{
+  margin-top:8px!important;
+  font-size:12px!important;
+  line-height:1.2!important;
+  color:color-mix(in srgb,#3b82f6 66%,var(--muted))!important;
+}
+.age-calculated-line{
+  display:grid!important;
+  grid-template-columns:minmax(180px,320px) minmax(190px,1fr)!important;
+  gap:26px!important;
+  align-items:center!important;
+  min-height:46px!important;
+}
+.age-display-box{
+  height:46px!important;
+  min-height:46px!important;
+  padding:0 14px!important;
+  border-radius:12px!important;
+  border:1px solid color-mix(in srgb,var(--border) 70%,var(--text) 14%)!important;
+  background:color-mix(in srgb,var(--input) 92%,var(--panel) 8%)!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:12px!important;
+}
+body.dark-theme .age-display-box{
+  background:linear-gradient(180deg,rgba(15,23,42,.86),rgba(10,19,35,.94))!important;
+  border-color:rgba(148,163,184,.30)!important;
+}
+body:not(.dark-theme) .age-display-box{
+  background:#fff!important;
+  border-color:#d7e0ee!important;
+}
+.age-display-box .age-display-icon{
+  width:26px!important;
+  height:26px!important;
+  border-radius:50%!important;
+  font-size:14px!important;
+  flex:0 0 26px!important;
+}
+.age-display-box strong{
+  font-size:14px!important;
+  font-weight:850!important;
+  color:var(--text)!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+}
+.age-display-box span:last-child,.age-display-box b,.age-display-box small{display:contents!important}
+.soft-check.inline-split-check{
+  margin:0!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:9px!important;
+  height:46px!important;
+  color:var(--text)!important;
+  font-size:13px!important;
+  font-weight:850!important;
+  white-space:nowrap!important;
+}
+.soft-check.inline-split-check input{
+  width:18px!important;
+  height:18px!important;
+  min-height:18px!important;
+  accent-color:#3b82f6!important;
+  padding:0!important;
+}
+.soft-check.inline-split-check em{
+  font-style:normal!important;
+  color:color-mix(in srgb,#3b82f6 75%,var(--muted))!important;
+  font-size:13px!important;
+}
+.patient-summary-card{
+  margin-top:24px!important;
+  border-radius:18px!important;
+  display:grid!important;
+  grid-template-columns:minmax(260px,1.25fr) minmax(520px,2fr)!important;
+  align-items:center!important;
+  background:linear-gradient(90deg,color-mix(in srgb,#2563eb 10%,var(--panel)),color-mix(in srgb,var(--panel) 94%,var(--bg) 6%))!important;
+}
+.patient-summary-card .summary-top{
+  padding:16px 20px!important;
+  border-right:1px solid color-mix(in srgb,var(--border) 80%,transparent)!important;
+}
+.patient-summary-card .patient-avatar{
+  width:42px!important;
+  height:42px!important;
+  border-radius:13px!important;
+  font-size:17px!important;
+}
+.patient-summary-card h4{font-size:15px!important;margin:0!important}
+.patient-summary-card p{font-size:12px!important;margin-top:4px!important}
+.summary-list.preview-strip{
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  padding:12px 18px!important;
+}
+.summary-list.preview-strip div:nth-child(5){display:none!important}
+.summary-list.preview-strip div{padding:8px 14px!important}
+.summary-list.preview-strip div::before{width:30px!important;height:30px!important;margin-bottom:4px!important}
+.summary-list.preview-strip span,.summary-list.preview-strip b{font-size:12.5px!important}
+.basic-tip{
+  grid-column:1 / -1!important;
+  margin:0 20px 16px!important;
+  padding:11px 14px!important;
+  border-radius:13px!important;
+  font-size:12.5px!important;
+}
+@media(max-width:1120px){
+  .patient-grid.priority-patient-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .priority-patient-grid .consultant-priority-field,.priority-patient-grid .honorific-field,.priority-patient-grid .patient-name-field,.priority-patient-grid .gender-field,.priority-patient-grid .age-combo-field,.priority-patient-grid .mobile-priority-field,.priority-patient-grid .dob-field,.priority-patient-grid .age-display-field{grid-column:auto!important}
+  .age-calculated-line{grid-template-columns:1fr!important;gap:10px!important}
+  .soft-check.inline-split-check{height:auto!important}
+  .patient-summary-card{grid-template-columns:1fr!important}
+  .patient-summary-card .summary-top{border-right:0!important;border-bottom:1px solid color-mix(in srgb,var(--border) 80%,transparent)!important}
+}
+@media(max-width:760px){
+  .patient-step .patient-form-pro > .patient-section-card:first-child{padding:18px 14px!important;border-radius:18px!important}
+  .patient-step .patient-form-pro > .patient-section-card:first-child .section-icon{width:46px!important;height:46px!important;border-radius:14px!important}
+  .patient-step .patient-form-pro > .patient-section-card:first-child .section-heading h4{font-size:20px!important}
+  .patient-grid.priority-patient-grid{grid-template-columns:1fr!important;gap:16px!important}
+  .summary-list.preview-strip{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+
+
+
+
+
+/* Clean rebuilt Basic Information layout - matches approved sketch */
+.patient-step .patient-registration-layout{
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  gap:22px!important;
+}
+.patient-step .patient-form-pro{display:grid!important;gap:18px!important;overflow:visible!important;}
+.patient-step .patient-section-card:first-child{
+  position:relative!important;
+  padding:28px!important;
+  border-radius:26px!important;
+  overflow:visible!important;
+  border:1px solid rgba(59,130,246,.28)!important;
+  background:linear-gradient(145deg,rgba(15,23,42,.96),rgba(8,14,28,.98))!important;
+  box-shadow:0 18px 60px rgba(2,6,23,.28), inset 0 1px 0 rgba(148,163,184,.08)!important;
+}
+.light-mode .patient-step .patient-section-card:first-child,
+body:not(.dark-theme) .patient-step .patient-section-card:first-child{
+  background:linear-gradient(145deg,#ffffff,#f7fbff)!important;
+  border-color:#dbeafe!important;
+  box-shadow:0 18px 48px rgba(15,23,42,.08)!important;
+}
+.patient-step .basic-info-heading{
+  display:flex!important;
+  justify-content:space-between!important;
+  align-items:flex-start!important;
+  gap:18px!important;
+  margin:0 0 28px!important;
+}
+.patient-step .basic-info-title-group{display:flex!important;align-items:center!important;gap:18px!important;min-width:0!important;}
+.patient-step .basic-info-heading .section-icon{
+  width:58px!important;height:58px!important;border-radius:18px!important;
+  font-size:24px!important;background:linear-gradient(135deg,#3b82f6,#2563eb)!important;color:#fff!important;
+  box-shadow:0 14px 34px rgba(37,99,235,.28)!important;flex:0 0 auto!important;
+}
+.patient-step .basic-info-heading h4{font-size:24px!important;line-height:1.1!important;margin:0!important;font-weight:1000!important;letter-spacing:-.03em!important;}
+.patient-step .basic-info-heading p{font-size:14px!important;line-height:1.4!important;margin:6px 0 0!important;font-weight:800!important;color:#94a3b8!important;}
+.light-mode .patient-step .basic-info-heading p,body:not(.dark-theme) .patient-step .basic-info-heading p{color:#64748b!important;}
+.clear-basic-info-btn{
+  height:42px!important;padding:0 18px!important;border-radius:16px!important;
+  border:1px solid rgba(59,130,246,.55)!important;background:rgba(37,99,235,.10)!important;
+  color:#60a5fa!important;font-weight:950!important;font-size:13px!important;cursor:pointer!important;
+}
+.clear-basic-info-btn:hover{background:rgba(37,99,235,.18)!important;color:#93c5fd!important;}
+.light-mode .clear-basic-info-btn,body:not(.dark-theme) .clear-basic-info-btn{background:#eff6ff!important;color:#2563eb!important;border-color:#bfdbfe!important;}
+
+.patient-step .priority-patient-grid{
+  display:grid!important;
+  grid-template-columns:minmax(280px,1.12fr) minmax(230px,.86fr) minmax(300px,1.18fr)!important;
+  column-gap:28px!important;row-gap:24px!important;align-items:start!important;
+}
+.patient-step .priority-patient-grid .consultant-priority-field{grid-column:1!important;grid-row:1!important;}
+.patient-step .priority-patient-grid .honorific-field{grid-column:2!important;grid-row:1!important;}
+.patient-step .priority-patient-grid .patient-name-field{grid-column:3!important;grid-row:1!important;}
+.patient-step .priority-patient-grid .gender-field{grid-column:1!important;grid-row:2!important;}
+.patient-step .priority-patient-grid .age-combo-field{grid-column:2!important;grid-row:2!important;}
+.patient-step .priority-patient-grid .mobile-priority-field{grid-column:3!important;grid-row:2!important;}
+.patient-step .priority-patient-grid .dob-field{grid-column:1!important;grid-row:3!important;}
+.patient-step .priority-patient-grid .age-display-field{grid-column:2!important;grid-row:3!important;}
+.patient-step .priority-patient-grid .split-age-field{grid-column:3!important;grid-row:3!important;}
+.patient-step .priority-patient-grid .field{min-width:0!important;position:relative!important;}
+.patient-step .priority-patient-grid .field label:not(.soft-check){
+  display:block!important;margin:0 0 8px!important;color:#e5e7eb!important;font-size:14px!important;font-weight:950!important;letter-spacing:-.01em!important;
+}
+.light-mode .patient-step .priority-patient-grid .field label:not(.soft-check),
+body:not(.dark-theme) .patient-step .priority-patient-grid .field label:not(.soft-check){color:#1e293b!important;}
+.patient-step .priority-patient-grid .field label b{color:#ef4444!important;font-weight:1000!important;}
+
+.patient-step .priority-patient-grid input,
+.patient-step .priority-patient-grid select,
+.patient-step .age-display-box{
+  height:52px!important;min-height:52px!important;border-radius:14px!important;
+  border:1px solid rgba(100,116,139,.50)!important;background:#0f172a!important;color:#e5eefc!important;
+  box-shadow:none!important;font-size:14px!important;font-weight:850!important;padding:0 16px!important;
+}
+.light-mode .patient-step .priority-patient-grid input,
+.light-mode .patient-step .priority-patient-grid select,
+.light-mode .patient-step .age-display-box,
+body:not(.dark-theme) .patient-step .priority-patient-grid input,
+body:not(.dark-theme) .patient-step .priority-patient-grid select,
+body:not(.dark-theme) .patient-step .age-display-box{
+  background:#fff!important;color:#0f172a!important;border-color:#cbd5e1!important;
+}
+.patient-step .priority-patient-grid input::placeholder{color:#a9b5c8!important;font-weight:800!important;}
+.light-mode .patient-step .priority-patient-grid input::placeholder,body:not(.dark-theme) .patient-step .priority-patient-grid input::placeholder{color:#64748b!important;}
+.patient-step .priority-patient-grid input:focus,
+.patient-step .priority-patient-grid select:focus{border-color:#3b82f6!important;box-shadow:0 0 0 4px rgba(59,130,246,.16)!important;outline:none!important;}
+
+.patient-step .consultant-compact-row,
+.patient-step .select-plus-row.attached-plus{display:grid!important;grid-template-columns:minmax(0,1fr) 52px!important;gap:10px!important;align-items:end!important;}
+.patient-step .mini-plus,.patient-step .consultant-plus{
+  width:52px!important;height:52px!important;min-height:52px!important;border-radius:14px!important;
+  border:1px solid rgba(59,130,246,.65)!important;background:rgba(37,99,235,.18)!important;
+  color:#60a5fa!important;font-size:24px!important;font-weight:1000!important;display:grid!important;place-items:center!important;padding:0!important;
+}
+.light-mode .patient-step .mini-plus,.light-mode .patient-step .consultant-plus,body:not(.dark-theme) .patient-step .mini-plus,body:not(.dark-theme) .patient-step .consultant-plus{background:#eff6ff!important;color:#2563eb!important;border-color:#bfdbfe!important;}
+.patient-step .age-combo-row{display:grid!important;grid-template-columns:minmax(85px,.95fr) minmax(120px,1.05fr)!important;gap:0!important;}
+.patient-step .age-combo-row input{border-top-right-radius:0!important;border-bottom-right-radius:0!important;}
+.patient-step .age-combo-row select{border-top-left-radius:0!important;border-bottom-left-radius:0!important;border-left:0!important;}
+.patient-step .field-helper{display:block!important;margin-top:9px!important;color:#60a5fa!important;font-weight:850!important;font-size:12px!important;line-height:1.25!important;}
+.light-mode .patient-step .field-helper,body:not(.dark-theme) .patient-step .field-helper{color:#2563eb!important;}
+.patient-step .age-display-box{display:flex!important;align-items:center!important;gap:12px!important;padding:0 16px!important;background:rgba(15,23,42,.84)!important;}
+.patient-step .age-display-box strong{font-size:15px!important;font-weight:950!important;color:inherit!important;}
+.patient-step .age-display-icon{width:30px!important;height:30px!important;border-radius:999px!important;display:grid!important;place-items:center!important;border:1px solid rgba(96,165,250,.55)!important;background:rgba(37,99,235,.12)!important;font-size:15px!important;}
+.light-mode .patient-step .age-display-box,body:not(.dark-theme) .patient-step .age-display-box{background:#fff!important;}
+.patient-step .split-label-spacer{visibility:hidden!important;}
+.patient-step .split-age-field{display:flex!important;flex-direction:column!important;justify-content:flex-start!important;}
+.patient-step .inline-split-check{
+  height:52px!important;margin:0!important;display:flex!important;align-items:center!important;gap:10px!important;
+  color:#e5e7eb!important;font-size:14px!important;font-weight:950!important;white-space:nowrap!important;
+}
+.light-mode .patient-step .inline-split-check,body:not(.dark-theme) .patient-step .inline-split-check{color:#1e293b!important;}
+.patient-step .inline-split-check input{width:18px!important;height:18px!important;min-height:18px!important;accent-color:#3b82f6!important;padding:0!important;}
+.patient-step .inline-split-check em{font-style:normal!important;color:#60a5fa!important;font-size:14px!important;}
+
+.patient-step .patient-summary-card{
+  position:relative!important;display:grid!important;grid-template-columns:minmax(280px,1.25fr) repeat(5,minmax(110px,1fr))!important;
+  align-items:center!important;gap:18px!important;width:100%!important;max-width:none!important;padding:16px!important;
+  border-radius:18px!important;border:1px solid rgba(59,130,246,.22)!important;background:linear-gradient(135deg,rgba(30,64,175,.16),rgba(15,23,42,.80))!important;
+  box-shadow:none!important;overflow:hidden!important;
+}
+.light-mode .patient-step .patient-summary-card,body:not(.dark-theme) .patient-step .patient-summary-card{background:linear-gradient(135deg,#eff6ff,#ffffff)!important;border-color:#dbeafe!important;}
+.patient-step .patient-summary-card .summary-top{display:flex!important;gap:14px!important;align-items:center!important;padding:0!important;border:0!important;}
+.patient-step .patient-summary-card .patient-avatar{width:48px!important;height:48px!important;border-radius:14px!important;font-size:16px!important;}
+.patient-step .patient-summary-card .summary-top h4{font-size:15px!important;margin:0!important;font-weight:950!important;}
+.patient-step .patient-summary-card .summary-top p{font-size:12px!important;margin:4px 0 0!important;line-height:1.25!important;}
+.patient-step .patient-summary-card .summary-list.preview-strip{display:contents!important;padding:0!important;}
+.patient-step .patient-summary-card .summary-list.preview-strip div{display:grid!important;gap:3px!important;justify-content:start!important;padding:0 0 0 18px!important;border-bottom:0!important;border-left:1px solid rgba(148,163,184,.16)!important;}
+.patient-step .patient-summary-card .summary-list.preview-strip span{font-size:12px!important;font-weight:900!important;color:#bfdbfe!important;}
+.patient-step .patient-summary-card .summary-list.preview-strip b{text-align:left!important;font-size:13px!important;font-weight:900!important;color:#e5eefc!important;max-width:150px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;}
+.light-mode .patient-step .patient-summary-card .summary-list.preview-strip span,body:not(.dark-theme) .patient-step .patient-summary-card .summary-list.preview-strip span{color:#2563eb!important;}
+.light-mode .patient-step .patient-summary-card .summary-list.preview-strip b,body:not(.dark-theme) .patient-step .patient-summary-card .summary-list.preview-strip b{color:#0f172a!important;}
+.patient-step .patient-summary-card .basic-tip{grid-column:1 / -1!important;margin:8px 0 0!important;padding:12px 14px!important;border-radius:14px!important;background:rgba(15,23,42,.45)!important;border:1px solid rgba(59,130,246,.18)!important;color:#bfdbfe!important;font-size:12px!important;font-weight:750!important;}
+.light-mode .patient-step .patient-summary-card .basic-tip,body:not(.dark-theme) .patient-step .patient-summary-card .basic-tip{background:#f8fafc!important;color:#334155!important;border-color:#dbeafe!important;}
+
+@media(max-width:1180px){
+  .patient-step .priority-patient-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;}
+  .patient-step .priority-patient-grid .consultant-priority-field,.patient-step .priority-patient-grid .honorific-field,.patient-step .priority-patient-grid .patient-name-field,.patient-step .priority-patient-grid .gender-field,.patient-step .priority-patient-grid .age-combo-field,.patient-step .priority-patient-grid .mobile-priority-field,.patient-step .priority-patient-grid .dob-field,.patient-step .priority-patient-grid .age-display-field,.patient-step .priority-patient-grid .split-age-field{grid-column:auto!important;grid-row:auto!important;}
+  .patient-step .patient-summary-card{grid-template-columns:1fr 1fr!important;}
+  .patient-step .patient-summary-card .summary-top,.patient-step .patient-summary-card .basic-tip{grid-column:1 / -1!important;}
+}
+@media(max-width:720px){
+  .patient-step .patient-section-card:first-child{padding:18px!important;border-radius:20px!important;}
+  .patient-step .basic-info-heading{align-items:flex-start!important;}
+  .patient-step .basic-info-heading .section-icon{width:48px!important;height:48px!important;}
+  .patient-step .basic-info-heading h4{font-size:20px!important;}
+  .clear-basic-info-btn{display:none!important;}
+  .patient-step .priority-patient-grid{grid-template-columns:1fr!important;gap:18px!important;}
+  .patient-step .patient-summary-card{grid-template-columns:1fr!important;}
+  .patient-step .patient-summary-card .summary-list.preview-strip div{border-left:0!important;border-top:1px solid rgba(148,163,184,.16)!important;padding:10px 0 0!important;}
+}
+
+/* Light mode repair for Basic Information (Angular :host-context safe) */
+:host-context(body.light) .patient-step .patient-section-card:first-child,
+:host-context(.light) .patient-step .patient-section-card:first-child{
+  background:linear-gradient(145deg,#ffffff 0%,#f8fbff 100%)!important;
+  border-color:#dbeafe!important;
+  box-shadow:0 18px 48px rgba(15,23,42,.08)!important;
+}
+:host-context(body.light) .patient-step .basic-info-heading h4,
+:host-context(.light) .patient-step .basic-info-heading h4,
+:host-context(body.light) .patient-step .priority-patient-grid .field label:not(.soft-check),
+:host-context(.light) .patient-step .priority-patient-grid .field label:not(.soft-check){
+  color:#172033!important;
+  text-shadow:none!important;
+}
+:host-context(body.light) .patient-step .basic-info-heading p,
+:host-context(.light) .patient-step .basic-info-heading p{
+  color:#667085!important;
+  text-shadow:none!important;
+}
+:host-context(body.light) .patient-step .priority-patient-grid input,
+:host-context(body.light) .patient-step .priority-patient-grid select,
+:host-context(body.light) .patient-step .age-display-box,
+:host-context(.light) .patient-step .priority-patient-grid input,
+:host-context(.light) .patient-step .priority-patient-grid select,
+:host-context(.light) .patient-step .age-display-box{
+  background:#ffffff!important;
+  color:#111827!important;
+  border-color:#cbd5e1!important;
+  box-shadow:0 1px 2px rgba(15,23,42,.04)!important;
+  color-scheme:light!important;
+}
+:host-context(body.light) .patient-step .priority-patient-grid input::placeholder,
+:host-context(.light) .patient-step .priority-patient-grid input::placeholder{
+  color:#64748b!important;
+  opacity:1!important;
+}
+:host-context(body.light) .patient-step .age-combo-row,
+:host-context(.light) .patient-step .age-combo-row{
+  background:#ffffff!important;
+  border-color:#cbd5e1!important;
+  box-shadow:0 1px 2px rgba(15,23,42,.04)!important;
+}
+:host-context(body.light) .patient-step .age-combo-row input,
+:host-context(body.light) .patient-step .age-combo-row select,
+:host-context(.light) .patient-step .age-combo-row input,
+:host-context(.light) .patient-step .age-combo-row select{
+  background:transparent!important;
+  color:#111827!important;
+  border-color:#cbd5e1!important;
+}
+:host-context(body.light) .patient-step .field-helper,
+:host-context(.light) .patient-step .field-helper{
+  color:#2563eb!important;
+  text-shadow:none!important;
+}
+:host-context(body.light) .patient-step .inline-split-check,
+:host-context(.light) .patient-step .inline-split-check{
+  color:#172033!important;
+  text-shadow:none!important;
+}
+:host-context(body.light) .patient-step .mini-plus,
+:host-context(body.light) .patient-step .consultant-plus,
+:host-context(.light) .patient-step .mini-plus,
+:host-context(.light) .patient-step .consultant-plus{
+  background:#eff6ff!important;
+  color:#2563eb!important;
+  border-color:#93c5fd!important;
+  box-shadow:0 8px 18px rgba(37,99,235,.12)!important;
+}
+:host-context(body.light) .clear-basic-info-btn,
+:host-context(.light) .clear-basic-info-btn{
+  background:#eff6ff!important;
+  color:#2563eb!important;
+  border-color:#93c5fd!important;
+}
+:host-context(body.light) .patient-step .age-display-icon,
+:host-context(.light) .patient-step .age-display-icon{
+  background:#eff6ff!important;
+  border-color:#93c5fd!important;
+  color:#2563eb!important;
+}
+:host-context(body.light) .patient-step .patient-summary-card,
+:host-context(.light) .patient-step .patient-summary-card{
+  background:linear-gradient(135deg,#eff6ff,#ffffff)!important;
+  border-color:#dbeafe!important;
+  box-shadow:0 10px 30px rgba(15,23,42,.06)!important;
+}
+:host-context(body.light) .patient-step .patient-summary-card .summary-top h4,
+:host-context(body.light) .patient-step .patient-summary-card .summary-list.preview-strip b,
+:host-context(.light) .patient-step .patient-summary-card .summary-top h4,
+:host-context(.light) .patient-step .patient-summary-card .summary-list.preview-strip b{
+  color:#111827!important;
+}
+:host-context(body.light) .patient-step .patient-summary-card .summary-top p,
+:host-context(body.light) .patient-step .patient-summary-card .summary-list.preview-strip span,
+:host-context(.light) .patient-step .patient-summary-card .summary-top p,
+:host-context(.light) .patient-step .patient-summary-card .summary-list.preview-strip span{
+  color:#2563eb!important;
+}
+:host-context(body.light) .patient-step .patient-summary-card .basic-tip,
+:host-context(.light) .patient-step .patient-summary-card .basic-tip{
+  background:#f8fafc!important;
+  color:#334155!important;
+  border-color:#dbeafe!important;
+}
+:host-context(body.light) .consultant-results,
+:host-context(.light) .consultant-results{
+  background:#ffffff!important;
+  border-color:#dbeafe!important;
+  box-shadow:0 24px 60px rgba(15,23,42,.18)!important;
+}
+:host-context(body.light) .consultant-option,
+:host-context(.light) .consultant-option{
+  background:#ffffff!important;
+  color:#111827!important;
+  border-color:#e2e8f0!important;
+}
+:host-context(body.light) .consultant-option:hover,
+:host-context(.light) .consultant-option:hover{
+  background:#eff6ff!important;
+  border-color:#93c5fd!important;
+}
+
+
+
+/* Existing patient search dropdown: overlay only, do not push the page down */
+.patient-title-bar{
+  position:relative!important;
+  z-index:70!important;
+}
+.top-patient-search{
+  position:relative!important;
+  z-index:90!important;
+  margin-bottom:0!important;
+}
+.top-patient-search.has-results{
+  margin-bottom:0!important;
+}
+.top-patient-search .patient-results{
+  position:absolute!important;
+  top:calc(100% + 10px)!important;
+  left:0!important;
+  right:0!important;
+  z-index:120!important;
+  max-height:230px!important;
+  overflow-y:auto!important;
+  border-radius:18px!important;
+  padding:8px!important;
+  background:var(--surface)!important;
+  border:1px solid var(--border)!important;
+  box-shadow:0 22px 46px rgba(15,23,42,.24)!important;
+}
+.patient-registration-layout{
+  position:relative!important;
+  z-index:1!important;
+}
+.patient-step .patient-section-card:first-child{
+  position:relative!important;
+  z-index:1!important;
+}
+:host-context(body.light) .top-patient-search .patient-results,
+:host-context(.light) .top-patient-search .patient-results{
+  background:#ffffff!important;
+  border-color:#d7dee8!important;
+  box-shadow:0 22px 46px rgba(15,23,42,.16)!important;
+}
+
+
+
+/* Details-only patient summary: no heading/title/tip, just values */
+.patient-summary-card.details-only-summary{
+  display:block!important;
+  grid-template-columns:none!important;
+  margin-top:22px!important;
+  padding:0!important;
+  border:1px solid color-mix(in srgb,#3b82f6 24%,var(--border))!important;
+  border-radius:18px!important;
+  overflow:hidden!important;
+  background:linear-gradient(90deg,color-mix(in srgb,#2563eb 8%,var(--panel)),color-mix(in srgb,var(--panel) 95%,var(--bg) 5%))!important;
+}
+body.dark-theme .patient-summary-card.details-only-summary{
+  background:linear-gradient(90deg,rgba(30,64,175,.18),rgba(15,23,42,.72))!important;
+}
+.patient-summary-card.details-only-summary .summary-top,
+.patient-summary-card.details-only-summary .basic-tip{
+  display:none!important;
+}
+.patient-summary-card.details-only-summary .summary-list.preview-strip{
+  display:grid!important;
+  grid-template-columns:repeat(5,minmax(0,1fr))!important;
+  gap:0!important;
+  padding:14px 18px!important;
+  align-items:center!important;
+}
+.patient-summary-card.details-only-summary .summary-list.preview-strip div{
+  display:grid!important;
+  grid-template-columns:34px minmax(0,1fr)!important;
+  grid-template-rows:auto auto!important;
+  column-gap:12px!important;
+  row-gap:2px!important;
+  align-items:center!important;
+  padding:8px 18px!important;
+  border-right:1px solid color-mix(in srgb,var(--border) 82%,transparent)!important;
+  border-bottom:0!important;
+}
+.patient-summary-card.details-only-summary .summary-list.preview-strip div:last-child{border-right:0!important}
+.patient-summary-card.details-only-summary .summary-list.preview-strip div:nth-child(5){display:grid!important}
+.patient-summary-card.details-only-summary .summary-list.preview-strip div::before{
+  grid-row:1 / 3!important;
+  content:''!important;
+  width:34px!important;
+  height:34px!important;
+  border-radius:50%!important;
+  background:color-mix(in srgb,#3b82f6 14%,var(--panel))!important;
+  margin:0!important;
+}
+.patient-summary-card.details-only-summary .summary-list.preview-strip span{
+  color:var(--muted)!important;
+  font-size:12px!important;
+  font-weight:850!important;
+  line-height:1.1!important;
+}
+.patient-summary-card.details-only-summary .summary-list.preview-strip b{
+  text-align:left!important;
+  color:var(--text)!important;
+  font-size:13px!important;
+  font-weight:950!important;
+  line-height:1.18!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+}
+@media(max-width:1120px){
+  .patient-summary-card.details-only-summary .summary-list.preview-strip{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .patient-summary-card.details-only-summary .summary-list.preview-strip div{border-bottom:1px solid color-mix(in srgb,var(--border) 80%,transparent)!important}
+}
+@media(max-width:760px){
+  .patient-summary-card.details-only-summary .summary-list.preview-strip{grid-template-columns:1fr!important;padding:10px 14px!important}
+  .patient-summary-card.details-only-summary .summary-list.preview-strip div{border-right:0!important;padding:9px 8px!important}
+}
+  
+
+/* Billing Basic Information compact contrast sync with Masters */
+.patient-step .patient-form-pro > .patient-section-card:first-child {
+  padding: 18px 22px !important;
+}
+.patient-step .patient-form-pro > .patient-section-card:first-child .patient-grid.basic-grid,
+.patient-step .patient-form-pro > .patient-section-card:first-child .priority-patient-grid {
+  gap: 14px 24px !important;
+  align-items: end !important;
+}
+.patient-step .patient-form-pro > .patient-section-card:first-child .field label,
+.patient-step .patient-form-pro > .patient-section-card:first-child .soft-check span,
+.patient-step .patient-form-pro > .patient-section-card:first-child .split-label-spacer {
+  font-size: 12px !important;
+  font-weight: 850 !important;
+  line-height: 1.15 !important;
+  margin-bottom: 5px !important;
+  color: color-mix(in srgb, var(--text) 88%, var(--muted)) !important;
+}
+.patient-step .patient-form-pro > .patient-section-card:first-child input,
+.patient-step .patient-form-pro > .patient-section-card:first-child select,
+.patient-step .patient-form-pro > .patient-section-card:first-child .age-display-box {
+  min-height: 36px !important;
+  height: 36px !important;
+  border-radius: 10px !important;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, var(--text) 8%) !important;
+  background: color-mix(in srgb, var(--surface-2) 84%, transparent) !important;
+  color: var(--text) !important;
+  font-size: 12.5px !important;
+  font-weight: 650 !important;
+  padding: 0 12px !important;
+  box-shadow: none !important;
+}
+.patient-step .patient-form-pro > .patient-section-card:first-child input::placeholder {
+  color: var(--muted) !important;
+  opacity: .82 !important;
+  font-weight: 650 !important;
+}
+.patient-step .patient-form-pro > .patient-section-card:first-child input:focus,
+.patient-step .patient-form-pro > .patient-section-card:first-child select:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent) !important;
+}
+.patient-step .consultant-compact-row,
+.patient-step .select-plus-row.attached-plus,
+.patient-step .age-combo-row {
+  gap: 8px !important;
+  align-items: center !important;
+}
+.patient-step .age-combo-row {
+  display: grid !important;
+  grid-template-columns: minmax(80px,.65fr) minmax(110px,.8fr) !important;
+}
+.patient-step .age-combo-row input,
+.patient-step .age-combo-row select {
+  border-radius: 10px !important;
+}
+.patient-step .attached-plus {
+  display: grid !important;
+  grid-template-columns: minmax(0,1fr) 36px !important;
+}
+.patient-step .consultant-compact-row {
+  display: grid !important;
+  grid-template-columns: minmax(0,1fr) 36px !important;
+}
+.patient-step .mini-plus,
+.patient-step .consultant-plus,
+.patient-step .attached-plus .mini-plus {
+  width: 36px !important;
+  min-width: 36px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  border-radius: 10px !important;
+  padding: 0 !important;
+  font-size: 17px !important;
+  line-height: 1 !important;
+  display: inline-grid !important;
+  place-items: center !important;
+}
+.patient-step .field-helper,
+.patient-step .field-hint {
+  margin-top: 5px !important;
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+  font-weight: 750 !important;
+  color: color-mix(in srgb, var(--primary) 76%, var(--muted)) !important;
+}
+.patient-step .age-display-box {
+  justify-content: flex-start !important;
+  gap: 8px !important;
+}
+.patient-step .age-display-box strong {
+  font-size: 12.5px !important;
+  font-weight: 750 !important;
+}
+.patient-step .age-display-icon {
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  border-radius: 999px !important;
+  display: grid !important;
+  place-items: center !important;
+  font-size: 12px !important;
+}
+.patient-step .inline-split-check {
+  height: 36px !important;
+  margin-top: 0 !important;
+  align-items: center !important;
+  gap: 7px !important;
+}
+.patient-step .inline-split-check input {
+  width: 16px !important;
+  height: 16px !important;
+  min-height: 16px !important;
+  border-radius: 4px !important;
+}
+:host-context(body.dark-theme) .patient-step .patient-form-pro > .patient-section-card:first-child input,
+:host-context(body.dark-theme) .patient-step .patient-form-pro > .patient-section-card:first-child select,
+:host-context(body.dark-theme) .patient-step .patient-form-pro > .patient-section-card:first-child .age-display-box {
+  background: #0b1220 !important;
+  border-color: rgba(148,163,184,.18) !important;
+  color: #f8fafc !important;
+  color-scheme: dark !important;
+}
+:host-context(body.dark-theme) .patient-step .patient-form-pro > .patient-section-card:first-child input::placeholder {
+  color: #94a3b8 !important;
+}
+:host-context(body.light) .patient-step .patient-form-pro > .patient-section-card:first-child input,
+:host-context(body.light) .patient-step .patient-form-pro > .patient-section-card:first-child select,
+:host-context(body.light) .patient-step .patient-form-pro > .patient-section-card:first-child .age-display-box {
+  background: #fff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+  color-scheme: light !important;
+}
+:host-context(body.light) .patient-step .patient-form-pro > .patient-section-card:first-child input::placeholder {
+  color: #64748b !important;
+}
+@media (max-width: 900px) {
+  .patient-step .patient-form-pro > .patient-section-card:first-child .patient-grid.basic-grid,
+  .patient-step .patient-form-pro > .patient-section-card:first-child .priority-patient-grid {
+    gap: 12px !important;
+  }
+  .patient-step .patient-form-pro > .patient-section-card:first-child input,
+  .patient-step .patient-form-pro > .patient-section-card:first-child select,
+  .patient-step .patient-form-pro > .patient-section-card:first-child .age-display-box {
+    height: 38px !important;
+    min-height: 38px !important;
+  }
+  .patient-step .mini-plus,
+  .patient-step .consultant-plus,
+  .patient-step .attached-plus .mini-plus {
+    height: 38px !important;
+    min-height: 38px !important;
+    width: 38px !important;
+    min-width: 38px !important;
+  }
+}
+
+/* Final Billing Basic Info alignment pass:
+   remove nested Age wrapper border and align DOB with all other compact fields. */
+.patient-step .priority-patient-grid {
+  row-gap: 18px !important;
+}
+.patient-step .priority-patient-grid .field label:not(.soft-check) {
+  margin-bottom: 7px !important;
+  font-size: 13px !important;
+  line-height: 1.15 !important;
+}
+.patient-step .priority-patient-grid input,
+.patient-step .priority-patient-grid select,
+.patient-step .age-display-box {
+  height: 42px !important;
+  min-height: 42px !important;
+  border-radius: 12px !important;
+  padding: 0 14px !important;
+  font-size: 13px !important;
+  font-weight: 750 !important;
+}
+.patient-step .consultant-compact-row,
+.patient-step .select-plus-row.attached-plus {
+  grid-template-columns: minmax(0,1fr) 42px !important;
+  gap: 10px !important;
+  align-items: end !important;
+}
+.patient-step .mini-plus,
+.patient-step .consultant-plus,
+.patient-step .attached-plus .mini-plus {
+  width: 42px !important;
+  min-width: 42px !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  border-radius: 12px !important;
+  font-size: 20px !important;
+}
+.patient-step .age-combo-row {
+  display: grid !important;
+  grid-template-columns: minmax(88px,.9fr) minmax(122px,1.1fr) !important;
+  gap: 10px !important;
+  align-items: end !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+.patient-step .age-combo-row input,
+.patient-step .age-combo-row select {
+  height: 42px !important;
+  min-height: 42px !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(100,116,139,.50) !important;
+  background: #0b1220 !important;
+  color: #f8fafc !important;
+  box-shadow: none !important;
+}
+.patient-step .age-combo-row input {
+  border-right: 1px solid rgba(100,116,139,.50) !important;
+}
+.patient-step .age-combo-row input:focus,
+.patient-step .age-combo-row select:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59,130,246,.16) !important;
+}
+:host-context(body.light) .patient-step .age-combo-row input,
+:host-context(body.light) .patient-step .age-combo-row select,
+body:not(.dark-theme) .patient-step .age-combo-row input,
+body:not(.dark-theme) .patient-step .age-combo-row select {
+  background: #fff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+.patient-step .dob-field input[type="date"] {
+  width: 100% !important;
+  display: block !important;
+  box-sizing: border-box !important;
+}
+.patient-step .field-helper,
+.patient-step .field-hint {
+  margin-top: 6px !important;
+  font-size: 11.5px !important;
+  line-height: 1.2 !important;
+  font-weight: 700 !important;
+  color: color-mix(in srgb, var(--primary) 72%, var(--muted)) !important;
+}
+.patient-step .split-age-field {
+  justify-content: flex-end !important;
+  padding-bottom: 0 !important;
+}
+.patient-step .inline-split-check {
+  height: 42px !important;
+  align-items: center !important;
+  margin-top: 0 !important;
+}
+.patient-step .age-display-box {
+  min-width: 0 !important;
+  width: 100% !important;
+}
+@media (max-width: 900px) {
+  .patient-step .age-combo-row {
+    grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important;
+  }
+}
+
+/* Final Billing Basic Information alignment refinement
+   - No outer age wrapper box
+   - DOB/calculated-age/split row baseline aligned
+   - Compact Masters-style field sizing in dark and light themes */
+.patient-step .priority-patient-grid {
+  align-items: start !important;
+  row-gap: 18px !important;
+  column-gap: 28px !important;
+}
+.patient-step .priority-patient-grid .field {
+  min-height: 0 !important;
+}
+.patient-step .priority-patient-grid label {
+  min-height: 18px !important;
+  line-height: 18px !important;
+  margin-bottom: 8px !important;
+}
+.patient-step .basic-info-card .field input:not([type="checkbox"]),
+.patient-step .basic-info-card .field select,
+.patient-step .dob-field input[type="date"],
+.patient-step .age-display-box {
+  height: 42px !important;
+  min-height: 42px !important;
+  box-sizing: border-box !important;
+}
+.patient-step .age-combo-row {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.18fr) !important;
+  gap: 10px !important;
+  align-items: start !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+.patient-step .age-combo-row input,
+.patient-step .age-combo-row select {
+  width: 100% !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  margin: 0 !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+}
+.patient-step .age-combo-row input {
+  border-right-width: 1px !important;
+}
+.patient-step .dob-field input[type="date"] {
+  width: 100% !important;
+  line-height: 42px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  padding-right: 38px !important;
+}
+.patient-step .age-display-box {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+.patient-step .field-helper,
+.patient-step .field-hint {
+  display: block !important;
+  min-height: 16px !important;
+  margin-top: 6px !important;
+  line-height: 16px !important;
+  font-size: 11.5px !important;
+  font-weight: 650 !important;
+}
+.patient-step .split-age-field {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+  align-self: start !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.patient-step .split-age-field .split-label-spacer {
+  display: block !important;
+  height: 18px !important;
+  min-height: 18px !important;
+  line-height: 18px !important;
+  margin: 0 0 8px 0 !important;
+}
+.patient-step .inline-split-check {
+  height: 42px !important;
+  min-height: 42px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: 1 !important;
+}
+.patient-step .inline-split-check input[type="checkbox"] {
+  width: 18px !important;
+  height: 18px !important;
+  margin: 0 !important;
+}
+.patient-step .inline-split-check span,
+.patient-step .inline-split-check em {
+  line-height: 18px !important;
+}
+@media (max-width: 900px) {
+  .patient-step .priority-patient-grid {
+    row-gap: 16px !important;
+  }
+  .patient-step .split-age-field .split-label-spacer {
+    display: none !important;
+  }
+}
+
+
+/* Force exact row-control alignment in Billing Basic Information.
+   Every field reserves the same three vertical slots:
+   label row, control row, helper row. This keeps DOB, age, mobile,
+   gender, calculated age, and split checkbox controls on the same line
+   regardless of helper text below any field. */
+.patient-step .priority-patient-grid {
+  row-gap: 16px !important;
+  align-items: start !important;
+}
+.patient-step .priority-patient-grid .field {
+  display: grid !important;
+  grid-template-rows: 22px 42px 18px !important;
+  align-content: start !important;
+  min-height: 82px !important;
+  max-height: 82px !important;
+}
+.patient-step .priority-patient-grid .field > label:not(.soft-check),
+.patient-step .split-age-field .split-label-spacer {
+  grid-row: 1 !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  line-height: 18px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: block !important;
+}
+.patient-step .priority-patient-grid .field > input:not([type="checkbox"]),
+.patient-step .priority-patient-grid .field > select,
+.patient-step .select-plus-row,
+.patient-step .age-combo-row,
+.patient-step .age-display-box,
+.patient-step .inline-split-check {
+  grid-row: 2 !important;
+  align-self: start !important;
+  margin: 0 !important;
+}
+.patient-step .field-helper,
+.patient-step .field-hint {
+  grid-row: 3 !important;
+  height: 18px !important;
+  min-height: 18px !important;
+  line-height: 16px !important;
+  margin: 4px 0 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+.patient-step .age-combo-row {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.18fr) !important;
+  gap: 10px !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+.patient-step .age-combo-row input,
+.patient-step .age-combo-row select,
+.patient-step .dob-field input[type="date"],
+.patient-step .age-display-box,
+.patient-step .inline-split-check {
+  height: 42px !important;
+  min-height: 42px !important;
+  max-height: 42px !important;
+  box-sizing: border-box !important;
+}
+.patient-step .age-combo-row input,
+.patient-step .age-combo-row select {
+  width: 100% !important;
+  margin: 0 !important;
+  border-radius: 12px !important;
+}
+.patient-step .dob-field input[type="date"] {
+  width: 100% !important;
+  line-height: 42px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  padding-right: 38px !important;
+}
+.patient-step .age-display-box {
+  width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+}
+.patient-step .split-age-field {
+  display: grid !important;
+  grid-template-rows: 22px 42px 18px !important;
+  min-height: 82px !important;
+  max-height: 82px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.patient-step .inline-split-check {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: 1 !important;
+}
+.patient-step .inline-split-check input[type="checkbox"] {
+  width: 18px !important;
+  height: 18px !important;
+  min-height: 18px !important;
+  margin: 0 !important;
+}
+.patient-step .inline-split-check span,
+.patient-step .inline-split-check em {
+  line-height: 18px !important;
+}
+@media (max-width: 900px) {
+  .patient-step .priority-patient-grid .field,
+  .patient-step .split-age-field {
+    max-height: none !important;
+  }
+}
+
+
+
+/* Billing Step 1 reference design refresh - compact, screenshot-aligned */
+.pro-billing {
+  max-width: 100%;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(59, 130, 246, .18), transparent 30%),
+    linear-gradient(180deg, rgba(15, 23, 42, .96), rgba(11, 18, 32, .98));
+  border: 1px solid rgba(148, 163, 184, .18);
+  box-shadow: 0 24px 60px rgba(2, 6, 23, .35);
+  padding: 14px;
+}
+
+.pro-billing .stepper-head {
+  min-height: 58px !important;
+  padding: 6px !important;
+  gap: 8px !important;
+  border-radius: 22px !important;
+  background: rgba(15, 23, 42, .72) !important;
+  border: 1px solid rgba(148, 163, 184, .16) !important;
+  margin-bottom: 12px !important;
+}
+
+.pro-billing .step-tab {
+  min-height: 46px !important;
+  padding: 6px 12px !important;
+  border-radius: 16px !important;
+  gap: 8px !important;
+}
+
+.pro-billing .step-tab span {
+  width: 26px !important;
+  height: 26px !important;
+  min-width: 26px !important;
+  font-size: 12px !important;
+  border-radius: 10px !important;
+}
+
+.pro-billing .step-tab b {
+  font-size: 13px !important;
+  line-height: 1.05 !important;
+}
+
+.pro-billing .step-tab small {
+  font-size: 10px !important;
+  line-height: 1.05 !important;
+}
+
+.pro-billing .billing-scroll {
+  padding: 0 !important;
+}
+
+.pro-billing .patient-entry-card {
+  border: 1px solid rgba(148, 163, 184, .16);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(30, 41, 59, .88), rgba(15, 23, 42, .9));
+  padding: 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 18px 44px rgba(2, 6, 23, .24);
+}
+
+.pro-billing .patient-entry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.pro-billing .patient-title-main {
+  display: grid;
+  gap: 1px;
+}
+
+.pro-billing .patient-title-main .eyebrow {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: .14em;
+  color: #93c5fd;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.pro-billing .patient-title-main h3 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.1;
+  letter-spacing: -.03em;
+}
+
+.pro-billing .patient-id-pill {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.pro-billing .patient-lookup-row {
+  display: grid;
+  grid-template-columns: minmax(360px, 1fr) 44px 112px auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.pro-billing .patient-lookup-field {
+  position: relative;
+  min-width: 0;
+}
+
+.pro-billing .patient-lookup-field label {
+  display: none !important;
+}
+
+.pro-billing .lookup-search-icon {
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  color: #94a3b8;
+  z-index: 2;
+  pointer-events: none;
+  font-weight: 900;
+}
+
+.pro-billing .patient-lookup-field input {
+  height: 44px !important;
+  min-height: 44px !important;
+  padding: 0 14px 0 42px !important;
+  border-radius: 14px !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  background: rgba(2, 6, 23, .32) !important;
+  border: 1px solid rgba(148, 163, 184, .2) !important;
+}
+
+.pro-billing .lookup-filter-btn,
+.pro-billing .lookup-search-btn,
+.pro-billing .patient-mode-toggle button {
+  height: 44px !important;
+  min-height: 44px !important;
+  border-radius: 14px !important;
+}
+
+.pro-billing .lookup-filter-btn {
+  border: 1px solid rgba(148, 163, 184, .2);
+  background: rgba(15, 23, 42, .72);
+  color: #cbd5e1;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.pro-billing .lookup-filter-btn:hover {
+  border-color: rgba(96, 165, 250, .65);
+  color: #dbeafe;
+}
+
+.pro-billing .lookup-search-btn {
+  padding: 0 18px !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+}
+
+.pro-billing .patient-mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  min-width: 266px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, .18);
+  background: rgba(2, 6, 23, .28);
+}
+
+.pro-billing .patient-mode-toggle button {
+  border: 0;
+  padding: 0 14px;
+  color: #94a3b8;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.pro-billing .patient-mode-toggle button.active {
+  color: #eff6ff;
+  background: linear-gradient(135deg, #2563eb, #38bdf8);
+  box-shadow: 0 12px 28px rgba(37, 99, 235, .28);
+}
+
+.pro-billing .patient-registration-layout {
+  grid-template-columns: 1fr !important;
+  gap: 12px !important;
+}
+
+.pro-billing .details-only-summary {
+  display: none !important;
+}
+
+.pro-billing .patient-section-card {
+  border-radius: 24px !important;
+  padding: 14px !important;
+  background: linear-gradient(180deg, rgba(30, 41, 59, .84), rgba(15, 23, 42, .88)) !important;
+  border: 1px solid rgba(148, 163, 184, .15) !important;
+  box-shadow: 0 16px 40px rgba(2, 6, 23, .22) !important;
+}
+
+.pro-billing .section-heading.basic-info-heading {
+  min-height: 42px !important;
+  padding: 0 !important;
+  margin-bottom: 12px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.pro-billing .basic-info-title-group {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-width: 0;
+}
+
+.pro-billing .section-icon {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  border-radius: 12px !important;
+  display: grid !important;
+  place-items: center !important;
+  font-size: 16px !important;
+}
+
+.pro-billing .inline-heading-copy {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.pro-billing .inline-heading-copy h4 {
+  margin: 0 !important;
+  font-size: 16px !important;
+  line-height: 1.1 !important;
+  letter-spacing: -.02em;
+}
+
+.pro-billing .inline-heading-copy p {
+  margin: 0 !important;
+  font-size: 12px !important;
+  color: #94a3b8 !important;
+  font-weight: 750 !important;
+}
+
+.pro-billing .clear-basic-info-btn {
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 14px !important;
+  border-radius: 13px !important;
+  font-size: 12px !important;
+}
+
+.pro-billing .priority-patient-grid {
+  display: grid !important;
+  grid-template-columns: 1.35fr 1fr 1fr 1fr !important;
+  gap: 12px !important;
+  align-items: start !important;
+}
+
+.pro-billing .patient-name-field { order: 1; }
+.pro-billing .mobile-priority-field { order: 2; }
+.pro-billing .gender-field { order: 3; }
+.pro-billing .age-combo-field { order: 4; }
+.pro-billing .dob-field { order: 5; }
+.pro-billing .consultant-priority-field { order: 6; }
+.pro-billing .honorific-field { order: 7; }
+.pro-billing .referrer-type-field { order: 8; }
+.pro-billing .age-display-field { order: 9; }
+.pro-billing .split-age-field { order: 10; }
+
+.pro-billing .field label {
+  margin-bottom: 5px !important;
+  font-size: 11px !important;
+  font-weight: 900 !important;
+  color: #cbd5e1 !important;
+}
+
+.pro-billing .field input,
+.pro-billing .field select,
+.pro-billing .field textarea,
+.pro-billing .consultant-compact-row input,
+.pro-billing .age-display-box {
+  min-height: 42px !important;
+  height: 42px !important;
+  border-radius: 13px !important;
+  font-size: 12.5px !important;
+  font-weight: 750 !important;
+  background: rgba(2, 6, 23, .25) !important;
+  border-color: rgba(148, 163, 184, .18) !important;
+}
+
+.pro-billing .field textarea {
+  height: 70px !important;
+}
+
+.pro-billing .field-helper,
+.pro-billing .field-hint {
+  display: none !important;
+}
+
+.pro-billing .age-combo-row,
+.pro-billing .consultant-compact-row,
+.pro-billing .select-plus-row {
+  height: 42px !important;
+}
+
+.pro-billing .mini-plus {
+  width: 42px !important;
+  height: 42px !important;
+  border-radius: 12px !important;
+}
+
+.pro-billing .inline-split-check {
+  height: 42px !important;
+  min-height: 42px !important;
+  border-radius: 13px !important;
+}
+
+.pro-billing .contact-grid {
+  grid-template-columns: .9fr 1.1fr 1.4fr !important;
+  gap: 12px !important;
+}
+
+.pro-billing .guardian-grid {
+  gap: 12px !important;
+}
+
+.pro-billing .step-actions.sticky-actions {
+  margin-top: 12px !important;
+  min-height: 56px !important;
+  padding: 10px 12px !important;
+  border-radius: 22px !important;
+  background: rgba(15, 23, 42, .86) !important;
+  border: 1px solid rgba(148, 163, 184, .14) !important;
+  box-shadow: 0 14px 38px rgba(2, 6, 23, .28) !important;
+}
+
+.pro-billing .step-actions .btn {
+  height: 42px !important;
+  min-height: 42px !important;
+  border-radius: 14px !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+}
+
+.pro-billing .step-actions .btn.big {
+  min-width: 170px;
+}
+
+.light .pro-billing {
+  background: linear-gradient(180deg, #eef5ff, #f8fafc);
+  border-color: rgba(15, 23, 42, .08);
+  box-shadow: 0 20px 46px rgba(15, 23, 42, .12);
+}
+
+.light .pro-billing .patient-entry-card,
+.light .pro-billing .patient-section-card,
+.light .pro-billing .step-actions.sticky-actions {
+  background: rgba(255, 255, 255, .92) !important;
+  border-color: rgba(15, 23, 42, .08) !important;
+}
+
+.light .pro-billing .field label,
+.light .pro-billing .inline-heading-copy h4 {
+  color: #0f172a !important;
+}
+
+.light .pro-billing .inline-heading-copy p,
+.light .pro-billing .patient-title-main .eyebrow {
+  color: #2563eb !important;
+}
+
+@media (max-width: 1200px) {
+  .pro-billing .patient-lookup-row {
+    grid-template-columns: 1fr 44px 104px;
+  }
+  .pro-billing .patient-mode-toggle {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+  .pro-billing .priority-patient-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .pro-billing {
+    padding: 10px;
+    border-radius: 22px;
+  }
+  .pro-billing .stepper-head {
+    grid-template-columns: 1fr !important;
+  }
+  .pro-billing .patient-entry-head,
+  .pro-billing .section-heading.basic-info-heading {
+    align-items: flex-start !important;
+    flex-direction: column;
+  }
+  .pro-billing .patient-lookup-row,
+  .pro-billing .priority-patient-grid,
+  .pro-billing .contact-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .pro-billing .lookup-filter-btn,
+  .pro-billing .lookup-search-btn {
+    width: 100%;
+  }
+}
+
+:host-context(.light) .pro-billing {
+  background: linear-gradient(180deg, #eef5ff, #f8fafc) !important;
+  border-color: rgba(15, 23, 42, .08) !important;
+  box-shadow: 0 20px 46px rgba(15, 23, 42, .12) !important;
+}
+:host-context(.light) .pro-billing .patient-entry-card,
+:host-context(.light) .pro-billing .patient-section-card,
+:host-context(.light) .pro-billing .step-actions.sticky-actions {
+  background: rgba(255, 255, 255, .94) !important;
+  border-color: rgba(15, 23, 42, .08) !important;
+}
+:host-context(.light) .pro-billing .field label,
+:host-context(.light) .pro-billing .inline-heading-copy h4 {
+  color: #0f172a !important;
+}
+
+/* Final compact billing polish - match approved reference, remove oversized header/card feel */
+.patient-step {
+  .patient-entry-card.compact-patient-card {
+    padding: 20px 22px !important;
+    border-radius: 16px !important;
+    background: linear-gradient(180deg, rgba(15, 23, 42, .74), rgba(8, 15, 29, .82)) !important;
+    border: 1px solid rgba(148, 163, 184, .18) !important;
+    box-shadow: none !important;
+  }
+
+  .patient-entry-head {
+    display: none !important;
+  }
+
+  .patient-lookup-row {
+    display: grid !important;
+    grid-template-columns: minmax(360px, 1fr) 58px 122px minmax(320px, 440px) !important;
+    align-items: center !important;
+    gap: 16px !important;
+  }
+
+  .patient-lookup-field,
+  .patient-lookup-field input,
+  .lookup-filter-btn,
+  .lookup-search-btn,
+  .patient-mode-toggle,
+  .patient-mode-toggle button {
+    height: 48px !important;
+    min-height: 48px !important;
+  }
+
+  .patient-lookup-field {
+    border-radius: 11px !important;
+    border: 1px solid rgba(148, 163, 184, .22) !important;
+    background: rgba(8, 15, 29, .84) !important;
+  }
+
+  .patient-lookup-field input {
+    font-size: 14px !important;
+    font-weight: 650 !important;
+    padding-left: 46px !important;
+    background: transparent !important;
+  }
+
+  .lookup-search-icon {
+    left: 18px !important;
+    font-size: 22px !important;
+    opacity: .9 !important;
+  }
+
+  .lookup-filter-btn {
+    width: 58px !important;
+    border-radius: 12px !important;
+    background: rgba(8, 15, 29, .78) !important;
+    border: 1px solid rgba(148, 163, 184, .22) !important;
+    color: #dbeafe !important;
+    font-size: 18px !important;
+  }
+
+  .lookup-search-btn {
+    width: 122px !important;
+    border-radius: 11px !important;
+    font-size: 14px !important;
+    font-weight: 900 !important;
+  }
+
+  .patient-mode-toggle {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(148, 163, 184, .22) !important;
+    background: rgba(8, 15, 29, .78) !important;
+  }
+
+  .patient-mode-toggle button {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: #cbd5e1 !important;
+    font-size: 14px !important;
+    font-weight: 850 !important;
+  }
+
+  .patient-mode-toggle button.active {
+    border-radius: 10px !important;
+    margin: 3px !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    color: #fff !important;
+    background: linear-gradient(135deg, #2563eb, #38bdf8) !important;
+    box-shadow: 0 12px 26px rgba(37, 99, 235, .28) !important;
+  }
+
+  .patient-registration-layout,
+  .patient-form-pro {
+    gap: 16px !important;
+  }
+
+  .patient-form-pro > .patient-section-card:first-child,
+  .patient-section-card:first-child {
+    padding: 24px 26px 22px !important;
+    border-radius: 16px !important;
+    background: linear-gradient(180deg, rgba(15, 23, 42, .70), rgba(8, 15, 29, .88)) !important;
+    border: 1px solid rgba(148, 163, 184, .18) !important;
+    box-shadow: none !important;
+  }
+
+  .basic-info-heading {
+    align-items: center !important;
+    margin: 0 0 22px !important;
+    gap: 12px !important;
+  }
+
+  .basic-info-title-group {
+    align-items: center !important;
+    gap: 12px !important;
+  }
+
+  .basic-info-heading .section-icon {
+    width: 40px !important;
+    height: 40px !important;
+    flex: 0 0 40px !important;
+    border-radius: 12px !important;
+    font-size: 16px !important;
+    background: rgba(37, 99, 235, .18) !important;
+    color: #93c5fd !important;
+    box-shadow: none !important;
+  }
+
+  .basic-info-heading .inline-heading-copy {
+    display: flex !important;
+    align-items: baseline !important;
+    gap: 14px !important;
+    min-width: 0 !important;
+    flex-wrap: wrap !important;
+  }
+
+  .basic-info-heading h4 {
+    font-size: 19px !important;
+    line-height: 1.1 !important;
+    letter-spacing: -.02em !important;
+    margin: 0 !important;
+    font-weight: 950 !important;
+  }
+
+  .basic-info-heading p {
+    font-size: 13px !important;
+    line-height: 1.2 !important;
+    margin: 0 !important;
+    font-weight: 650 !important;
+    color: #cbd5e1 !important;
+  }
+
+  .clear-basic-info-btn {
+    height: 40px !important;
+    min-height: 40px !important;
+    padding: 0 18px !important;
+    border-radius: 10px !important;
+    font-size: 13px !important;
+    font-weight: 850 !important;
+    background: rgba(15, 23, 42, .56) !important;
+    border: 1px solid rgba(59, 130, 246, .46) !important;
+    color: #93c5fd !important;
+  }
+
+  .priority-patient-grid {
+    display: grid !important;
+    grid-template-columns: minmax(210px, 1.05fr) minmax(200px, .98fr) minmax(190px, .9fr) minmax(260px, 1.12fr) !important;
+    column-gap: 24px !important;
+    row-gap: 22px !important;
+  }
+
+  .priority-patient-grid .patient-name-field { grid-column: 1 !important; grid-row: 1 !important; }
+  .priority-patient-grid .mobile-priority-field { grid-column: 2 !important; grid-row: 1 !important; }
+  .priority-patient-grid .gender-field { grid-column: 3 !important; grid-row: 1 !important; }
+  .priority-patient-grid .age-combo-field { grid-column: 4 !important; grid-row: 1 !important; }
+  .priority-patient-grid .dob-field { grid-column: 1 !important; grid-row: 2 !important; }
+  .priority-patient-grid .consultant-priority-field { grid-column: 2 !important; grid-row: 2 !important; }
+  .priority-patient-grid .honorific-field { grid-column: 3 !important; grid-row: 2 !important; }
+  .priority-patient-grid .referrer-type-field { grid-column: 4 !important; grid-row: 2 !important; }
+  .priority-patient-grid .split-age-field { grid-column: 1 / span 2 !important; grid-row: 3 !important; }
+  .priority-patient-grid .age-display-field { display: none !important; }
+
+  .priority-patient-grid .field label:not(.soft-check) {
+    font-size: 13px !important;
+    font-weight: 850 !important;
+    margin: 0 0 8px !important;
+    color: #e5e7eb !important;
+  }
+
+  .priority-patient-grid input,
+  .priority-patient-grid select,
+  .priority-patient-grid .age-combo-row {
+    height: 46px !important;
+    min-height: 46px !important;
+    border-radius: 9px !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    background: rgba(8, 15, 29, .82) !important;
+    border: 1px solid rgba(148, 163, 184, .24) !important;
+    color: #e5eefc !important;
+    box-shadow: none !important;
+  }
+
+  .priority-patient-grid input,
+  .priority-patient-grid select {
+    padding: 0 14px !important;
+  }
+
+  .priority-patient-grid input::placeholder {
+    color: #94a3b8 !important;
+    font-weight: 650 !important;
+  }
+
+  .consultant-compact-row,
+  .select-plus-row.attached-plus {
+    grid-template-columns: minmax(0, 1fr) 46px !important;
+    gap: 8px !important;
+  }
+
+  .mini-plus,
+  .consultant-plus {
+    width: 46px !important;
+    height: 46px !important;
+    min-height: 46px !important;
+    border-radius: 10px !important;
+    font-size: 22px !important;
+    background: rgba(37, 99, 235, .14) !important;
+    border: 1px solid rgba(59, 130, 246, .44) !important;
+    color: #93c5fd !important;
+    box-shadow: none !important;
+  }
+
+  .age-combo-row {
+    display: grid !important;
+    grid-template-columns: minmax(80px, .85fr) minmax(108px, 1fr) !important;
+    overflow: hidden !important;
+    background: transparent !important;
+    border: 0 !important;
+  }
+
+  .age-combo-row input {
+    border-radius: 9px 0 0 9px !important;
+  }
+
+  .age-combo-row select {
+    border-left: 0 !important;
+    border-radius: 0 9px 9px 0 !important;
+  }
+
+  .field-helper,
+  .field-hint {
+    display: none !important;
+  }
+
+  .split-label-spacer {
+    display: none !important;
+  }
+
+  .inline-split-check {
+    height: 34px !important;
+    margin: 2px 0 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    color: #e5e7eb !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    white-space: nowrap !important;
+  }
+
+  .inline-split-check input {
+    width: 17px !important;
+    height: 17px !important;
+    min-height: 17px !important;
+    accent-color: #3b82f6 !important;
+  }
+
+  .patient-summary-card.details-only-summary {
+    display: none !important;
+  }
+
+  .sticky-actions {
+    position: relative !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 16px !important;
+    margin-top: 16px !important;
+    padding: 16px 20px !important;
+    border: 1px solid rgba(148, 163, 184, .18) !important;
+    border-radius: 16px !important;
+    background: linear-gradient(180deg, rgba(15, 23, 42, .68), rgba(8, 15, 29, .80)) !important;
+  }
+
+  .sticky-actions .btn {
+    height: 46px !important;
+    min-height: 46px !important;
+    border-radius: 10px !important;
+    padding: 0 28px !important;
+    font-weight: 850 !important;
+  }
+
+  .sticky-actions .btn.big {
+    min-width: 220px !important;
+  }
+}
+
+.stepper-head {
+  height: 66px !important;
+  min-height: 66px !important;
+  padding: 5px 8px !important;
+  gap: 8px !important;
+}
+.stepper-head .step-tab {
+  min-height: 52px !important;
+  height: 52px !important;
+  padding: 0 18px !important;
+  border-radius: 13px !important;
+  grid-template-columns: 36px minmax(0, 1fr) !important;
+  column-gap: 12px !important;
+}
+.stepper-head .step-tab span {
+  width: 32px !important;
+  height: 32px !important;
+  font-size: 14px !important;
+}
+.stepper-head .step-tab b {
+  font-size: 14px !important;
+  line-height: 1.05 !important;
+}
+.stepper-head .step-tab small {
+  font-size: 11px !important;
+  line-height: 1.1 !important;
+  margin-top: 3px !important;
+}
+
+@media (max-width: 1180px) {
+  .patient-step .patient-lookup-row { grid-template-columns: 1fr 56px 116px !important; }
+  .patient-step .patient-mode-toggle { grid-column: 1 / -1 !important; }
+  .patient-step .priority-patient-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .patient-step .priority-patient-grid .patient-name-field,
+  .patient-step .priority-patient-grid .mobile-priority-field,
+  .patient-step .priority-patient-grid .gender-field,
+  .patient-step .priority-patient-grid .age-combo-field,
+  .patient-step .priority-patient-grid .dob-field,
+  .patient-step .priority-patient-grid .consultant-priority-field,
+  .patient-step .priority-patient-grid .honorific-field,
+  .patient-step .priority-patient-grid .referrer-type-field,
+  .patient-step .priority-patient-grid .split-age-field { grid-column: auto !important; grid-row: auto !important; }
+}
+
+@media (max-width: 720px) {
+  .patient-step .patient-lookup-row,
+  .patient-step .priority-patient-grid { grid-template-columns: 1fr !important; }
+  .patient-step .lookup-filter-btn,
+  .patient-step .lookup-search-btn { width: 100% !important; }
+  .patient-step .basic-info-heading { align-items: flex-start !important; }
+  .patient-step .basic-info-heading .inline-heading-copy { display: block !important; }
+  .patient-step .sticky-actions { flex-direction: column !important; align-items: stretch !important; }
+  .patient-step .sticky-actions .btn { width: 100% !important; }
+}
+
+/* Final visual correction requested:
+   - stepper has no subtitle and no overlap with Billing header
+   - smaller icons everywhere
+   - tighter patient card height
+   - age value/unit are two plain fields, no wrapper card */
+:host {
+  display: block;
+}
+
+.pro-billing {
+  padding: 10px 12px 12px !important;
+  border-radius: 22px !important;
+}
+
+.pro-billing .stepper-head,
+.stepper-head {
+  height: 48px !important;
+  min-height: 48px !important;
+  padding: 4px !important;
+  margin: 0 0 10px !important;
+  gap: 6px !important;
+  border-radius: 16px !important;
+  overflow: visible !important;
+}
+
+.pro-billing .step-tab,
+.stepper-head .step-tab {
+  height: 40px !important;
+  min-height: 40px !important;
+  padding: 0 12px !important;
+  border-radius: 12px !important;
+  grid-template-columns: 28px minmax(0, 1fr) !important;
+  column-gap: 9px !important;
+  row-gap: 0 !important;
+  align-items: center !important;
+}
+
+.pro-billing .step-tab span,
+.stepper-head .step-tab span {
+  width: 24px !important;
+  min-width: 24px !important;
+  height: 24px !important;
+  border-radius: 8px !important;
+  font-size: 11px !important;
+}
+
+.pro-billing .step-tab b,
+.stepper-head .step-tab b {
+  font-size: 12.5px !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+
+.pro-billing .step-tab small,
+.stepper-head .step-tab small {
+  display: none !important;
+}
+
+.pro-billing .patient-entry-card,
+.patient-entry-card.compact-patient-card {
+  padding: 12px !important;
+  margin-bottom: 12px !important;
+  border-radius: 18px !important;
+}
+
+.pro-billing .patient-entry-head,
+.patient-entry-head {
+  display: none !important;
+}
+
+.patient-step .patient-lookup-row {
+  grid-template-columns: minmax(330px, 1fr) 42px 112px minmax(320px, .95fr) !important;
+  gap: 12px !important;
+  align-items: center !important;
+}
+
+.patient-step .top-patient-search,
+.patient-step .patient-lookup-field,
+.patient-step .patient-lookup-field input,
+.patient-step .lookup-filter-btn,
+.patient-step .lookup-search-btn,
+.patient-step .patient-mode-toggle,
+.patient-step .patient-mode-toggle button,
+.patient-step .patient-mode-toggle button.active {
+  height: 40px !important;
+  min-height: 40px !important;
+}
+
+.patient-step .lookup-filter-btn {
+  width: 42px !important;
+  border-radius: 10px !important;
+  font-size: 14px !important;
+}
+
+.patient-step .lookup-search-btn {
+  width: 112px !important;
+  border-radius: 10px !important;
+  font-size: 13px !important;
+}
+
+.patient-step .patient-mode-toggle {
+  border-radius: 12px !important;
+}
+
+.patient-step .patient-mode-toggle button {
+  font-size: 13px !important;
+  font-weight: 800 !important;
+}
+
+.patient-step .patient-mode-toggle button.active {
+  margin: 2px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  border-radius: 10px !important;
+}
+
+.patient-step .patient-registration-layout,
+.patient-step .patient-form-pro {
+  gap: 12px !important;
+}
+
+.patient-step .patient-form-pro > .patient-section-card:first-child,
+.patient-step .patient-section-card:first-child {
+  padding: 18px 20px 16px !important;
+  border-radius: 18px !important;
+  min-height: 0 !important;
+}
+
+.patient-step .basic-info-heading {
+  align-items: center !important;
+  margin: 0 0 16px !important;
+  gap: 10px !important;
+}
+
+.patient-step .basic-info-title-group {
+  gap: 10px !important;
+  align-items: center !important;
+}
+
+.patient-step .basic-info-heading .section-icon,
+.patient-step .patient-form-pro > .patient-section-card:first-child .section-icon {
+  width: 30px !important;
+  min-width: 30px !important;
+  height: 30px !important;
+  flex: 0 0 30px !important;
+  border-radius: 9px !important;
+  font-size: 13px !important;
+  box-shadow: none !important;
+  opacity: .9 !important;
+}
+
+.patient-step .basic-info-heading .inline-heading-copy {
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 12px !important;
+  flex-wrap: wrap !important;
+}
+
+.patient-step .basic-info-heading h4,
+.patient-step .patient-form-pro > .patient-section-card:first-child .section-heading h4 {
+  font-size: 18px !important;
+  line-height: 1.1 !important;
+  letter-spacing: -.02em !important;
+  font-weight: 900 !important;
+}
+
+.patient-step .basic-info-heading p,
+.patient-step .patient-form-pro > .patient-section-card:first-child .section-heading p {
+  font-size: 12px !important;
+  line-height: 1.15 !important;
+  font-weight: 650 !important;
+  margin: 0 !important;
+}
+
+.patient-step .clear-basic-info-btn {
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 14px !important;
+  border-radius: 10px !important;
+  font-size: 12px !important;
+}
+
+.patient-step .priority-patient-grid {
+  grid-template-columns: minmax(210px, 1fr) minmax(190px, .9fr) minmax(180px, .85fr) minmax(240px, 1.05fr) !important;
+  column-gap: 22px !important;
+  row-gap: 14px !important;
+  align-items: start !important;
+}
+
+.patient-step .priority-patient-grid .field,
+.patient-step .split-age-field {
+  grid-template-rows: 19px 38px 0 !important;
+  min-height: 60px !important;
+  max-height: 60px !important;
+}
+
+.patient-step .priority-patient-grid .field label:not(.soft-check),
+.patient-step .priority-patient-grid .field > label:not(.soft-check),
+.patient-step .split-age-field .split-label-spacer {
+  height: 18px !important;
+  min-height: 18px !important;
+  line-height: 16px !important;
+  margin: 0 0 5px !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+}
+
+.patient-step .priority-patient-grid input,
+.patient-step .priority-patient-grid select,
+.patient-step .priority-patient-grid .field > input:not([type="checkbox"]),
+.patient-step .priority-patient-grid .field > select,
+.patient-step .dob-field input[type="date"] {
+  height: 38px !important;
+  min-height: 38px !important;
+  max-height: 38px !important;
+  border-radius: 10px !important;
+  font-size: 12.5px !important;
+  font-weight: 650 !important;
+  padding: 0 12px !important;
+}
+
+.patient-step .consultant-compact-row,
+.patient-step .select-plus-row.attached-plus {
+  grid-template-columns: minmax(0, 1fr) 34px !important;
+  gap: 7px !important;
+  align-items: start !important;
+  height: 38px !important;
+}
+
+.patient-step .mini-plus,
+.patient-step .consultant-plus,
+.patient-step .attached-plus .mini-plus {
+  width: 34px !important;
+  min-width: 34px !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  border-radius: 9px !important;
+  font-size: 15px !important;
+  font-weight: 850 !important;
+  box-shadow: none !important;
+}
+
+.patient-step .age-combo-row,
+.patient-step .priority-patient-grid .age-combo-row {
+  display: grid !important;
+  grid-template-columns: minmax(70px, .8fr) minmax(104px, 1fr) !important;
+  gap: 8px !important;
+  align-items: start !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  max-height: 38px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+.patient-step .age-combo-row input,
+.patient-step .age-combo-row select {
+  width: 100% !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  max-height: 38px !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(148, 163, 184, .24) !important;
+}
+
+.patient-step .age-combo-row input {
+  border-right: 1px solid rgba(148, 163, 184, .24) !important;
+}
+
+.patient-step .age-combo-row select {
+  border-left: 1px solid rgba(148, 163, 184, .24) !important;
+}
+
+.patient-step .field-helper,
+.patient-step .field-hint,
+.patient-step .age-display-field {
+  display: none !important;
+}
+
+.patient-step .priority-patient-grid .split-age-field {
+  grid-column: 1 / span 2 !important;
+  grid-row: 3 !important;
+}
+
+.patient-step .split-label-spacer {
+  display: none !important;
+}
+
+.patient-step .inline-split-check {
+  height: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
+  margin: 2px 0 0 !important;
+  gap: 6px !important;
+  font-size: 12px !important;
+  font-weight: 750 !important;
+}
+
+.patient-step .inline-split-check input[type="checkbox"] {
+  width: 14px !important;
+  min-width: 14px !important;
+  height: 14px !important;
+  min-height: 14px !important;
+  border-radius: 3px !important;
+}
+
+.patient-step .inline-split-check em {
+  font-size: 12px !important;
+}
+
+@media (max-width: 1180px) {
+  .patient-step .patient-lookup-row {
+    grid-template-columns: 1fr 42px 112px !important;
+  }
+  .patient-step .patient-mode-toggle {
+    grid-column: 1 / -1 !important;
+  }
+  .patient-step .priority-patient-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .patient-step .priority-patient-grid .patient-name-field,
+  .patient-step .priority-patient-grid .mobile-priority-field,
+  .patient-step .priority-patient-grid .gender-field,
+  .patient-step .priority-patient-grid .age-combo-field,
+  .patient-step .priority-patient-grid .dob-field,
+  .patient-step .priority-patient-grid .consultant-priority-field,
+  .patient-step .priority-patient-grid .honorific-field,
+  .patient-step .priority-patient-grid .referrer-type-field,
+  .patient-step .priority-patient-grid .split-age-field {
+    grid-column: auto !important;
+    grid-row: auto !important;
+  }
+}
+
+/* FINAL billing compact alignment polish - requested corrections */
+.pro-billing .stepper-head,
+.stepper-head {
+  height: 42px !important;
+  min-height: 42px !important;
+  padding: 3px !important;
+  margin: 0 0 8px !important;
+  gap: 6px !important;
+  align-items: center !important;
+}
+
+.pro-billing .step-tab,
+.stepper-head .step-tab {
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 12px !important;
+  display: grid !important;
+  grid-template-columns: 24px minmax(0, 1fr) !important;
+  gap: 9px !important;
+  align-items: center !important;
+  justify-items: start !important;
+}
+
+.pro-billing .step-tab span,
+.stepper-head .step-tab span {
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+  align-self: center !important;
+}
+
+.pro-billing .step-tab b,
+.stepper-head .step-tab b {
+  display: flex !important;
+  align-items: center !important;
+  height: 22px !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  transform: translateY(-1px);
+}
+
+.patient-step .patient-form-pro > .patient-section-card:first-child,
+.patient-step .patient-section-card:first-child {
+  padding: 14px 16px 12px !important;
+  border-radius: 16px !important;
+  min-height: 0 !important;
+}
+
+.patient-step .basic-info-heading {
+  margin: 0 0 12px !important;
+  min-height: 34px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.patient-step .basic-info-heading .section-icon,
+.patient-step .patient-form-pro > .patient-section-card:first-child .section-icon {
+  width: 26px !important;
+  min-width: 26px !important;
+  height: 26px !important;
+  flex-basis: 26px !important;
+  border-radius: 8px !important;
+  font-size: 11px !important;
+}
+
+.patient-step .basic-info-heading h4,
+.patient-step .patient-form-pro > .patient-section-card:first-child .section-heading h4 {
+  font-size: 16px !important;
+  line-height: 1 !important;
+}
+
+.patient-step .basic-info-heading p,
+.patient-step .patient-form-pro > .patient-section-card:first-child .section-heading p {
+  font-size: 11.5px !important;
+  line-height: 1 !important;
+}
+
+.patient-step .clear-basic-info-btn {
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 12px !important;
+  border-radius: 9px !important;
+  font-size: 11.5px !important;
+  align-self: center !important;
+}
+
+.patient-step .priority-patient-grid {
+  row-gap: 10px !important;
+  column-gap: 18px !important;
+  align-items: start !important;
+}
+
+.patient-step .priority-patient-grid .field,
+.patient-step .split-age-field {
+  min-height: 54px !important;
+  max-height: 54px !important;
+}
+
+.patient-step .priority-patient-grid input,
+.patient-step .priority-patient-grid select,
+.patient-step .priority-patient-grid .field > input:not([type="checkbox"]),
+.patient-step .priority-patient-grid .field > select,
+.patient-step .dob-field input[type="date"] {
+  height: 34px !important;
+  min-height: 34px !important;
+  max-height: 34px !important;
+  border-radius: 9px !important;
+  font-size: 12px !important;
+  padding: 0 11px !important;
+}
+
+.patient-step .consultant-compact-row,
+.patient-step .select-plus-row.attached-plus {
+  grid-template-columns: minmax(0, 1fr) 30px !important;
+  gap: 6px !important;
+  height: 34px !important;
+}
+
+.patient-step .mini-plus,
+.patient-step .consultant-plus,
+.patient-step .attached-plus .mini-plus {
+  width: 30px !important;
+  min-width: 30px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  border-radius: 8px !important;
+  font-size: 13px !important;
+  line-height: 1 !important;
+  display: inline-grid !important;
+  place-items: center !important;
+}
+
+.patient-step .age-combo-row,
+.patient-step .priority-patient-grid .age-combo-row {
+  height: 34px !important;
+  min-height: 34px !important;
+  max-height: 34px !important;
+  gap: 7px !important;
+}
+
+.patient-step .age-combo-row input,
+.patient-step .age-combo-row select {
+  height: 34px !important;
+  min-height: 34px !important;
+  max-height: 34px !important;
+  border-radius: 9px !important;
+}
+
+.patient-step .priority-patient-grid .split-age-field {
+  grid-column: 1 / span 2 !important;
+  grid-row: 3 !important;
+  min-height: 24px !important;
+  max-height: 24px !important;
+  align-self: start !important;
+  margin-top: -2px !important;
+}
+
+.patient-step .inline-split-check {
+  height: 22px !important;
+  min-height: 22px !important;
+  max-height: 22px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  line-height: 1 !important;
+  font-size: 11.5px !important;
+}
+
+.patient-step .inline-split-check input[type="checkbox"] {
+  width: 13px !important;
+  min-width: 13px !important;
+  height: 13px !important;
+  min-height: 13px !important;
+  margin: 0 !important;
+}
+
+.patient-step .inline-split-check span,
+.patient-step .inline-split-check em {
+  line-height: 1 !important;
+  margin: 0 !important;
+}
+
+.patient-step input[type="date"] {
+  color-scheme: dark !important;
+}
+.patient-step input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 1 !important;
+  filter: invert(76%) sepia(16%) saturate(704%) hue-rotate(181deg) brightness(102%) contrast(94%) !important;
+  cursor: pointer !important;
+}
+body:not(.dark-theme) .patient-step input[type="date"] {
+  color-scheme: light !important;
+}
+body:not(.dark-theme) .patient-step input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: none !important;
+}
+
+.pro-billing .step-actions.sticky-actions,
+.patient-step .step-actions.sticky-actions,
+.sticky-actions {
+  min-height: 48px !important;
+  height: 48px !important;
+  margin-top: 10px !important;
+  padding: 6px 10px !important;
+  border-radius: 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+.pro-billing .step-actions .btn,
+.patient-step .step-actions .btn,
+.sticky-actions .btn {
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 18px !important;
+  border-radius: 10px !important;
+  font-size: 12px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.pro-billing .step-actions .btn.big,
+.patient-step .step-actions .btn.big,
+.sticky-actions .btn.big {
+  min-width: 190px !important;
+  max-width: 240px !important;
+}
+
+/* FULL PATCH v5 - final alignment pass requested
+   - balanced stepper padding/text alignment
+   - proper split checkbox row spacing
+   - visible dark date icon
+   - restore compact sticky footer
+   - keep icons visually secondary to fields */
+.pro-billing {
+  padding: 12px !important;
+  border-radius: 22px !important;
+}
+
+.pro-billing .stepper-head,
+.stepper-head {
+  height: 52px !important;
+  min-height: 52px !important;
+  padding: 5px !important;
+  margin: 0 0 10px !important;
+  gap: 8px !important;
+  display: grid !important;
+  align-items: center !important;
+  border-radius: 18px !important;
+}
+
+.pro-billing .step-tab,
+.stepper-head .step-tab {
+  height: 40px !important;
+  min-height: 40px !important;
+  padding: 0 16px !important;
+  border-radius: 13px !important;
+  display: grid !important;
+  grid-template-columns: 24px minmax(0, 1fr) !important;
+  column-gap: 10px !important;
+  align-items: center !important;
+  justify-items: start !important;
+}
+
+.pro-billing .step-tab span,
+.stepper-head .step-tab span {
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  margin: 0 !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  align-self: center !important;
+  line-height: 1 !important;
+  font-size: 11px !important;
+}
+
+.pro-billing .step-tab b,
+.stepper-head .step-tab b {
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: block !important;
+  align-self: center !important;
+  line-height: 1.05 !important;
+  transform: none !important;
+  font-size: 12.5px !important;
+  white-space: nowrap !important;
+}
+
+.pro-billing .step-tab small,
+.stepper-head .step-tab small {
+  display: none !important;
+}
+
+.patient-step .patient-entry-card.compact-patient-card,
+.pro-billing .patient-entry-card.compact-patient-card {
+  padding: 12px !important;
+  margin-bottom: 12px !important;
+  border-radius: 18px !important;
+}
+
+.patient-step .patient-form-pro,
+.patient-step .patient-registration-layout {
+  gap: 12px !important;
+}
+
+.patient-step .patient-form-pro > .patient-section-card:first-child,
+.patient-step .patient-section-card:first-child {
+  padding: 16px 18px 14px !important;
+  border-radius: 17px !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+
+.patient-step .basic-info-heading {
+  min-height: 30px !important;
+  margin: 0 0 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+}
+
+.patient-step .basic-info-title-group {
+  display: flex !important;
+  align-items: center !important;
+  gap: 9px !important;
+  min-width: 0 !important;
+}
+
+.patient-step .basic-info-heading .section-icon,
+.patient-step .patient-form-pro > .patient-section-card:first-child .section-icon {
+  width: 24px !important;
+  min-width: 24px !important;
+  height: 24px !important;
+  flex: 0 0 24px !important;
+  border-radius: 7px !important;
+  font-size: 10px !important;
+  opacity: .84 !important;
+}
+
+.patient-step .basic-info-heading .inline-heading-copy {
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 10px !important;
+  flex-wrap: wrap !important;
+  min-width: 0 !important;
+}
+
+.patient-step .basic-info-heading h4,
+.patient-step .patient-form-pro > .patient-section-card:first-child .section-heading h4 {
+  font-size: 15.5px !important;
+  line-height: 1.05 !important;
+  margin: 0 !important;
+  font-weight: 900 !important;
+}
+
+.patient-step .basic-info-heading p,
+.patient-step .patient-form-pro > .patient-section-card:first-child .section-heading p {
+  font-size: 11px !important;
+  line-height: 1.05 !important;
+  margin: 0 !important;
+  font-weight: 650 !important;
+  color: #9aa7bb !important;
+}
+
+.patient-step .clear-basic-info-btn {
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 12px !important;
+  border-radius: 9px !important;
+  font-size: 11.5px !important;
+  align-self: center !important;
+}
+
+.patient-step .priority-patient-grid {
+  grid-template-columns: minmax(210px, 1fr) minmax(190px, .9fr) minmax(180px, .85fr) minmax(235px, 1fr) !important;
+  column-gap: 18px !important;
+  row-gap: 10px !important;
+  align-items: start !important;
+}
+
+.patient-step .priority-patient-grid .field:not(.split-age-field) {
+  min-height: 54px !important;
+  max-height: 54px !important;
+}
+
+.patient-step .priority-patient-grid .field label:not(.soft-check) {
+  height: 17px !important;
+  min-height: 17px !important;
+  line-height: 15px !important;
+  margin: 0 0 4px !important;
+  font-size: 11.5px !important;
+  font-weight: 800 !important;
+}
+
+.patient-step .priority-patient-grid input,
+.patient-step .priority-patient-grid select,
+.patient-step .dob-field input[type="date"] {
+  height: 33px !important;
+  min-height: 33px !important;
+  max-height: 33px !important;
+  border-radius: 9px !important;
+  font-size: 12px !important;
+  padding: 0 10px !important;
+}
+
+.patient-step .consultant-compact-row,
+.patient-step .select-plus-row.attached-plus {
+  grid-template-columns: minmax(0, 1fr) 30px !important;
+  gap: 6px !important;
+  height: 33px !important;
+  min-height: 33px !important;
+  align-items: center !important;
+}
+
+.patient-step .mini-plus,
+.patient-step .consultant-plus,
+.patient-step .attached-plus .mini-plus {
+  width: 30px !important;
+  min-width: 30px !important;
+  height: 33px !important;
+  min-height: 33px !important;
+  border-radius: 8px !important;
+  font-size: 13px !important;
+  line-height: 1 !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  opacity: .9 !important;
+}
+
+.patient-step .age-combo-row,
+.patient-step .priority-patient-grid .age-combo-row {
+  display: grid !important;
+  grid-template-columns: minmax(72px, .8fr) minmax(102px, 1fr) !important;
+  gap: 7px !important;
+  height: 33px !important;
+  min-height: 33px !important;
+  max-height: 33px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+.patient-step .age-combo-row input,
+.patient-step .age-combo-row select {
+  height: 33px !important;
+  min-height: 33px !important;
+  max-height: 33px !important;
+  border: 1px solid rgba(148, 163, 184, .24) !important;
+  border-radius: 9px !important;
+}
+
+.patient-step .field-helper,
+.patient-step .field-hint,
+.patient-step .age-display-field {
+  display: none !important;
+}
+
+.patient-step .priority-patient-grid .split-age-field {
+  grid-column: 1 / -1 !important;
+  grid-row: 3 !important;
+  min-height: 22px !important;
+  max-height: 22px !important;
+  height: 22px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  align-self: start !important;
+}
+
+.patient-step .split-label-spacer {
+  display: none !important;
+}
+
+.patient-step .inline-split-check {
+  height: 22px !important;
+  min-height: 22px !important;
+  max-height: 22px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  line-height: 1 !important;
+  font-size: 11.5px !important;
+  font-weight: 750 !important;
+  white-space: nowrap !important;
+}
+
+.patient-step .inline-split-check input[type="checkbox"] {
+  width: 13px !important;
+  min-width: 13px !important;
+  height: 13px !important;
+  min-height: 13px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  accent-color: #3b82f6 !important;
+}
+
+.patient-step .inline-split-check span,
+.patient-step .inline-split-check em {
+  line-height: 1 !important;
+  margin: 0 !important;
+}
+
+.patient-step .patient-form-pro > .patient-section-card:first-child + .patient-section-card {
+  margin-top: 8px !important;
+}
+
+.patient-step input[type="date"] {
+  color-scheme: dark !important;
+}
+
+.patient-step input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: .88 !important;
+  filter: invert(84%) sepia(15%) saturate(476%) hue-rotate(177deg) brightness(101%) contrast(92%) !important;
+  cursor: pointer !important;
+}
+
+body:not(.dark-theme) .patient-step input[type="date"],
+.light .patient-step input[type="date"] {
+  color-scheme: light !important;
+}
+
+body:not(.dark-theme) .patient-step input[type="date"]::-webkit-calendar-picker-indicator,
+.light .patient-step input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: none !important;
+  opacity: .75 !important;
+}
+
+.pro-billing .step-actions.sticky-actions,
+.patient-step .step-actions.sticky-actions,
+.sticky-actions {
+  position: sticky !important;
+  bottom: 8px !important;
+  z-index: 30 !important;
+  min-height: 52px !important;
+  height: 52px !important;
+  margin-top: 12px !important;
+  padding: 7px 10px !important;
+  border-radius: 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  background: rgba(15, 23, 42, .92) !important;
+  border: 1px solid rgba(148, 163, 184, .16) !important;
+  box-shadow: 0 12px 28px rgba(2, 6, 23, .24) !important;
+}
+
+.pro-billing .step-actions.sticky-actions .btn,
+.patient-step .step-actions.sticky-actions .btn,
+.sticky-actions .btn {
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 18px !important;
+  border-radius: 10px !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.pro-billing .step-actions.sticky-actions .btn.big,
+.patient-step .step-actions.sticky-actions .btn.big,
+.sticky-actions .btn.big {
+  min-width: 188px !important;
+  max-width: 230px !important;
+}
+
+@media (max-width: 1180px) {
+  .patient-step .priority-patient-grid .split-age-field {
+    grid-column: 1 / -1 !important;
+    grid-row: auto !important;
+  }
+}
+
+
+/* BILLING UI V6 HARD OVERRIDE
+   Fixes requested after visual review:
+   1) Stepper badge/text exact vertical alignment and balanced padding.
+   2) Split below 1 year kept inside the patient card with proper breathing room.
+   3) Compact cards/fields/icons without oversized plus/date/checkbox icons.
+   4) Date picker icon visible in dark mode.
+   5) Footer restored as compact sticky bottom action bar. */
+.billing-stepper.pro-billing {
+  padding: 10px 12px 12px !important;
+  border-radius: 20px !important;
+}
+
+.billing-stepper.pro-billing > .stepper-head {
+  height: 44px !important;
+  min-height: 44px !important;
+  padding: 3px !important;
+  margin: 0 0 10px !important;
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 7px !important;
+  align-items: center !important;
+  border-radius: 16px !important;
+  overflow: hidden !important;
+}
+
+.billing-stepper.pro-billing > .stepper-head > .step-tab {
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 14px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 10px !important;
+  border-radius: 12px !important;
+  line-height: 1 !important;
+  min-width: 0 !important;
+}
+
+.billing-stepper.pro-billing > .stepper-head > .step-tab span {
+  width: 24px !important;
+  min-width: 24px !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 8px !important;
+  font-size: 11.5px !important;
+  font-weight: 900 !important;
+  line-height: 1 !important;
+  position: static !important;
+  transform: none !important;
+}
+
+.billing-stepper.pro-billing > .stepper-head > .step-tab b {
+  display: block !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  font-size: 12.8px !important;
+  font-weight: 900 !important;
+  line-height: 1 !important;
+  letter-spacing: -.01em !important;
+  white-space: nowrap !important;
+  position: static !important;
+  transform: none !important;
+}
+
+.billing-stepper.pro-billing > .stepper-head > .step-tab small {
+  display: none !important;
+}
+
+.billing-stepper.pro-billing .patient-entry-card.compact-patient-card {
+  padding: 12px !important;
+  margin-bottom: 12px !important;
+  border-radius: 17px !important;
+}
+
+.billing-stepper.pro-billing .patient-lookup-row {
+  display: grid !important;
+  grid-template-columns: minmax(320px, 1fr) 40px 108px minmax(300px, .9fr) !important;
+  gap: 10px !important;
+  align-items: center !important;
+}
+
+.billing-stepper.pro-billing .patient-lookup-field,
+.billing-stepper.pro-billing .patient-lookup-field input,
+.billing-stepper.pro-billing .lookup-filter-btn,
+.billing-stepper.pro-billing .lookup-search-btn,
+.billing-stepper.pro-billing .patient-mode-toggle,
+.billing-stepper.pro-billing .patient-mode-toggle button {
+  height: 38px !important;
+  min-height: 38px !important;
+}
+
+.billing-stepper.pro-billing .lookup-filter-btn {
+  width: 40px !important;
+  border-radius: 10px !important;
+  font-size: 13px !important;
+}
+
+.billing-stepper.pro-billing .lookup-search-btn {
+  width: 108px !important;
+  border-radius: 10px !important;
+  font-size: 12.5px !important;
+}
+
+.billing-stepper.pro-billing .patient-mode-toggle {
+  border-radius: 12px !important;
+  padding: 2px !important;
+}
+
+.billing-stepper.pro-billing .patient-mode-toggle button {
+  font-size: 12.5px !important;
+  font-weight: 800 !important;
+  border-radius: 9px !important;
+}
+
+.billing-stepper.pro-billing .patient-mode-toggle button.active {
+  height: 34px !important;
+  min-height: 34px !important;
+  margin: 0 !important;
+}
+
+.billing-stepper.pro-billing .patient-registration-layout,
+.billing-stepper.pro-billing .patient-form-pro {
+  gap: 14px !important;
+}
+
+.billing-stepper.pro-billing .patient-section-card.basic-info-card,
+.billing-stepper.pro-billing .patient-form-pro > .patient-section-card:first-child {
+  padding: 16px 18px 18px !important;
+  border-radius: 17px !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+
+.billing-stepper.pro-billing .basic-info-heading {
+  min-height: 30px !important;
+  margin: 0 0 14px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+}
+
+.billing-stepper.pro-billing .basic-info-title-group {
+  display: flex !important;
+  align-items: center !important;
+  gap: 9px !important;
+  min-width: 0 !important;
+}
+
+.billing-stepper.pro-billing .basic-info-heading .section-icon {
+  width: 24px !important;
+  min-width: 24px !important;
+  height: 24px !important;
+  flex: 0 0 24px !important;
+  border-radius: 7px !important;
+  font-size: 10px !important;
+  opacity: .82 !important;
+  box-shadow: none !important;
+}
+
+.billing-stepper.pro-billing .basic-info-heading .inline-heading-copy {
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+  flex-wrap: wrap !important;
+}
+
+.billing-stepper.pro-billing .basic-info-heading h4 {
+  font-size: 15.5px !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+  font-weight: 900 !important;
+  letter-spacing: -.01em !important;
+}
+
+.billing-stepper.pro-billing .basic-info-heading p {
+  font-size: 11px !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+  font-weight: 650 !important;
+  color: #9aa7bb !important;
+}
+
+.billing-stepper.pro-billing .clear-basic-info-btn {
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 12px !important;
+  border-radius: 9px !important;
+  font-size: 11.5px !important;
+  align-self: center !important;
+}
+
+.billing-stepper.pro-billing .priority-patient-grid {
+  display: grid !important;
+  grid-template-columns: minmax(210px, 1fr) minmax(190px, .9fr) minmax(180px, .85fr) minmax(235px, 1fr) !important;
+  column-gap: 18px !important;
+  row-gap: 11px !important;
+  align-items: start !important;
+}
+
+.billing-stepper.pro-billing .priority-patient-grid .patient-name-field { grid-column: 1 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .mobile-priority-field { grid-column: 2 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .gender-field { grid-column: 3 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .age-combo-field { grid-column: 4 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .dob-field { grid-column: 1 !important; grid-row: 2 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .consultant-priority-field { grid-column: 2 !important; grid-row: 2 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .honorific-field { grid-column: 3 !important; grid-row: 2 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .referrer-type-field { grid-column: 4 !important; grid-row: 2 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .age-display-field { display: none !important; }
+
+.billing-stepper.pro-billing .priority-patient-grid .field:not(.split-age-field) {
+  display: block !important;
+  min-height: 54px !important;
+  max-height: 54px !important;
+}
+
+.billing-stepper.pro-billing .priority-patient-grid .field label:not(.soft-check) {
+  display: block !important;
+  height: 17px !important;
+  min-height: 17px !important;
+  line-height: 15px !important;
+  margin: 0 0 4px !important;
+  padding: 0 !important;
+  font-size: 11.5px !important;
+  font-weight: 800 !important;
+}
+
+.billing-stepper.pro-billing .priority-patient-grid input,
+.billing-stepper.pro-billing .priority-patient-grid select,
+.billing-stepper.pro-billing .priority-patient-grid .field > input:not([type="checkbox"]),
+.billing-stepper.pro-billing .priority-patient-grid .field > select,
+.billing-stepper.pro-billing .dob-field input[type="date"] {
+  height: 33px !important;
+  min-height: 33px !important;
+  max-height: 33px !important;
+  border-radius: 9px !important;
+  font-size: 12px !important;
+  font-weight: 650 !important;
+  padding: 0 10px !important;
+  box-sizing: border-box !important;
+}
+
+.billing-stepper.pro-billing .consultant-compact-row,
+.billing-stepper.pro-billing .select-plus-row.attached-plus {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 28px !important;
+  gap: 6px !important;
+  height: 33px !important;
+  min-height: 33px !important;
+  align-items: center !important;
+}
+
+.billing-stepper.pro-billing .mini-plus,
+.billing-stepper.pro-billing .consultant-plus,
+.billing-stepper.pro-billing .attached-plus .mini-plus {
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 33px !important;
+  min-height: 33px !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  opacity: .82 !important;
+  box-shadow: none !important;
+}
+
+.billing-stepper.pro-billing .age-combo-row {
+  display: grid !important;
+  grid-template-columns: minmax(72px, .8fr) minmax(102px, 1fr) !important;
+  gap: 7px !important;
+  height: 33px !important;
+  min-height: 33px !important;
+  max-height: 33px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+.billing-stepper.pro-billing .age-combo-row input,
+.billing-stepper.pro-billing .age-combo-row select {
+  width: 100% !important;
+  height: 33px !important;
+  min-height: 33px !important;
+  max-height: 33px !important;
+  border-radius: 9px !important;
+  border: 1px solid rgba(148, 163, 184, .24) !important;
+}
+
+.billing-stepper.pro-billing .field-helper,
+.billing-stepper.pro-billing .field-hint {
+  display: none !important;
+}
+
+.billing-stepper.pro-billing .priority-patient-grid .split-age-field {
+  grid-column: 1 / -1 !important;
+  grid-row: 3 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  max-height: 24px !important;
+  margin: 1px 0 0 !important;
+  padding: 0 !important;
+  align-self: start !important;
+}
+
+.billing-stepper.pro-billing .split-label-spacer {
+  display: none !important;
+}
+
+.billing-stepper.pro-billing .inline-split-check {
+  height: 22px !important;
+  min-height: 22px !important;
+  max-height: 22px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  line-height: 1 !important;
+  font-size: 11.5px !important;
+  font-weight: 750 !important;
+  white-space: nowrap !important;
+}
+
+.billing-stepper.pro-billing .inline-split-check input[type="checkbox"] {
+  width: 13px !important;
+  min-width: 13px !important;
+  height: 13px !important;
+  min-height: 13px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  accent-color: #3b82f6 !important;
+}
+
+.billing-stepper.pro-billing .inline-split-check span,
+.billing-stepper.pro-billing .inline-split-check em {
+  line-height: 1 !important;
+  margin: 0 !important;
+}
+
+.billing-stepper.pro-billing .patient-form-pro > .patient-section-card:first-child + .patient-section-card,
+.billing-stepper.pro-billing .patient-section-card.basic-info-card + .patient-section-card {
+  margin-top: 14px !important;
+}
+
+.billing-stepper.pro-billing input[type="date"] {
+  color-scheme: dark !important;
+}
+
+.billing-stepper.pro-billing input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 1 !important;
+  filter: invert(86%) sepia(16%) saturate(477%) hue-rotate(178deg) brightness(105%) contrast(96%) !important;
+  cursor: pointer !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing input[type="date"],
+body:not(.dark-theme) .billing-stepper.pro-billing input[type="date"] {
+  color-scheme: light !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing input[type="date"]::-webkit-calendar-picker-indicator,
+body:not(.dark-theme) .billing-stepper.pro-billing input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: none !important;
+  opacity: .78 !important;
+}
+
+.billing-stepper.pro-billing .step-panel.patient-step > .step-actions.sticky-actions {
+  position: sticky !important;
+  bottom: 8px !important;
+  z-index: 80 !important;
+  height: 50px !important;
+  min-height: 50px !important;
+  margin-top: 12px !important;
+  padding: 7px 10px !important;
+  border-radius: 15px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  background: rgba(15, 23, 42, .94) !important;
+  border: 1px solid rgba(148, 163, 184, .16) !important;
+  box-shadow: 0 12px 28px rgba(2, 6, 23, .25) !important;
+}
+
+.billing-stepper.pro-billing .step-panel.patient-step > .step-actions.sticky-actions .btn {
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 18px !important;
+  border-radius: 10px !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.billing-stepper.pro-billing .step-panel.patient-step > .step-actions.sticky-actions .btn.big {
+  min-width: 188px !important;
+  max-width: 230px !important;
+}
+
+@media (max-width: 1180px) {
+  .billing-stepper.pro-billing .patient-lookup-row {
+    grid-template-columns: 1fr 40px 108px !important;
+  }
+  .billing-stepper.pro-billing .patient-mode-toggle {
+    grid-column: 1 / -1 !important;
+  }
+  .billing-stepper.pro-billing .priority-patient-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .billing-stepper.pro-billing .priority-patient-grid .patient-name-field,
+  .billing-stepper.pro-billing .priority-patient-grid .mobile-priority-field,
+  .billing-stepper.pro-billing .priority-patient-grid .gender-field,
+  .billing-stepper.pro-billing .priority-patient-grid .age-combo-field,
+  .billing-stepper.pro-billing .priority-patient-grid .dob-field,
+  .billing-stepper.pro-billing .priority-patient-grid .consultant-priority-field,
+  .billing-stepper.pro-billing .priority-patient-grid .honorific-field,
+  .billing-stepper.pro-billing .priority-patient-grid .referrer-type-field,
+  .billing-stepper.pro-billing .priority-patient-grid .split-age-field {
+    grid-column: auto !important;
+    grid-row: auto !important;
+  }
+}
+
+/* BILLING UI V7 FIXED FOOTER + ALIGNMENT PATCH
+   This block intentionally overrides previous billing patches only. */
+.billing-stepper.pro-billing {
+  padding-bottom: 84px !important;
+}
+
+.billing-stepper.pro-billing .billing-scroll {
+  padding-bottom: 88px !important;
+}
+
+/* Stepper: make badge and title share one exact center line */
+.billing-stepper.pro-billing > .stepper-head {
+  height: 40px !important;
+  min-height: 40px !important;
+  padding: 2px !important;
+  gap: 6px !important;
+  margin-bottom: 9px !important;
+}
+
+.billing-stepper.pro-billing > .stepper-head > .step-tab {
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 12px !important;
+  display: grid !important;
+  grid-template-columns: 24px minmax(0, 1fr) !important;
+  align-items: center !important;
+  justify-items: start !important;
+  column-gap: 10px !important;
+}
+
+.billing-stepper.pro-billing > .stepper-head > .step-tab span {
+  width: 22px !important;
+  min-width: 22px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  display: grid !important;
+  place-items: center !important;
+  align-self: center !important;
+  justify-self: center !important;
+  line-height: 1 !important;
+  font-size: 11px !important;
+  margin: 0 !important;
+}
+
+.billing-stepper.pro-billing > .stepper-head > .step-tab b {
+  display: flex !important;
+  align-items: center !important;
+  align-self: center !important;
+  height: 22px !important;
+  line-height: 22px !important;
+  font-size: 12.4px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  transform: none !important;
+}
+
+/* Patient search row: exact vertical centering */
+.billing-stepper.pro-billing .patient-lookup-row {
+  grid-template-columns: minmax(320px, 1fr) 38px 104px minmax(300px, .92fr) !important;
+  gap: 10px !important;
+  align-items: center !important;
+}
+
+.billing-stepper.pro-billing .patient-lookup-field {
+  display: grid !important;
+  grid-template-columns: 36px minmax(0, 1fr) !important;
+  align-items: center !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 !important;
+}
+
+.billing-stepper.pro-billing .patient-lookup-field .lookup-search-icon {
+  width: 36px !important;
+  height: 36px !important;
+  display: grid !important;
+  place-items: center !important;
+  align-self: center !important;
+  justify-self: center !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  font-size: 16px !important;
+}
+
+.billing-stepper.pro-billing .patient-lookup-field input {
+  height: 36px !important;
+  min-height: 36px !important;
+  line-height: 36px !important;
+  padding: 0 12px 0 0 !important;
+  display: block !important;
+  align-self: center !important;
+}
+
+.billing-stepper.pro-billing .lookup-filter-btn,
+.billing-stepper.pro-billing .lookup-search-btn,
+.billing-stepper.pro-billing .patient-mode-toggle {
+  height: 36px !important;
+  min-height: 36px !important;
+}
+
+.billing-stepper.pro-billing .lookup-filter-btn {
+  width: 38px !important;
+}
+
+.billing-stepper.pro-billing .lookup-search-btn {
+  width: 104px !important;
+}
+
+.billing-stepper.pro-billing .patient-mode-toggle {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  align-items: center !important;
+  padding: 2px !important;
+}
+
+.billing-stepper.pro-billing .patient-mode-toggle button,
+.billing-stepper.pro-billing .patient-mode-toggle button.active {
+  height: 32px !important;
+  min-height: 32px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  line-height: 1 !important;
+  padding: 0 14px !important;
+  margin: 0 !important;
+}
+
+/* New patient card: tighter height, corrected field order */
+.billing-stepper.pro-billing .patient-section-card.basic-info-card,
+.billing-stepper.pro-billing .patient-form-pro > .patient-section-card:first-child {
+  padding: 14px 18px 12px !important;
+  border-radius: 16px !important;
+}
+
+.billing-stepper.pro-billing .basic-info-heading {
+  min-height: 28px !important;
+  margin-bottom: 12px !important;
+}
+
+.billing-stepper.pro-billing .basic-info-heading .section-icon {
+  width: 22px !important;
+  min-width: 22px !important;
+  height: 22px !important;
+  flex-basis: 22px !important;
+  font-size: 9px !important;
+}
+
+.billing-stepper.pro-billing .basic-info-heading h4 {
+  font-size: 15px !important;
+}
+
+.billing-stepper.pro-billing .basic-info-heading p {
+  font-size: 10.8px !important;
+}
+
+.billing-stepper.pro-billing .priority-patient-grid {
+  grid-template-columns: minmax(140px, .55fr) minmax(220px, 1.05fr) minmax(180px, .85fr) minmax(230px, 1fr) !important;
+  column-gap: 18px !important;
+  row-gap: 9px !important;
+  align-items: start !important;
+}
+
+.billing-stepper.pro-billing .priority-patient-grid .honorific-field { grid-column: 1 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .patient-name-field { grid-column: 2 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .gender-field { grid-column: 3 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .age-combo-field { grid-column: 4 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .dob-field { grid-column: 1 !important; grid-row: 2 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .consultant-priority-field { grid-column: 2 !important; grid-row: 2 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .mobile-priority-field { grid-column: 3 !important; grid-row: 2 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .referrer-type-field { grid-column: 4 !important; grid-row: 2 !important; }
+
+.billing-stepper.pro-billing .priority-patient-grid .field:not(.split-age-field) {
+  min-height: 50px !important;
+  max-height: 50px !important;
+}
+
+.billing-stepper.pro-billing .priority-patient-grid .field label:not(.soft-check) {
+  height: 15px !important;
+  min-height: 15px !important;
+  line-height: 14px !important;
+  margin-bottom: 4px !important;
+  font-size: 11.2px !important;
+}
+
+.billing-stepper.pro-billing .priority-patient-grid input,
+.billing-stepper.pro-billing .priority-patient-grid select,
+.billing-stepper.pro-billing .dob-field input[type="date"] {
+  height: 31px !important;
+  min-height: 31px !important;
+  max-height: 31px !important;
+  border-radius: 8px !important;
+  font-size: 11.8px !important;
+  padding: 0 10px !important;
+}
+
+.billing-stepper.pro-billing .consultant-compact-row,
+.billing-stepper.pro-billing .select-plus-row.attached-plus {
+  grid-template-columns: minmax(0, 1fr) 26px !important;
+  gap: 6px !important;
+  height: 31px !important;
+  min-height: 31px !important;
+}
+
+.billing-stepper.pro-billing .mini-plus,
+.billing-stepper.pro-billing .consultant-plus,
+.billing-stepper.pro-billing .attached-plus .mini-plus {
+  width: 26px !important;
+  min-width: 26px !important;
+  height: 31px !important;
+  min-height: 31px !important;
+  font-size: 11px !important;
+  border-radius: 8px !important;
+  opacity: .74 !important;
+}
+
+.billing-stepper.pro-billing .age-combo-row,
+.billing-stepper.pro-billing .age-combo-row input,
+.billing-stepper.pro-billing .age-combo-row select {
+  height: 31px !important;
+  min-height: 31px !important;
+  max-height: 31px !important;
+}
+
+.billing-stepper.pro-billing .age-combo-row {
+  grid-template-columns: minmax(64px, .76fr) minmax(96px, 1fr) !important;
+  gap: 7px !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+
+/* Split below: actual class in HTML is .split-below-row, keep it inside the card */
+.billing-stepper.pro-billing .split-below-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  height: 20px !important;
+  min-height: 20px !important;
+  margin: 8px 0 0 !important;
+  padding: 0 !important;
+  clear: both !important;
+}
+
+.billing-stepper.pro-billing .split-below-row .inline-split-check,
+.billing-stepper.pro-billing .inline-split-check {
+  height: 18px !important;
+  min-height: 18px !important;
+  max-height: 18px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 5px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: 1 !important;
+  font-size: 11px !important;
+  font-weight: 750 !important;
+}
+
+.billing-stepper.pro-billing .split-below-row input[type="checkbox"] {
+  width: 13px !important;
+  min-width: 13px !important;
+  height: 13px !important;
+  min-height: 13px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  flex: 0 0 13px !important;
+}
+
+.billing-stepper.pro-billing .split-below-row span,
+.billing-stepper.pro-billing .split-below-row em {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 18px !important;
+  line-height: 18px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.billing-stepper.pro-billing .patient-section-card.basic-info-card + .patient-section-card,
+.billing-stepper.pro-billing .patient-form-pro > .patient-section-card:first-child + .patient-section-card {
+  margin-top: 16px !important;
+}
+
+/* Date icon: keep visible in dark */
+.billing-stepper.pro-billing input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: .92 !important;
+  filter: invert(78%) sepia(18%) saturate(480%) hue-rotate(178deg) brightness(111%) contrast(95%) !important;
+}
+
+/* REAL fixed footer: outside normal visual flow, always visible in viewport */
+.billing-stepper.pro-billing .step-panel.patient-step > .step-actions.sticky-actions {
+  position: fixed !important;
+  left: max(24px, env(safe-area-inset-left)) !important;
+  right: max(24px, env(safe-area-inset-right)) !important;
+  bottom: max(10px, env(safe-area-inset-bottom)) !important;
+  z-index: 9999 !important;
+  height: 54px !important;
+  min-height: 54px !important;
+  max-height: 54px !important;
+  margin: 0 !important;
+  padding: 8px 18px !important;
+  border-radius: 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  background: rgba(10, 18, 32, .96) !important;
+  border: 1px solid rgba(148, 163, 184, .22) !important;
+  box-shadow: 0 18px 46px rgba(2, 6, 23, .42) !important;
+  backdrop-filter: blur(14px) !important;
+}
+
+.billing-stepper.pro-billing .step-panel.patient-step > .step-actions.sticky-actions .btn {
+  height: 36px !important;
+  min-height: 36px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+  padding: 0 18px !important;
+  border-radius: 10px !important;
+  font-size: 12px !important;
+}
+
+.billing-stepper.pro-billing .step-panel.patient-step > .step-actions.sticky-actions .btn.big {
+  width: 220px !important;
+  min-width: 220px !important;
+  max-width: 220px !important;
+}
+
+@media (min-width: 980px) {
+  .billing-stepper.pro-billing .step-panel.patient-step > .step-actions.sticky-actions {
+    left: 36px !important;
+    right: 36px !important;
+  }
+}
+
+@media (max-width: 1180px) {
+  .billing-stepper.pro-billing .priority-patient-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .billing-stepper.pro-billing .priority-patient-grid .honorific-field,
+  .billing-stepper.pro-billing .priority-patient-grid .patient-name-field,
+  .billing-stepper.pro-billing .priority-patient-grid .gender-field,
+  .billing-stepper.pro-billing .priority-patient-grid .age-combo-field,
+  .billing-stepper.pro-billing .priority-patient-grid .dob-field,
+  .billing-stepper.pro-billing .priority-patient-grid .consultant-priority-field,
+  .billing-stepper.pro-billing .priority-patient-grid .mobile-priority-field,
+  .billing-stepper.pro-billing .priority-patient-grid .referrer-type-field {
+    grid-column: auto !important;
+    grid-row: auto !important;
+  }
+}
+
+/* =========================================================
+   V8 visual correction - patient card spacing, age calculated,
+   aligned split row, and real header-like fixed footer.
+   ========================================================= */
+.billing-stepper.pro-billing {
+  padding-bottom: 82px !important;
+}
+
+.billing-stepper.pro-billing .billing-scroll {
+  padding-bottom: 92px !important;
+}
+
+.billing-stepper.pro-billing .patient-section-card.basic-info-card,
+.billing-stepper.pro-billing .patient-form-pro > .patient-section-card:first-child {
+  padding: 18px 20px 16px !important;
+  overflow: visible !important;
+}
+
+.billing-stepper.pro-billing .basic-info-heading {
+  margin-bottom: 16px !important;
+  align-items: center !important;
+}
+
+.billing-stepper.pro-billing .basic-info-title-group {
+  gap: 10px !important;
+  align-items: center !important;
+}
+
+.billing-stepper.pro-billing .basic-info-heading .section-icon {
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  flex-basis: 28px !important;
+  border-radius: 8px !important;
+  font-size: 11px !important;
+}
+
+.billing-stepper.pro-billing .basic-info-heading h4 {
+  font-size: 18px !important;
+  line-height: 1 !important;
+}
+
+.billing-stepper.pro-billing .basic-info-heading p {
+  margin: 0 !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+}
+
+.billing-stepper.pro-billing .priority-patient-grid {
+  grid-template-columns: minmax(145px, .65fr) minmax(260px, 1.1fr) minmax(210px, .95fr) minmax(260px, 1fr) !important;
+  column-gap: 22px !important;
+  row-gap: 16px !important;
+  align-items: start !important;
+}
+
+.billing-stepper.pro-billing .priority-patient-grid .honorific-field { grid-column: 1 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .patient-name-field { grid-column: 2 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .gender-field { grid-column: 3 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .age-combo-field { grid-column: 4 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .dob-field { grid-column: 1 !important; grid-row: 2 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .consultant-priority-field { grid-column: 2 !important; grid-row: 2 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .mobile-priority-field { grid-column: 3 !important; grid-row: 2 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .referrer-type-field { grid-column: 4 !important; grid-row: 2 !important; }
+
+.billing-stepper.pro-billing .priority-patient-grid .field:not(.split-age-field) {
+  min-height: 48px !important;
+  max-height: none !important;
+}
+
+.billing-stepper.pro-billing .priority-patient-grid .field label:not(.soft-check),
+.billing-stepper.pro-billing .patient-card-bottom-row .field label:not(.soft-check) {
+  height: 15px !important;
+  min-height: 15px !important;
+  line-height: 15px !important;
+  margin: 0 0 6px !important;
+  font-size: 12px !important;
+  font-weight: 900 !important;
+}
+
+.billing-stepper.pro-billing .priority-patient-grid input,
+.billing-stepper.pro-billing .priority-patient-grid select,
+.billing-stepper.pro-billing .dob-field input[type="date"] {
+  height: 36px !important;
+  min-height: 36px !important;
+  max-height: 36px !important;
+  border-radius: 10px !important;
+  font-size: 13px !important;
+  line-height: 36px !important;
+  padding: 0 12px !important;
+}
+
+.billing-stepper.pro-billing .priority-patient-grid .field-helper,
+.billing-stepper.pro-billing .priority-patient-grid .field-hint {
+  display: none !important;
+}
+
+.billing-stepper.pro-billing .consultant-compact-row,
+.billing-stepper.pro-billing .select-plus-row.attached-plus {
+  grid-template-columns: minmax(0, 1fr) 30px !important;
+  gap: 8px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+}
+
+.billing-stepper.pro-billing .mini-plus,
+.billing-stepper.pro-billing .consultant-plus,
+.billing-stepper.pro-billing .attached-plus .mini-plus {
+  width: 30px !important;
+  min-width: 30px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  font-size: 13px !important;
+  border-radius: 9px !important;
+  opacity: .82 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  padding: 0 !important;
+}
+
+.billing-stepper.pro-billing .age-combo-row {
+  grid-template-columns: minmax(72px, .8fr) minmax(108px, 1fr) !important;
+  gap: 8px !important;
+  height: 36px !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+
+.billing-stepper.pro-billing .age-combo-row input,
+.billing-stepper.pro-billing .age-combo-row select {
+  height: 36px !important;
+  min-height: 36px !important;
+  max-height: 36px !important;
+  border-radius: 10px !important;
+}
+
+.billing-stepper.pro-billing .patient-card-bottom-row {
+  display: grid !important;
+  grid-template-columns: minmax(145px, .65fr) minmax(260px, 1.1fr) minmax(210px, .95fr) minmax(260px, 1fr) !important;
+  column-gap: 22px !important;
+  align-items: end !important;
+  margin-top: 16px !important;
+  min-height: 52px !important;
+}
+
+.billing-stepper.pro-billing .patient-card-bottom-row .split-below-row {
+  grid-column: 1 !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  margin: 0 !important;
+  padding: 15px 0 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+}
+
+.billing-stepper.pro-billing .patient-card-bottom-row .inline-split-check {
+  height: 20px !important;
+  min-height: 20px !important;
+  max-height: 20px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: 20px !important;
+  font-size: 12.5px !important;
+  font-weight: 850 !important;
+  color: #e5eefc !important;
+}
+
+.billing-stepper.pro-billing .patient-card-bottom-row .inline-split-check input[type="checkbox"] {
+  width: 14px !important;
+  min-width: 14px !important;
+  height: 14px !important;
+  min-height: 14px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  flex: 0 0 14px !important;
+  accent-color: #3b82f6 !important;
+}
+
+.billing-stepper.pro-billing .patient-card-bottom-row .inline-split-check span,
+.billing-stepper.pro-billing .patient-card-bottom-row .inline-split-check em {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 20px !important;
+  line-height: 20px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.billing-stepper.pro-billing .patient-card-bottom-row .inline-split-check em {
+  color: #60a5fa !important;
+  font-style: normal !important;
+  font-size: 13px !important;
+}
+
+.billing-stepper.pro-billing .patient-card-bottom-row .compact-age-calculated {
+  grid-column: 2 !important;
+  min-height: 52px !important;
+  max-height: 52px !important;
+}
+
+.billing-stepper.pro-billing .compact-age-calculated .age-display-box {
+  height: 36px !important;
+  min-height: 36px !important;
+  border-radius: 10px !important;
+  padding: 0 12px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  width: 100% !important;
+  background: rgba(15, 23, 42, .48) !important;
+  border: 1px solid rgba(148, 163, 184, .22) !important;
+  color: #e5eefc !important;
+}
+
+.billing-stepper.pro-billing .compact-age-calculated .age-display-icon {
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  flex: 0 0 22px !important;
+  border-radius: 999px !important;
+  font-size: 10px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.billing-stepper.pro-billing .compact-age-calculated .age-display-box b {
+  font-size: 13px !important;
+  line-height: 1 !important;
+  font-weight: 900 !important;
+}
+
+.billing-stepper.pro-billing .patient-section-card.basic-info-card + .patient-section-card,
+.billing-stepper.pro-billing .patient-form-pro > .patient-section-card:first-child + .patient-section-card {
+  margin-top: 14px !important;
+}
+
+/* Footer should behave like the top fixed header: full-width bar, no floating rounded card. */
+.billing-stepper.pro-billing .step-panel.patient-step > .step-actions.sticky-actions {
+  position: fixed !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  z-index: 10000 !important;
+  width: 100vw !important;
+  height: 64px !important;
+  min-height: 64px !important;
+  max-height: 64px !important;
+  margin: 0 !important;
+  padding: 10px 40px !important;
+  border-radius: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  background: rgba(8, 15, 28, .98) !important;
+  border: 0 !important;
+  border-top: 1px solid rgba(148, 163, 184, .24) !important;
+  box-shadow: 0 -12px 34px rgba(2, 6, 23, .44) !important;
+  backdrop-filter: blur(16px) !important;
+}
+
+.billing-stepper.pro-billing .step-panel.patient-step > .step-actions.sticky-actions .btn {
+  height: 40px !important;
+  min-height: 40px !important;
+  max-height: 40px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+  padding: 0 22px !important;
+  border-radius: 11px !important;
+  font-size: 13px !important;
+}
+
+.billing-stepper.pro-billing .step-panel.patient-step > .step-actions.sticky-actions .btn.big {
+  width: 240px !important;
+  min-width: 240px !important;
+  max-width: 240px !important;
+}
+
+@media (max-width: 1180px) {
+  .billing-stepper.pro-billing .priority-patient-grid,
+  .billing-stepper.pro-billing .patient-card-bottom-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .billing-stepper.pro-billing .priority-patient-grid .honorific-field,
+  .billing-stepper.pro-billing .priority-patient-grid .patient-name-field,
+  .billing-stepper.pro-billing .priority-patient-grid .gender-field,
+  .billing-stepper.pro-billing .priority-patient-grid .age-combo-field,
+  .billing-stepper.pro-billing .priority-patient-grid .dob-field,
+  .billing-stepper.pro-billing .priority-patient-grid .consultant-priority-field,
+  .billing-stepper.pro-billing .priority-patient-grid .mobile-priority-field,
+  .billing-stepper.pro-billing .priority-patient-grid .referrer-type-field,
+  .billing-stepper.pro-billing .patient-card-bottom-row .split-below-row,
+  .billing-stepper.pro-billing .patient-card-bottom-row .compact-age-calculated {
+    grid-column: auto !important;
+    grid-row: auto !important;
+  }
+}
+
+
+/* ======================================================================
+   BILLING UI V9 FINAL: tab stepper, bill-search matching patient search,
+   compact calculated age row, and true topbar-style footer.
+   ====================================================================== */
+
+/* Page scroll spacing for the fixed bottom command bar. */
+.billing-stepper.pro-billing .billing-scroll {
+  padding-bottom: 84px !important;
+}

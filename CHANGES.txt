@@ -1,0 +1,3 @@
+Fix: Output Settings radio buttons now use separate native groups.
+documentAppearance: With background / Without background
+singleTestPlacement: At the beginning / At the end

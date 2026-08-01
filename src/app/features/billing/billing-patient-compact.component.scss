@@ -1,0 +1,2204 @@
+/* V13: footer was moved out to AppShell. Keep billing component as scroll content only. */
+.billing-stepper.pro-billing > .billing-bottom-bar {
+  display: none !important;
+}
+.billing-stepper.pro-billing .step-actions {
+  display: none !important;
+}
+.billing-stepper.pro-billing {
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  display: grid !important;
+  grid-template-rows: auto auto auto !important;
+}
+.billing-stepper.pro-billing > .billing-scroll {
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  padding-bottom: 0 !important;
+}
+/* Keep stepper as clean tab bar with centered labels and no numbers. */
+.billing-stepper.pro-billing > .stepper-head {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  align-items: center !important;
+  gap: 6px !important;
+  min-height: 44px !important;
+  padding: 4px !important;
+}
+.billing-stepper.pro-billing > .stepper-head > .step-tab {
+  min-height: 36px !important;
+  height: 36px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  padding: 0 14px !important;
+  border-radius: 999px !important;
+}
+.billing-stepper.pro-billing > .stepper-head > .step-tab b {
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: 1 !important;
+  transform: none !important;
+}
+
+
+/* -------------------------------------------------------------------------
+   BILLING UI V14 - confirmed compact layout from approved sketch
+   Scope: billing UI only. Keeps existing billing workflow logic intact.
+   ------------------------------------------------------------------------- */
+.billing-stepper.pro-billing {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  padding: 14px 16px 0 !important;
+  gap: 12px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Main billing stepper: same design, only slimmer and centered. */
+.billing-stepper.pro-billing > .stepper-head {
+  min-height: 54px !important;
+  height: 54px !important;
+  padding: 7px !important;
+  gap: 8px !important;
+  border-radius: 22px !important;
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  align-items: center !important;
+  margin: 0 !important;
+}
+.billing-stepper.pro-billing > .stepper-head > .step-tab {
+  height: 40px !important;
+  min-height: 40px !important;
+  padding: 0 16px !important;
+  border-radius: 18px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0 !important;
+  line-height: 1 !important;
+}
+.billing-stepper.pro-billing > .stepper-head > .step-tab b {
+  line-height: 1 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  font-size: 14px !important;
+  font-weight: 900 !important;
+  letter-spacing: 0 !important;
+  transform: none !important;
+}
+.billing-stepper.pro-billing > .stepper-head > .step-tab span,
+.billing-stepper.pro-billing > .stepper-head > .step-tab small { display: none !important; }
+
+/* Scroll body remains independent from shell footer. */
+.billing-stepper.pro-billing .billing-scroll {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  padding: 0 !important;
+}
+.billing-stepper.pro-billing .step-panel.patient-step {
+  display: grid !important;
+  gap: 12px !important;
+}
+
+/* Patient search card: compact, no Search/settings buttons; same pill language as bill search. */
+.billing-stepper.pro-billing .patient-entry-card.compact-patient-card {
+  padding: 12px 16px !important;
+  border-radius: 20px !important;
+  min-height: 0 !important;
+  background: color-mix(in srgb, var(--surface) 72%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent) !important;
+}
+.billing-stepper.pro-billing .patient-entry-head { display: none !important; }
+.billing-stepper.pro-billing .patient-lookup-row {
+  display: grid !important;
+  grid-template-columns: minmax(360px, 0.95fr) minmax(330px, 0.7fr) auto !important;
+  align-items: center !important;
+  gap: 18px !important;
+  min-height: 48px !important;
+}
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field {
+  height: 46px !important;
+  min-height: 46px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 0 16px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(148, 163, 184, .28) !important;
+  background: rgba(8, 14, 26, .68) !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+.billing-stepper.pro-billing .top-patient-search .lookup-search-icon {
+  width: 20px !important;
+  height: 20px !important;
+  flex: 0 0 20px !important;
+  color: rgba(203, 213, 225, .72) !important;
+  stroke: currentColor !important;
+  stroke-width: 2.25 !important;
+  fill: none !important;
+  margin: 0 !important;
+}
+.billing-stepper.pro-billing .top-patient-search input {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  color: var(--text) !important;
+  font-size: 15px !important;
+  font-weight: 850 !important;
+  line-height: 46px !important;
+}
+.billing-stepper.pro-billing .top-patient-search input::placeholder {
+  color: rgba(203, 213, 225, .62) !important;
+  font-weight: 850 !important;
+}
+.billing-stepper.pro-billing .top-patient-search:focus-within {
+  border-color: rgba(96, 165, 250, .78) !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, .16) !important;
+}
+.billing-stepper.pro-billing .top-patient-search .patient-results {
+  left: 0 !important;
+  right: 0 !important;
+  top: calc(100% + 8px) !important;
+  z-index: 80 !important;
+}
+.billing-stepper.pro-billing .patient-mode-toggle {
+  height: 46px !important;
+  min-height: 46px !important;
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 0 !important;
+  padding: 4px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(148, 163, 184, .25) !important;
+  background: rgba(8, 14, 26, .68) !important;
+}
+.billing-stepper.pro-billing .patient-mode-toggle button {
+  height: 38px !important;
+  min-height: 38px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 18px !important;
+  line-height: 1 !important;
+  font-size: 14px !important;
+  font-weight: 900 !important;
+  white-space: nowrap !important;
+}
+.billing-stepper.pro-billing .patient-mode-toggle button.active {
+  background: linear-gradient(135deg, #3b82f6, #60a5fa) !important;
+  color: #fff !important;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, .24) !important;
+}
+.billing-stepper.pro-billing .patient-reg-date-chip {
+  justify-self: end !important;
+  height: 34px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  padding: 0 12px !important;
+  border-radius: 999px !important;
+  font-size: 12px !important;
+}
+
+/* Mini patient details stepper: below search, before form. */
+.patient-detail-tabs {
+  min-height: 48px !important;
+  height: 48px !important;
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  align-items: center !important;
+  gap: 0 !important;
+  padding: 4px !important;
+  border-radius: 18px !important;
+  border: 1px solid rgba(148, 163, 184, .24) !important;
+  background: color-mix(in srgb, var(--surface) 72%, transparent) !important;
+  overflow: hidden !important;
+}
+.patient-detail-tabs button {
+  height: 40px !important;
+  border: 0 !important;
+  border-radius: 14px !important;
+  background: transparent !important;
+  color: var(--muted) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 10px !important;
+  font-size: 14px !important;
+  font-weight: 900 !important;
+  cursor: pointer !important;
+}
+.patient-detail-tabs button.active {
+  color: #fff !important;
+  background: linear-gradient(135deg, #5b5ff0, #60a5fa) !important;
+  box-shadow: 0 10px 22px rgba(37, 99, 235, .20) !important;
+}
+.patient-detail-tabs .tab-icon {
+  font-size: 16px !important;
+  line-height: 1 !important;
+}
+
+/* Compact basic details card. */
+.billing-stepper.pro-billing .patient-registration-layout,
+.billing-stepper.pro-billing .patient-form-pro {
+  display: grid !important;
+  gap: 12px !important;
+  min-width: 0 !important;
+  overflow: visible !important;
+}
+.billing-stepper.pro-billing .details-only-summary { display: none !important; }
+.billing-stepper.pro-billing .patient-section-card {
+  padding: 16px 18px !important;
+  border-radius: 18px !important;
+  margin: 0 !important;
+  overflow: visible !important;
+}
+.billing-stepper.pro-billing .basic-info-card {
+  padding: 18px 20px 16px !important;
+}
+.billing-stepper.pro-billing .basic-info-heading,
+.billing-stepper.pro-billing .section-heading {
+  margin: 0 0 14px !important;
+  gap: 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+.billing-stepper.pro-billing .basic-info-title-group {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  min-width: 0 !important;
+}
+.billing-stepper.pro-billing .section-icon {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  border-radius: 10px !important;
+  font-size: 15px !important;
+  display: grid !important;
+  place-items: center !important;
+}
+.billing-stepper.pro-billing .section-heading h4 {
+  font-size: 17px !important;
+  line-height: 1.1 !important;
+  margin: 0 !important;
+  white-space: nowrap !important;
+}
+.billing-stepper.pro-billing .section-heading p {
+  margin: 0 !important;
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+}
+.billing-stepper.pro-billing .inline-heading-copy {
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 12px !important;
+  min-width: 0 !important;
+}
+.billing-stepper.pro-billing .clear-basic-info-btn {
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 16px !important;
+  border-radius: 12px !important;
+  font-size: 12px !important;
+}
+
+.billing-stepper.pro-billing .priority-patient-grid {
+  display: grid !important;
+  grid-template-columns: minmax(160px, .75fr) minmax(260px, 1.35fr) minmax(220px, 1.05fr) minmax(260px, 1.25fr) !important;
+  gap: 14px 18px !important;
+  align-items: start !important;
+}
+/* Final field order: row 1 honorific, name, gender, age; row 2 dob, consultant, mobile, referrer type. */
+.billing-stepper.pro-billing .priority-patient-grid .honorific-field { grid-column: 1 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .patient-name-field { grid-column: 2 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .gender-field { grid-column: 3 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .age-combo-field { grid-column: 4 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .dob-field { grid-column: 1 !important; grid-row: 2 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .consultant-priority-field { grid-column: 2 !important; grid-row: 2 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .mobile-priority-field { grid-column: 3 !important; grid-row: 2 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .referrer-type-field { grid-column: 4 !important; grid-row: 2 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .age-display-field { display: none !important; }
+
+.billing-stepper.pro-billing .field label:not(.soft-check) {
+  margin: 0 0 6px !important;
+  font-size: 12px !important;
+  line-height: 1.05 !important;
+  font-weight: 900 !important;
+}
+.billing-stepper.pro-billing .patient-step input,
+.billing-stepper.pro-billing .patient-step select,
+.billing-stepper.pro-billing .patient-step textarea {
+  height: 42px !important;
+  min-height: 42px !important;
+  border-radius: 12px !important;
+  padding: 0 12px !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+}
+.billing-stepper.pro-billing .age-combo-row {
+  height: 42px !important;
+  min-height: 42px !important;
+  display: grid !important;
+  grid-template-columns: .8fr 1.2fr !important;
+  gap: 8px !important;
+  border: 0 !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  overflow: visible !important;
+}
+.billing-stepper.pro-billing .age-combo-row input,
+.billing-stepper.pro-billing .age-combo-row select {
+  height: 42px !important;
+  min-height: 42px !important;
+  border: 1px solid rgba(148, 163, 184, .28) !important;
+  border-radius: 12px !important;
+  background: rgba(8, 14, 26, .68) !important;
+}
+.billing-stepper.pro-billing .consultant-compact-row,
+.billing-stepper.pro-billing .select-plus-row.attached-plus {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 38px !important;
+  gap: 8px !important;
+  align-items: center !important;
+}
+.billing-stepper.pro-billing .mini-plus,
+.billing-stepper.pro-billing .consultant-plus {
+  width: 38px !important;
+  min-width: 38px !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  padding: 0 !important;
+  border-radius: 12px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 18px !important;
+  line-height: 1 !important;
+  font-weight: 900 !important;
+}
+.billing-stepper.pro-billing .field-helper,
+.billing-stepper.pro-billing .field-hint { display: none !important; }
+
+/* Bottom of patient card: split row + calculated age must stay inside, compact. */
+.billing-stepper.pro-billing .patient-card-bottom-row {
+  margin-top: 14px !important;
+  padding: 10px 12px !important;
+  min-height: 42px !important;
+  display: grid !important;
+  grid-template-columns: minmax(220px, auto) 1fr !important;
+  align-items: center !important;
+  gap: 16px !important;
+  border-radius: 14px !important;
+  border: 1px solid rgba(148, 163, 184, .22) !important;
+  background: rgba(15, 23, 42, .34) !important;
+}
+.billing-stepper.pro-billing .split-below-row,
+.billing-stepper.pro-billing .inline-split-check {
+  margin: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  line-height: 1 !important;
+}
+.billing-stepper.pro-billing .inline-split-check input {
+  width: 16px !important;
+  height: 16px !important;
+  min-height: 16px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  flex: 0 0 16px !important;
+  accent-color: #3b82f6 !important;
+}
+.billing-stepper.pro-billing .inline-split-check span,
+.billing-stepper.pro-billing .inline-split-check em {
+  line-height: 1 !important;
+  font-size: 12px !important;
+  font-weight: 850 !important;
+  font-style: normal !important;
+}
+.billing-stepper.pro-billing .compact-age-calculated {
+  display: flex !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+}
+.billing-stepper.pro-billing .compact-age-calculated > label {
+  margin: 0 !important;
+  font-size: 12px !important;
+  color: var(--muted) !important;
+  font-weight: 850 !important;
+  white-space: nowrap !important;
+}
+.billing-stepper.pro-billing .compact-age-calculated > label::after { content: ':'; }
+.billing-stepper.pro-billing .age-display-box {
+  min-height: 0 !important;
+  height: auto !important;
+  border: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0 !important;
+  box-shadow: none !important;
+}
+.billing-stepper.pro-billing .age-display-icon { display: none !important; }
+.billing-stepper.pro-billing .age-display-box b {
+  font-size: 12px !important;
+  line-height: 1 !important;
+  color: #7c3aed !important;
+  font-weight: 950 !important;
+  white-space: nowrap !important;
+}
+body.dark-theme .billing-stepper.pro-billing .age-display-box b { color: #93c5fd !important; }
+
+/* Contact details are no longer shown as a big default card; they appear only when mini tab is selected. */
+.billing-stepper.pro-billing .contact-details-card {
+  padding: 16px 18px !important;
+}
+.billing-stepper.pro-billing .contact-grid {
+  display: grid !important;
+  grid-template-columns: minmax(220px, .8fr) minmax(280px, 1fr) !important;
+  gap: 14px 18px !important;
+}
+.billing-stepper.pro-billing .contact-grid .notes-field { grid-column: 1 / -1 !important; }
+.billing-stepper.pro-billing .patient-empty-section {
+  min-height: 48px !important;
+  display: flex !important;
+  align-items: center !important;
+  padding: 0 14px !important;
+  border-radius: 14px !important;
+  border: 1px dashed rgba(148, 163, 184, .30) !important;
+  color: var(--muted) !important;
+  font-weight: 800 !important;
+  font-size: 13px !important;
+}
+
+/* Light theme support for the new compact layout. */
+:host-context(.light) .billing-stepper.pro-billing .top-patient-search.patient-lookup-field,
+:host-context(body.light) .billing-stepper.pro-billing .top-patient-search.patient-lookup-field,
+:host-context(.light-mode) .billing-stepper.pro-billing .top-patient-search.patient-lookup-field,
+:host-context(.light) .billing-stepper.pro-billing .patient-mode-toggle,
+:host-context(body.light) .billing-stepper.pro-billing .patient-mode-toggle,
+:host-context(.light-mode) .billing-stepper.pro-billing .patient-mode-toggle,
+:host-context(.light) .billing-stepper.pro-billing .age-combo-row input,
+:host-context(.light) .billing-stepper.pro-billing .age-combo-row select,
+:host-context(body.light) .billing-stepper.pro-billing .age-combo-row input,
+:host-context(body.light) .billing-stepper.pro-billing .age-combo-row select,
+:host-context(.light-mode) .billing-stepper.pro-billing .age-combo-row input,
+:host-context(.light-mode) .billing-stepper.pro-billing .age-combo-row select {
+  background: #fff !important;
+  color: #0f172a !important;
+  border-color: rgba(15, 23, 42, .16) !important;
+}
+:host-context(.light) .billing-stepper.pro-billing .patient-entry-card.compact-patient-card,
+:host-context(body.light) .billing-stepper.pro-billing .patient-entry-card.compact-patient-card,
+:host-context(.light-mode) .billing-stepper.pro-billing .patient-entry-card.compact-patient-card,
+:host-context(.light) .patient-detail-tabs,
+:host-context(body.light) .patient-detail-tabs,
+:host-context(.light-mode) .patient-detail-tabs {
+  background: #fff !important;
+  border-color: rgba(15, 23, 42, .12) !important;
+}
+:host-context(.light) .billing-stepper.pro-billing .patient-card-bottom-row,
+:host-context(body.light) .billing-stepper.pro-billing .patient-card-bottom-row,
+:host-context(.light-mode) .billing-stepper.pro-billing .patient-card-bottom-row {
+  background: #f8fafc !important;
+  border-color: rgba(15, 23, 42, .12) !important;
+}
+
+@media (max-width: 1180px) {
+  .billing-stepper.pro-billing .patient-lookup-row {
+    grid-template-columns: 1fr !important;
+  }
+  .billing-stepper.pro-billing .patient-mode-toggle { max-width: none !important; }
+  .billing-stepper.pro-billing .priority-patient-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .billing-stepper.pro-billing .priority-patient-grid .honorific-field,
+  .billing-stepper.pro-billing .priority-patient-grid .patient-name-field,
+  .billing-stepper.pro-billing .priority-patient-grid .gender-field,
+  .billing-stepper.pro-billing .priority-patient-grid .age-combo-field,
+  .billing-stepper.pro-billing .priority-patient-grid .dob-field,
+  .billing-stepper.pro-billing .priority-patient-grid .consultant-priority-field,
+  .billing-stepper.pro-billing .priority-patient-grid .mobile-priority-field,
+  .billing-stepper.pro-billing .priority-patient-grid .referrer-type-field {
+    grid-column: auto !important;
+    grid-row: auto !important;
+  }
+}
+@media (max-width: 760px) {
+  .billing-stepper.pro-billing > .stepper-head,
+  .patient-detail-tabs {
+    grid-template-columns: 1fr !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+  .billing-stepper.pro-billing .priority-patient-grid,
+  .billing-stepper.pro-billing .contact-grid,
+  .billing-stepper.pro-billing .patient-card-bottom-row {
+    grid-template-columns: 1fr !important;
+  }
+  .billing-stepper.pro-billing .compact-age-calculated { justify-content: flex-start !important; }
+}
+
+
+/* -------------------------------------------------------------------------
+   BILLING UI V15 - tighten Basic Details card and fix calculated age row
+   Fixes from screenshot:
+   - reduce patient card vertical height
+   - make all fields same height
+   - keep consultant/honorific plus icons small
+   - remove broken age-calculated box/popover look
+   - align split checkbox + calculated age inside one compact row
+   ------------------------------------------------------------------------- */
+.billing-stepper.pro-billing .step-panel.patient-step {
+  gap: 10px !important;
+}
+
+/* Keep the approved layout but reduce excess vertical mass. */
+.billing-stepper.pro-billing .patient-section-card.basic-info-card {
+  padding: 14px 18px 12px !important;
+  border-radius: 18px !important;
+}
+.billing-stepper.pro-billing .basic-info-heading,
+.billing-stepper.pro-billing .section-heading.basic-info-heading {
+  margin-bottom: 12px !important;
+}
+.billing-stepper.pro-billing .basic-info-heading .section-icon {
+  width: 30px !important;
+  height: 30px !important;
+  min-width: 30px !important;
+  border-radius: 9px !important;
+  font-size: 13px !important;
+  box-shadow: none !important;
+}
+.billing-stepper.pro-billing .section-heading h4 {
+  font-size: 16px !important;
+  line-height: 1 !important;
+}
+.billing-stepper.pro-billing .section-heading p {
+  font-size: 11.5px !important;
+  line-height: 1.1 !important;
+}
+.billing-stepper.pro-billing .clear-basic-info-btn {
+  height: 32px !important;
+  min-height: 32px !important;
+  padding: 0 14px !important;
+  border-radius: 10px !important;
+}
+
+/* Field grid density. */
+.billing-stepper.pro-billing .priority-patient-grid {
+  gap: 10px 16px !important;
+  align-items: start !important;
+}
+.billing-stepper.pro-billing .field label:not(.soft-check) {
+  margin: 0 0 5px !important;
+  font-size: 11.5px !important;
+  line-height: 1 !important;
+}
+
+/* All controls: one exact visual height. */
+.billing-stepper.pro-billing .priority-patient-grid input,
+.billing-stepper.pro-billing .priority-patient-grid select {
+  height: 38px !important;
+  min-height: 38px !important;
+  border-radius: 10px !important;
+  padding: 0 11px !important;
+  font-size: 12.5px !important;
+  line-height: 38px !important;
+}
+
+/* Age value + unit: remove any wrapper/card feel and match field height. */
+.billing-stepper.pro-billing .age-combo-row {
+  height: 38px !important;
+  min-height: 38px !important;
+  display: grid !important;
+  grid-template-columns: minmax(72px, .65fr) minmax(104px, .95fr) !important;
+  gap: 8px !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+.billing-stepper.pro-billing .age-combo-row input,
+.billing-stepper.pro-billing .age-combo-row select {
+  height: 38px !important;
+  min-height: 38px !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(148, 163, 184, .28) !important;
+  background: rgba(8, 14, 26, .68) !important;
+}
+
+/* Consultant and honorific action buttons should not dominate fields. */
+.billing-stepper.pro-billing .consultant-compact-row,
+.billing-stepper.pro-billing .select-plus-row.attached-plus {
+  grid-template-columns: minmax(0, 1fr) 34px !important;
+  gap: 7px !important;
+  align-items: center !important;
+}
+.billing-stepper.pro-billing .mini-plus,
+.billing-stepper.pro-billing .consultant-plus,
+.billing-stepper.pro-billing .attached-plus .mini-plus {
+  width: 34px !important;
+  min-width: 34px !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  border-radius: 10px !important;
+  padding: 0 !important;
+  font-size: 15px !important;
+  line-height: 1 !important;
+  box-shadow: none !important;
+}
+
+/* Final compact split/calculated age row. No nested field, no age box, no popup-looking control. */
+.billing-stepper.pro-billing .patient-card-bottom-row {
+  margin-top: 12px !important;
+  padding: 8px 10px !important;
+  min-height: 38px !important;
+  height: 38px !important;
+  display: grid !important;
+  grid-template-columns: minmax(230px, auto) minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 14px !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(148, 163, 184, .18) !important;
+  background: rgba(15, 23, 42, .24) !important;
+  overflow: hidden !important;
+}
+.billing-stepper.pro-billing .patient-card-bottom-row .split-below-row,
+.billing-stepper.pro-billing .patient-card-bottom-row .inline-split-check {
+  margin: 0 !important;
+  padding: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  color: #e5e7eb !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+  font-weight: 850 !important;
+  white-space: nowrap !important;
+}
+.billing-stepper.pro-billing .patient-card-bottom-row .inline-split-check input {
+  width: 14px !important;
+  height: 14px !important;
+  min-height: 14px !important;
+  flex: 0 0 14px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  accent-color: #3b82f6 !important;
+}
+.billing-stepper.pro-billing .patient-card-bottom-row .inline-split-check em {
+  font-style: normal !important;
+  color: #60a5fa !important;
+  font-size: 13px !important;
+  line-height: 1 !important;
+}
+.billing-stepper.pro-billing .compact-age-inline {
+  justify-self: end !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+  height: auto !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+.billing-stepper.pro-billing .compact-age-inline span {
+  color: var(--muted) !important;
+  font-size: 12px !important;
+  font-weight: 850 !important;
+  line-height: 1 !important;
+}
+.billing-stepper.pro-billing .compact-age-inline strong {
+  color: #93c5fd !important;
+  font-size: 12px !important;
+  font-weight: 950 !important;
+  line-height: 1 !important;
+}
+.billing-stepper.pro-billing .compact-age-calculated,
+.billing-stepper.pro-billing .compact-age-calculated .age-display-box,
+.billing-stepper.pro-billing .age-display-box {
+  box-shadow: none !important;
+}
+
+/* Light theme equivalents. */
+:host-context(.light) .billing-stepper.pro-billing .patient-card-bottom-row,
+:host-context(body.light) .billing-stepper.pro-billing .patient-card-bottom-row,
+:host-context(.light-mode) .billing-stepper.pro-billing .patient-card-bottom-row {
+  background: #f8fafc !important;
+  border-color: rgba(15, 23, 42, .12) !important;
+}
+:host-context(.light) .billing-stepper.pro-billing .patient-card-bottom-row .inline-split-check,
+:host-context(body.light) .billing-stepper.pro-billing .patient-card-bottom-row .inline-split-check,
+:host-context(.light-mode) .billing-stepper.pro-billing .patient-card-bottom-row .inline-split-check {
+  color: #0f172a !important;
+}
+:host-context(.light) .billing-stepper.pro-billing .compact-age-inline strong,
+:host-context(body.light) .billing-stepper.pro-billing .compact-age-inline strong,
+:host-context(.light-mode) .billing-stepper.pro-billing .compact-age-inline strong {
+  color: #2563eb !important;
+}
+:host-context(.light) .billing-stepper.pro-billing .age-combo-row input,
+:host-context(.light) .billing-stepper.pro-billing .age-combo-row select,
+:host-context(body.light) .billing-stepper.pro-billing .age-combo-row input,
+:host-context(body.light) .billing-stepper.pro-billing .age-combo-row select,
+:host-context(.light-mode) .billing-stepper.pro-billing .age-combo-row input,
+:host-context(.light-mode) .billing-stepper.pro-billing .age-combo-row select {
+  background: #fff !important;
+  border-color: rgba(15, 23, 42, .14) !important;
+}
+
+@media (max-width: 760px) {
+  .billing-stepper.pro-billing .patient-card-bottom-row {
+    height: auto !important;
+    grid-template-columns: 1fr !important;
+    align-items: start !important;
+  }
+  .billing-stepper.pro-billing .compact-age-inline { justify-self: start !important; }
+}
+
+/* =====================================================================
+   BILLING UI V16 FINAL DENSITY PATCH
+   - Main billing stepper: keep current design, only reduce height.
+   - Patient search: exact compact top-bill-search sizing.
+   - Existing/New and Basic/Address/Others: no gradients, small pills.
+   - Patient card: compact fields, correct order, keep split+age calculated.
+   ===================================================================== */
+
+.billing-stepper.pro-billing {
+  gap: 8px !important;
+  padding: 0 !important;
+}
+
+/* Main billing stepper: do not redesign, just make it short and aligned. */
+.billing-stepper.pro-billing > .stepper-head {
+  min-height: 48px !important;
+  height: 48px !important;
+  padding: 5px !important;
+  margin: 0 0 8px !important;
+  align-items: center !important;
+  border-radius: 18px !important;
+}
+.billing-stepper.pro-billing > .stepper-head > .step-tab {
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0 !important;
+  border-radius: 14px !important;
+  line-height: 1 !important;
+}
+.billing-stepper.pro-billing > .stepper-head > .step-tab b {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  font-size: 12.5px !important;
+  line-height: 1 !important;
+  font-weight: 850 !important;
+  white-space: nowrap !important;
+}
+.billing-stepper.pro-billing > .stepper-head > .step-tab span,
+.billing-stepper.pro-billing > .stepper-head > .step-tab small,
+.billing-stepper.pro-billing > .stepper-head > .step-tab::before,
+.billing-stepper.pro-billing > .stepper-head > .step-tab::after {
+  display: none !important;
+  content: none !important;
+}
+
+.billing-stepper.pro-billing .billing-scroll {
+  padding-top: 0 !important;
+}
+.billing-stepper.pro-billing .step-panel.patient-step {
+  gap: 8px !important;
+}
+
+/* Patient search area: make same compact scale as the top billing search. */
+.billing-stepper.pro-billing .patient-entry-card.compact-patient-card {
+  padding: 8px 10px !important;
+  margin: 0 0 8px !important;
+  border-radius: 18px !important;
+}
+.billing-stepper.pro-billing .patient-entry-head {
+  display: none !important;
+}
+.billing-stepper.pro-billing .patient-lookup-row {
+  display: grid !important;
+  grid-template-columns: minmax(260px, 430px) auto auto !important;
+  gap: 10px !important;
+  align-items: center !important;
+  min-height: 38px !important;
+}
+.billing-stepper.pro-billing .top-patient-search,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field {
+  position: relative !important;
+  width: min(430px, 100%) !important;
+  min-width: 0 !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.billing-stepper.pro-billing .top-patient-search .lookup-search-icon,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field .lookup-search-icon {
+  position: absolute !important;
+  left: 13px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 16px !important;
+  height: 16px !important;
+  color: var(--muted) !important;
+  pointer-events: none !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 2.25 !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+  z-index: 2 !important;
+}
+.billing-stepper.pro-billing .top-patient-search input,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field > input {
+  width: 100% !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 14px 0 38px !important;
+  border-radius: 999px !important;
+  border: 1px solid var(--border) !important;
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  font-size: 12.5px !important;
+  font-weight: 800 !important;
+  line-height: 38px !important;
+  box-shadow: none !important;
+}
+.billing-stepper.pro-billing .top-patient-search input::placeholder,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field > input::placeholder {
+  color: var(--muted) !important;
+  font-weight: 800 !important;
+}
+.billing-stepper.pro-billing .patient-results {
+  top: 44px !important;
+}
+
+/* Existing/New patient toggle: no gradient, perfectly centered. */
+.billing-stepper.pro-billing .patient-mode-toggle {
+  height: 38px !important;
+  min-height: 38px !important;
+  display: inline-grid !important;
+  grid-template-columns: repeat(2, minmax(118px, auto)) !important;
+  align-items: center !important;
+  padding: 3px !important;
+  gap: 3px !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--panel) 88%, var(--text) 4%) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}
+.billing-stepper.pro-billing .patient-mode-toggle button {
+  height: 30px !important;
+  min-height: 30px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  padding: 0 13px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  font-size: 11.5px !important;
+  font-weight: 850 !important;
+  white-space: nowrap !important;
+  background: transparent !important;
+  color: var(--muted) !important;
+  box-shadow: none !important;
+}
+.billing-stepper.pro-billing .patient-mode-toggle button.active {
+  background: color-mix(in srgb, var(--primary, #3b82f6) 24%, var(--panel)) !important;
+  color: color-mix(in srgb, var(--primary, #3b82f6) 18%, #ffffff) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary, #3b82f6) 30%, transparent) !important;
+}
+.billing-stepper.pro-billing .patient-reg-date-chip {
+  height: 30px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  border-radius: 999px !important;
+  padding: 0 10px !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  white-space: nowrap !important;
+}
+
+/* Mini patient section selector: keep all three, very small pills, no gradient. */
+.billing-stepper.pro-billing .patient-detail-tabs {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 7px !important;
+  min-height: 36px !important;
+  height: 36px !important;
+  padding: 3px 4px !important;
+  margin: 0 0 8px !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.billing-stepper.pro-billing .patient-detail-tabs button {
+  height: 30px !important;
+  min-height: 30px !important;
+  width: auto !important;
+  flex: 0 0 auto !important;
+  padding: 0 12px !important;
+  border-radius: 999px !important;
+  border: 1px solid var(--border) !important;
+  background: color-mix(in srgb, var(--panel) 88%, transparent) !important;
+  color: var(--muted) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0 !important;
+  font-size: 11.5px !important;
+  font-weight: 850 !important;
+  line-height: 1 !important;
+  box-shadow: none !important;
+}
+.billing-stepper.pro-billing .patient-detail-tabs button.active {
+  background: color-mix(in srgb, var(--primary, #3b82f6) 22%, var(--panel)) !important;
+  border-color: color-mix(in srgb, var(--primary, #3b82f6) 36%, var(--border)) !important;
+  color: color-mix(in srgb, var(--primary, #3b82f6) 14%, #ffffff) !important;
+  box-shadow: none !important;
+}
+.billing-stepper.pro-billing .patient-detail-tabs .tab-icon {
+  display: none !important;
+}
+
+/* Patient details card compact density. */
+.billing-stepper.pro-billing .patient-registration-layout,
+.billing-stepper.pro-billing .patient-form-pro {
+  gap: 8px !important;
+}
+.billing-stepper.pro-billing .patient-section-card.basic-info-card {
+  padding: 10px 12px 9px !important;
+  border-radius: 18px !important;
+  margin: 0 !important;
+}
+.billing-stepper.pro-billing .basic-info-heading {
+  min-height: 34px !important;
+  margin: 0 0 9px !important;
+  padding: 0 !important;
+  align-items: center !important;
+}
+.billing-stepper.pro-billing .section-icon {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  border-radius: 10px !important;
+  font-size: 14px !important;
+}
+.billing-stepper.pro-billing .inline-heading-copy h4 {
+  font-size: 14px !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+}
+.billing-stepper.pro-billing .inline-heading-copy p {
+  font-size: 11px !important;
+  line-height: 1.1 !important;
+  margin: 0 !important;
+}
+.billing-stepper.pro-billing .clear-basic-info-btn {
+  height: 30px !important;
+  padding: 0 12px !important;
+  font-size: 11px !important;
+  border-radius: 999px !important;
+}
+
+.billing-stepper.pro-billing .priority-patient-grid {
+  display: grid !important;
+  grid-template-columns: minmax(115px, .7fr) minmax(220px, 1.55fr) minmax(150px, .85fr) minmax(220px, 1.2fr) !important;
+  gap: 9px 10px !important;
+  align-items: start !important;
+}
+.billing-stepper.pro-billing .priority-patient-grid .honorific-field { grid-column: 1 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .patient-name-field { grid-column: 2 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .gender-field { grid-column: 3 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .age-combo-field { grid-column: 4 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .dob-field { grid-column: 1 !important; grid-row: 2 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .consultant-priority-field { grid-column: 2 !important; grid-row: 2 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .mobile-priority-field { grid-column: 3 !important; grid-row: 2 !important; }
+.billing-stepper.pro-billing .priority-patient-grid .referrer-type-field { grid-column: 4 !important; grid-row: 2 !important; }
+
+.billing-stepper.pro-billing .field label {
+  font-size: 10.5px !important;
+  line-height: 1.05 !important;
+  margin: 0 0 4px !important;
+  font-weight: 850 !important;
+}
+.billing-stepper.pro-billing .field input,
+.billing-stepper.pro-billing .field select {
+  height: 38px !important;
+  min-height: 38px !important;
+  border-radius: 12px !important;
+  padding: 0 11px !important;
+  font-size: 12px !important;
+  line-height: 38px !important;
+}
+.billing-stepper.pro-billing .field-hint {
+  display: none !important;
+}
+
+.billing-stepper.pro-billing .consultant-compact-row,
+.billing-stepper.pro-billing .select-plus-row.attached-plus {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 34px !important;
+  gap: 6px !important;
+  align-items: center !important;
+  height: 38px !important;
+}
+.billing-stepper.pro-billing .consultant-compact-row input,
+.billing-stepper.pro-billing .select-plus-row.attached-plus select {
+  height: 38px !important;
+  min-height: 38px !important;
+}
+.billing-stepper.pro-billing .mini-plus,
+.billing-stepper.pro-billing .consultant-plus {
+  width: 34px !important;
+  min-width: 34px !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 !important;
+  border-radius: 12px !important;
+  font-size: 15px !important;
+  line-height: 1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+.billing-stepper.pro-billing .age-combo-row {
+  display: grid !important;
+  grid-template-columns: minmax(70px, .7fr) minmax(104px, 1fr) !important;
+  gap: 6px !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.billing-stepper.pro-billing .age-combo-row input,
+.billing-stepper.pro-billing .age-combo-row select {
+  height: 38px !important;
+  min-height: 38px !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+  background: var(--panel) !important;
+  padding: 0 10px !important;
+  font-size: 12px !important;
+  line-height: 38px !important;
+  box-shadow: none !important;
+}
+
+/* Keep split below 1 year and age calculated; make them small and inside the card. */
+.billing-stepper.pro-billing .patient-card-bottom-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  min-height: 30px !important;
+  margin: 8px 0 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+.billing-stepper.pro-billing .patient-card-bottom-row .split-below-row,
+.billing-stepper.pro-billing .patient-card-bottom-row .inline-split-check {
+  height: 28px !important;
+  min-height: 28px !important;
+  margin: 0 !important;
+  padding: 0 10px !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--panel) 88%, transparent) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  flex: 0 0 auto !important;
+  box-shadow: none !important;
+}
+.billing-stepper.pro-billing .patient-card-bottom-row .inline-split-check input {
+  width: 14px !important;
+  height: 14px !important;
+  min-width: 14px !important;
+  margin: 0 !important;
+}
+.billing-stepper.pro-billing .patient-card-bottom-row .inline-split-check span,
+.billing-stepper.pro-billing .patient-card-bottom-row .inline-split-check em {
+  font-size: 11px !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+  font-style: normal !important;
+  white-space: nowrap !important;
+}
+.billing-stepper.pro-billing .compact-age-inline,
+.billing-stepper.pro-billing .compact-age-calculated,
+.billing-stepper.pro-billing .compact-age-calculated .age-display-box {
+  height: 28px !important;
+  min-height: 28px !important;
+  margin: 0 !important;
+  padding: 0 10px !important;
+  border: 1px solid color-mix(in srgb, var(--primary, #3b82f6) 22%, var(--border)) !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--primary, #3b82f6) 10%, transparent) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  color: var(--text) !important;
+  font-size: 11px !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  box-shadow: none !important;
+  flex: 0 1 auto !important;
+}
+.billing-stepper.pro-billing .compact-age-inline span,
+.billing-stepper.pro-billing .compact-age-inline strong,
+.billing-stepper.pro-billing .compact-age-calculated label,
+.billing-stepper.pro-billing .compact-age-calculated b {
+  font-size: 11px !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+  white-space: nowrap !important;
+}
+.billing-stepper.pro-billing .compact-age-inline strong {
+  font-weight: 900 !important;
+}
+
+/* No large Contact & Other Details card visible in Basic Details view. */
+.billing-stepper.pro-billing .contact-section.patient-section-card,
+.billing-stepper.pro-billing .patient-section-card.contact-info-card {
+  display: none !important;
+}
+
+/* Light theme support for the compact non-gradient pills. */
+:host-context(.light) .billing-stepper.pro-billing .patient-mode-toggle button.active,
+:host-context(body.light) .billing-stepper.pro-billing .patient-mode-toggle button.active,
+:host-context(.light-mode) .billing-stepper.pro-billing .patient-mode-toggle button.active,
+:host-context(.light) .billing-stepper.pro-billing .patient-detail-tabs button.active,
+:host-context(body.light) .billing-stepper.pro-billing .patient-detail-tabs button.active,
+:host-context(.light-mode) .billing-stepper.pro-billing .patient-detail-tabs button.active {
+  background: #dbeafe !important;
+  color: #1d4ed8 !important;
+  border-color: #93c5fd !important;
+}
+:host-context(.light) .billing-stepper.pro-billing .top-patient-search input,
+:host-context(body.light) .billing-stepper.pro-billing .top-patient-search input,
+:host-context(.light-mode) .billing-stepper.pro-billing .top-patient-search input,
+:host-context(.light) .billing-stepper.pro-billing .patient-search.patient-lookup-field > input,
+:host-context(body.light) .billing-stepper.pro-billing .patient-search.patient-lookup-field > input,
+:host-context(.light-mode) .billing-stepper.pro-billing .patient-search.patient-lookup-field > input {
+  background: #ffffff !important;
+}
+
+@media (max-width: 1100px) {
+  .billing-stepper.pro-billing .patient-lookup-row {
+    grid-template-columns: 1fr !important;
+  }
+  .billing-stepper.pro-billing .patient-mode-toggle {
+    width: 100% !important;
+    grid-template-columns: 1fr 1fr !important;
+  }
+  .billing-stepper.pro-billing .priority-patient-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .billing-stepper.pro-billing .priority-patient-grid .honorific-field,
+  .billing-stepper.pro-billing .priority-patient-grid .patient-name-field,
+  .billing-stepper.pro-billing .priority-patient-grid .gender-field,
+  .billing-stepper.pro-billing .priority-patient-grid .age-combo-field,
+  .billing-stepper.pro-billing .priority-patient-grid .dob-field,
+  .billing-stepper.pro-billing .priority-patient-grid .consultant-priority-field,
+  .billing-stepper.pro-billing .priority-patient-grid .mobile-priority-field,
+  .billing-stepper.pro-billing .priority-patient-grid .referrer-type-field {
+    grid-column: auto !important;
+    grid-row: auto !important;
+  }
+}
+@media (max-width: 720px) {
+  .billing-stepper.pro-billing > .stepper-head {
+    height: auto !important;
+    min-height: 0 !important;
+    grid-template-columns: 1fr !important;
+  }
+  .billing-stepper.pro-billing .priority-patient-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .billing-stepper.pro-billing .patient-card-bottom-row {
+    align-items: flex-start !important;
+    flex-direction: column !important;
+  }
+}
+
+/* V17 FINAL HARD DENSITY OVERRIDES
+   Goal: exact billing-search style for patient search, much smaller steppers,
+   consistent field heights, and simple split/age row without large pills. */
+
+/* Main billing stepper: keep the same visual design, only reduce height/padding. */
+.billing-stepper.pro-billing {
+  gap: 10px !important;
+}
+.billing-stepper.pro-billing > .stepper-head {
+  min-height: 54px !important;
+  height: 54px !important;
+  padding: 6px !important;
+  border-radius: 20px !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+.billing-stepper.pro-billing > .stepper-head > .step-tab {
+  height: 40px !important;
+  min-height: 40px !important;
+  padding: 0 14px !important;
+  border-radius: 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+.billing-stepper.pro-billing > .stepper-head > .step-tab b {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: 1 !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+}
+
+/* Patient lookup card/row: compact, no action buttons, same visual size as top bill search. */
+.billing-stepper.pro-billing .patient-entry-card.compact-patient-card {
+  padding: 8px 10px !important;
+  border-radius: 18px !important;
+  min-height: 0 !important;
+}
+.billing-stepper.pro-billing .patient-entry-head {
+  display: none !important;
+}
+.billing-stepper.pro-billing .patient-lookup-row {
+  display: grid !important;
+  grid-template-columns: minmax(320px, 520px) minmax(320px, 1fr) auto !important;
+  gap: 12px !important;
+  align-items: center !important;
+  min-height: 46px !important;
+  padding: 0 !important;
+}
+
+/* Copy top billing search mechanics: wrapper has no border; input is the single pill. */
+.billing-stepper.pro-billing .patient-search.patient-lookup-field,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field {
+  position: relative !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+.billing-stepper.pro-billing .patient-search.patient-lookup-field .lookup-search-icon,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field .lookup-search-icon {
+  position: absolute !important;
+  left: 14px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 20px !important;
+  height: 20px !important;
+  color: var(--muted) !important;
+  stroke: currentColor !important;
+  fill: none !important;
+  stroke-width: 2.2 !important;
+  pointer-events: none !important;
+  z-index: 2 !important;
+}
+.billing-stepper.pro-billing .patient-search.patient-lookup-field > input,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field > input {
+  width: 100% !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  padding: 0 16px 0 44px !important;
+  border: 1px solid rgba(148, 163, 184, 0.24) !important;
+  border-radius: 999px !important;
+  background: var(--panel) !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+  color: var(--text) !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  line-height: 42px !important;
+}
+.billing-stepper.pro-billing .patient-search.patient-lookup-field > input::placeholder,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field > input::placeholder {
+  color: var(--muted) !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  opacity: .9 !important;
+}
+.billing-stepper.pro-billing .patient-search.patient-lookup-field > input:focus,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field > input:focus {
+  border-color: rgba(96, 165, 250, 0.55) !important;
+  box-shadow: 0 0 0 3px rgba(59,130,246,.14) !important;
+}
+
+/* Existing/New toggle: compact, no gradient. */
+.billing-stepper.pro-billing .patient-mode-toggle {
+  height: 42px !important;
+  min-height: 42px !important;
+  padding: 4px !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  border: 1px solid rgba(148,163,184,.22) !important;
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+.billing-stepper.pro-billing .patient-mode-toggle button {
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 14px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  color: var(--muted) !important;
+  font-size: 12px !important;
+  font-weight: 900 !important;
+  line-height: 1 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: none !important;
+}
+.billing-stepper.pro-billing .patient-mode-toggle button.active {
+  background: #3b82f6 !important;
+  color: #fff !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+/* Mini patient detail tabs: very small pill tabs, keep all 3, no gradient, no giant bar. */
+.billing-stepper.pro-billing .patient-detail-tabs {
+  margin: 8px 0 8px !important;
+  padding: 0 !important;
+  min-height: 34px !important;
+  height: 34px !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  justify-content: flex-start !important;
+}
+.billing-stepper.pro-billing .patient-detail-tabs button {
+  flex: 0 0 auto !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  padding: 0 12px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(148,163,184,.22) !important;
+  background: transparent !important;
+  background-image: none !important;
+  color: var(--muted) !important;
+  font-size: 11.5px !important;
+  font-weight: 850 !important;
+  line-height: 1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  box-shadow: none !important;
+}
+.billing-stepper.pro-billing .patient-detail-tabs button.active {
+  background: rgba(59,130,246,.18) !important;
+  background-image: none !important;
+  color: #93c5fd !important;
+  border-color: rgba(96,165,250,.5) !important;
+  box-shadow: none !important;
+}
+.billing-stepper.pro-billing .patient-detail-tabs .tab-icon {
+  font-size: 11px !important;
+  line-height: 1 !important;
+  width: auto !important;
+  height: auto !important;
+}
+
+/* Patient card density and uniform field heights. */
+.billing-stepper.pro-billing .patient-registration-layout {
+  gap: 8px !important;
+}
+.billing-stepper.pro-billing .patient-form-pro {
+  gap: 8px !important;
+}
+.billing-stepper.pro-billing .patient-section-card.basic-info-card,
+.billing-stepper.pro-billing .patient-form-pro > .patient-section-card:first-child {
+  padding: 12px 14px !important;
+  border-radius: 18px !important;
+  min-height: 0 !important;
+}
+.billing-stepper.pro-billing .basic-info-heading,
+.billing-stepper.pro-billing .section-heading.basic-info-heading {
+  min-height: 34px !important;
+  height: 34px !important;
+  margin: 0 0 10px !important;
+  padding: 0 !important;
+  align-items: center !important;
+}
+.billing-stepper.pro-billing .basic-info-heading .section-icon {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  border-radius: 9px !important;
+  font-size: 12px !important;
+}
+.billing-stepper.pro-billing .basic-info-heading h4 {
+  font-size: 14px !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+}
+.billing-stepper.pro-billing .basic-info-heading p {
+  font-size: 10.5px !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+}
+.billing-stepper.pro-billing .clear-basic-info-btn {
+  height: 32px !important;
+  min-height: 32px !important;
+  padding: 0 14px !important;
+  border-radius: 12px !important;
+  font-size: 11px !important;
+}
+.billing-stepper.pro-billing .priority-patient-grid {
+  gap: 10px 12px !important;
+  align-items: end !important;
+}
+.billing-stepper.pro-billing .field label {
+  font-size: 11px !important;
+  line-height: 1 !important;
+  margin: 0 0 5px !important;
+}
+.billing-stepper.pro-billing .field input,
+.billing-stepper.pro-billing .field select {
+  height: 36px !important;
+  min-height: 36px !important;
+  border-radius: 10px !important;
+  padding: 0 10px !important;
+  font-size: 12px !important;
+  line-height: 36px !important;
+}
+.billing-stepper.pro-billing .consultant-compact-row,
+.billing-stepper.pro-billing .select-plus-row.attached-plus {
+  height: 36px !important;
+  min-height: 36px !important;
+  grid-template-columns: minmax(0, 1fr) 30px !important;
+  gap: 6px !important;
+}
+.billing-stepper.pro-billing .consultant-compact-row input,
+.billing-stepper.pro-billing .select-plus-row.attached-plus select {
+  height: 36px !important;
+  min-height: 36px !important;
+}
+.billing-stepper.pro-billing .mini-plus,
+.billing-stepper.pro-billing .consultant-plus,
+.billing-stepper.pro-billing .attached-plus .mini-plus {
+  width: 30px !important;
+  min-width: 30px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  border-radius: 10px !important;
+  padding: 0 !important;
+  font-size: 14px !important;
+  line-height: 1 !important;
+}
+.billing-stepper.pro-billing .age-combo-row {
+  height: 36px !important;
+  min-height: 36px !important;
+  grid-template-columns: minmax(62px, .7fr) minmax(92px, 1fr) !important;
+  gap: 6px !important;
+}
+.billing-stepper.pro-billing .age-combo-row input,
+.billing-stepper.pro-billing .age-combo-row select {
+  height: 36px !important;
+  min-height: 36px !important;
+  line-height: 36px !important;
+  border-radius: 10px !important;
+  padding: 0 10px !important;
+}
+
+/* Bottom row: keep Split and Age calculated but make it one simple aligned row, no separate capsules. */
+.billing-stepper.pro-billing .patient-card-bottom-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  margin: 10px 0 0 !important;
+  padding: 0 !important;
+  min-height: 24px !important;
+  height: 24px !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.billing-stepper.pro-billing .patient-card-bottom-row .split-below-row,
+.billing-stepper.pro-billing .patient-card-bottom-row .inline-split-check {
+  height: 24px !important;
+  min-height: 24px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  color: var(--text) !important;
+}
+.billing-stepper.pro-billing .patient-card-bottom-row .inline-split-check input[type="checkbox"] {
+  width: 14px !important;
+  height: 14px !important;
+  min-width: 14px !important;
+  min-height: 14px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  accent-color: #3b82f6 !important;
+}
+.billing-stepper.pro-billing .patient-card-bottom-row .inline-split-check span,
+.billing-stepper.pro-billing .patient-card-bottom-row .inline-split-check em,
+.billing-stepper.pro-billing .compact-age-inline,
+.billing-stepper.pro-billing .compact-age-inline span,
+.billing-stepper.pro-billing .compact-age-inline strong {
+  font-size: 11px !important;
+  line-height: 1 !important;
+  font-weight: 850 !important;
+  margin: 0 !important;
+  font-style: normal !important;
+  white-space: nowrap !important;
+}
+.billing-stepper.pro-billing .compact-age-inline {
+  height: 24px !important;
+  min-height: 24px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--muted) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 6px !important;
+  box-shadow: none !important;
+}
+.billing-stepper.pro-billing .compact-age-inline strong {
+  color: var(--text) !important;
+  font-weight: 900 !important;
+}
+
+@media (max-width: 1100px) {
+  .billing-stepper.pro-billing .patient-lookup-row {
+    grid-template-columns: 1fr !important;
+  }
+  .billing-stepper.pro-billing .patient-detail-tabs {
+    flex-wrap: wrap !important;
+    height: auto !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   BILLING UI V18 - TRUE PATIENT SEARCH MATCH + BASIC FIELD HEIGHT PATCH
+   Scope: visual-only billing Step 1 density fixes. No workflow/API changes.
+   -------------------------------------------------------------------------- */
+
+/* Patient search must behave exactly like the top Billing search:
+   wrapper is layout only, input is the only pill/border. */
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field {
+  position: relative !important;
+  display: block !important;
+  width: min(430px, 100%) !important;
+  min-width: 0 !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field::before,
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field::after,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field::before,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field::after,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field::before,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field::after {
+  content: none !important;
+  display: none !important;
+}
+
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field .lookup-search-icon,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field .lookup-search-icon,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field .lookup-search-icon {
+  position: absolute !important;
+  left: 13px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 16px !important;
+  height: 16px !important;
+  display: block !important;
+  color: rgba(203, 213, 225, 0.72) !important;
+  stroke: currentColor !important;
+  stroke-width: 2.25 !important;
+  fill: none !important;
+  pointer-events: none !important;
+  z-index: 2 !important;
+  margin: 0 !important;
+}
+
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field > input,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field > input,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field > input {
+  width: 100% !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  max-height: 38px !important;
+  display: block !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  padding: 0 16px 0 38px !important;
+  border-radius: 999px !important;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, rgba(148, 163, 184, 0.38)) !important;
+  outline: none !important;
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  font-size: 12.5px !important;
+  font-weight: 800 !important;
+  line-height: 38px !important;
+  letter-spacing: 0 !important;
+  box-shadow: none !important;
+  appearance: none !important;
+}
+
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field > input::placeholder,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field > input::placeholder,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field > input::placeholder {
+  color: rgba(203, 213, 225, 0.62) !important;
+  opacity: 1 !important;
+  font-size: 12.5px !important;
+  font-weight: 800 !important;
+}
+
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field > input:focus,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field > input:focus,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field > input:focus {
+  border-color: rgba(96, 165, 250, 0.72) !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.16) !important;
+  background: var(--panel) !important;
+}
+
+/* Keep the patient lookup row compact around the now-small search. */
+.billing-stepper.pro-billing .patient-lookup-row {
+  padding: 8px 10px !important;
+  min-height: 54px !important;
+  gap: 14px !important;
+  align-items: center !important;
+}
+
+/* Same height for all Basic Details controls, based on the consultant field scale. */
+.billing-stepper.pro-billing .patient-step input,
+.billing-stepper.pro-billing .patient-step select,
+.billing-stepper.pro-billing .patient-step textarea:not(.notes-textarea) {
+  height: 38px !important;
+  min-height: 38px !important;
+  max-height: 38px !important;
+  border-radius: 12px !important;
+  font-size: 12.5px !important;
+  line-height: 38px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+.billing-stepper.pro-billing .field-with-action,
+.billing-stepper.pro-billing .attached-plus {
+  grid-template-columns: minmax(0, 1fr) 36px !important;
+  gap: 7px !important;
+  align-items: center !important;
+}
+
+.billing-stepper.pro-billing .mini-plus,
+.billing-stepper.pro-billing .field-action-btn,
+.billing-stepper.pro-billing .consultant-plus {
+  width: 36px !important;
+  min-width: 36px !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  max-height: 38px !important;
+  border-radius: 12px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 17px !important;
+  line-height: 1 !important;
+}
+
+/* Date icon visible in dark mode. */
+.billing-stepper.pro-billing input[type='date']::-webkit-calendar-picker-indicator,
+.billing-stepper.pro-billing .patient-step input[type='date']::-webkit-calendar-picker-indicator {
+  filter: invert(86%) sepia(10%) saturate(480%) hue-rotate(178deg) brightness(1.08) !important;
+  opacity: 0.82 !important;
+  cursor: pointer !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field > input,
+:host-context(body.light) .billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field > input,
+:host-context(.light-mode) .billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field > input {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: rgba(148, 163, 184, 0.38) !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field > input::placeholder,
+:host-context(body.light) .billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field > input::placeholder,
+:host-context(.light-mode) .billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field > input::placeholder {
+  color: #64748b !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field .lookup-search-icon,
+:host-context(body.light) .billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field .lookup-search-icon,
+:host-context(.light-mode) .billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field .lookup-search-icon {
+  color: #64748b !important;
+}
+
+/* v19: keep consultant field full height, reduce the plus action so it does not dominate */
+.pro-billing .consultant-compact-row {
+  grid-template-columns: minmax(0, 1fr) 34px !important;
+  gap: 8px !important;
+  align-items: center !important;
+}
+
+.pro-billing .consultant-compact-row .consultant-plus,
+.pro-billing .consultant-priority-field .consultant-plus {
+  width: 34px !important;
+  min-width: 34px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  border-radius: 10px !important;
+  padding: 0 !important;
+  font-size: 15px !important;
+  line-height: 1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  align-self: center !important;
+  box-shadow: none !important;
+}
+
+.pro-billing .consultant-compact-row .consultant-plus mat-icon,
+.pro-billing .consultant-priority-field .consultant-plus mat-icon {
+  width: 15px !important;
+  height: 15px !important;
+  font-size: 15px !important;
+  line-height: 15px !important;
+}
+
+/* Honorific plus follows the same secondary visual weight, without changing field height */
+.pro-billing .select-plus-row.attached-plus {
+  grid-template-columns: minmax(0, 1fr) 34px !important;
+  gap: 8px !important;
+  align-items: center !important;
+}
+
+.pro-billing .select-plus-row.attached-plus .mini-plus {
+  width: 34px !important;
+  min-width: 34px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  border-radius: 10px !important;
+  padding: 0 !important;
+  font-size: 15px !important;
+  line-height: 1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  align-self: center !important;
+  box-shadow: none !important;
+}
+
+/* =====================================================================
+   BILLING UI V21 - PATIENT LOOKUP ROW ALIGNMENT + STEPPER PADDING
+   Scope: visual-only. Keeps previous layout; fixes row alignment and spacing.
+   ===================================================================== */
+
+/* Main billing stepper: keep same design, add balanced side padding and center content. */
+.billing-stepper.pro-billing > .stepper-head {
+  padding: 6px 14px !important;
+  min-height: 52px !important;
+  height: 52px !important;
+  gap: 10px !important;
+  align-items: center !important;
+}
+.billing-stepper.pro-billing > .stepper-head > .step-tab {
+  height: 38px !important;
+  min-height: 38px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+.billing-stepper.pro-billing > .stepper-head > .step-tab b {
+  line-height: 1 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  transform: none !important;
+}
+
+/* Patient lookup card: row gets proper left/right breathing room. */
+.billing-stepper.pro-billing .patient-entry-card.compact-patient-card {
+  padding: 10px 16px !important;
+}
+
+.billing-stepper.pro-billing .patient-lookup-row {
+  display: grid !important;
+  grid-template-columns: minmax(340px, 0.92fr) minmax(360px, 0.9fr) max-content !important;
+  gap: 16px !important;
+  align-items: center !important;
+  padding: 0 !important;
+  min-height: 42px !important;
+}
+
+/* The search wrapper is layout-only; only the input itself is the pill. */
+.billing-stepper.pro-billing .patient-search.patient-lookup-field,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field,
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field {
+  width: 100% !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  overflow: visible !important;
+}
+.billing-stepper.pro-billing .patient-search.patient-lookup-field::before,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field::after,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field::before,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field::after,
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field::before,
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field::after {
+  content: none !important;
+  display: none !important;
+}
+.billing-stepper.pro-billing .patient-search.patient-lookup-field > input,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field > input,
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field > input {
+  height: 42px !important;
+  min-height: 42px !important;
+  max-height: 42px !important;
+  line-height: 42px !important;
+  width: 100% !important;
+  border-radius: 999px !important;
+  padding: 0 18px 0 42px !important;
+  box-sizing: border-box !important;
+  box-shadow: none !important;
+}
+.billing-stepper.pro-billing .patient-search.patient-lookup-field .lookup-search-icon,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field .lookup-search-icon,
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field .lookup-search-icon {
+  left: 14px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 18px !important;
+  height: 18px !important;
+  margin: 0 !important;
+}
+
+/* Existing/New toggle and registration chip align to the exact same row center. */
+.billing-stepper.pro-billing .patient-mode-toggle {
+  width: 100% !important;
+  justify-self: stretch !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  align-self: center !important;
+}
+.billing-stepper.pro-billing .patient-mode-toggle button {
+  height: 34px !important;
+  min-height: 34px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+}
+.billing-stepper.pro-billing .patient-reg-date-chip {
+  justify-self: end !important;
+  align-self: center !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+}
+
+/* Mini patient section pills: keep all 3, add left/right padding and align. */
+.billing-stepper.pro-billing .patient-detail-tabs {
+  padding: 0 14px !important;
+  min-height: 36px !important;
+  height: 36px !important;
+  gap: 10px !important;
+  align-items: center !important;
+}
+.billing-stepper.pro-billing .patient-detail-tabs button {
+  height: 32px !important;
+  min-height: 32px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+}
+
+@media (max-width: 1200px) {
+  .billing-stepper.pro-billing .patient-lookup-row {
+    grid-template-columns: 1fr !important;
+  }
+  .billing-stepper.pro-billing .patient-reg-date-chip {
+    justify-self: start !important;
+  }
+}
+
+/* =====================================================================
+   BILLING UI V22 - DATE PICKER ICON VISIBILITY FIX
+   Scope: visual-only. Makes native date picker icon visible in dark mode.
+   ===================================================================== */
+.billing-stepper.pro-billing .patient-step .dob-field,
+.billing-stepper.pro-billing .dob-field,
+.billing-stepper.pro-billing .date-field,
+.billing-stepper.pro-billing .date-control {
+  position: relative !important;
+}
+
+.billing-stepper.pro-billing .patient-step input[type="date"],
+.billing-stepper.pro-billing input[type="date"] {
+  color-scheme: dark !important;
+  padding-right: 42px !important;
+}
+
+.billing-stepper.pro-billing .patient-step input[type="date"]::-webkit-calendar-picker-indicator,
+.billing-stepper.pro-billing input[type="date"]::-webkit-calendar-picker-indicator {
+  width: 18px !important;
+  height: 18px !important;
+  margin-right: 2px !important;
+  cursor: pointer !important;
+  opacity: 1 !important;
+  filter: invert(92%) sepia(12%) saturate(420%) hue-rotate(178deg) brightness(1.12) contrast(0.96) !important;
+}
+
+.billing-stepper.pro-billing .patient-step input[type="date"]::-webkit-calendar-picker-indicator:hover,
+.billing-stepper.pro-billing input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1 !important;
+  filter: invert(100%) sepia(10%) saturate(360%) hue-rotate(178deg) brightness(1.2) contrast(1) !important;
+}
+
+.billing-stepper.pro-billing .dob-field mat-icon,
+.billing-stepper.pro-billing .dob-field .mat-icon,
+.billing-stepper.pro-billing .date-picker-icon,
+.billing-stepper.pro-billing .date-field mat-icon,
+.billing-stepper.pro-billing .date-control mat-icon {
+  color: rgba(203, 213, 225, 0.88) !important;
+  opacity: 1 !important;
+}
+
+.billing-stepper.pro-billing .dob-field svg,
+.billing-stepper.pro-billing .date-field svg,
+.billing-stepper.pro-billing .date-control svg {
+  fill: rgba(203, 213, 225, 0.88) !important;
+  stroke: rgba(203, 213, 225, 0.88) !important;
+  opacity: 1 !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .patient-step input[type="date"],
+:host-context(body.light) .billing-stepper.pro-billing .patient-step input[type="date"],
+:host-context(.light-mode) .billing-stepper.pro-billing .patient-step input[type="date"],
+:host-context(.light) .billing-stepper.pro-billing input[type="date"],
+:host-context(body.light) .billing-stepper.pro-billing input[type="date"],
+:host-context(.light-mode) .billing-stepper.pro-billing input[type="date"] {
+  color-scheme: light !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .patient-step input[type="date"]::-webkit-calendar-picker-indicator,
+:host-context(body.light) .billing-stepper.pro-billing .patient-step input[type="date"]::-webkit-calendar-picker-indicator,
+:host-context(.light-mode) .billing-stepper.pro-billing .patient-step input[type="date"]::-webkit-calendar-picker-indicator,
+:host-context(.light) .billing-stepper.pro-billing input[type="date"]::-webkit-calendar-picker-indicator,
+:host-context(body.light) .billing-stepper.pro-billing input[type="date"]::-webkit-calendar-picker-indicator,
+:host-context(.light-mode) .billing-stepper.pro-billing input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: none !important;
+  opacity: 0.72 !important;
+}
+
+/* ------------------------------------------------------------------
+   BILLING UI V23 - BRIGHT DATE PICKER ICON THEME FIX
+   Scope: visual-only. Makes date picker icon clearly visible in dark
+   mode while keeping it subtle in light mode.
+------------------------------------------------------------------- */
+.billing-stepper.pro-billing .dob-field,
+.billing-stepper.pro-billing .date-field,
+.billing-stepper.pro-billing .date-control {
+  position: relative;
+}
+
+.billing-stepper.pro-billing .dob-field input[type="date"],
+.billing-stepper.pro-billing .patient-step input[type="date"],
+.billing-stepper.pro-billing input[type="date"] {
+  padding-right: 42px !important;
+  color-scheme: dark;
+}
+
+.billing-stepper.pro-billing .dob-field input[type="date"]::-webkit-calendar-picker-indicator,
+.billing-stepper.pro-billing .patient-step input[type="date"]::-webkit-calendar-picker-indicator,
+.billing-stepper.pro-billing input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(96%) sepia(12%) saturate(450%) hue-rotate(178deg) brightness(1.35) contrast(1.05) !important;
+  opacity: 1 !important;
+  cursor: pointer;
+}
+
+.billing-stepper.pro-billing .dob-field input[type="date"]::-webkit-calendar-picker-indicator:hover,
+.billing-stepper.pro-billing .patient-step input[type="date"]::-webkit-calendar-picker-indicator:hover,
+.billing-stepper.pro-billing input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  filter: invert(100%) sepia(12%) saturate(520%) hue-rotate(178deg) brightness(1.55) contrast(1.1) !important;
+  opacity: 1 !important;
+}
+
+.billing-stepper.pro-billing .date-picker-icon,
+.billing-stepper.pro-billing .date-field mat-icon,
+.billing-stepper.pro-billing .date-control mat-icon,
+.billing-stepper.pro-billing .dob-field mat-icon {
+  color: rgba(241, 245, 249, 0.96) !important;
+  opacity: 1 !important;
+}
+
+.billing-stepper.pro-billing .date-field svg,
+.billing-stepper.pro-billing .date-control svg,
+.billing-stepper.pro-billing .dob-field svg {
+  fill: rgba(241, 245, 249, 0.96) !important;
+  stroke: rgba(241, 245, 249, 0.96) !important;
+  opacity: 1 !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .dob-field input[type="date"],
+:host-context(body.light) .billing-stepper.pro-billing .dob-field input[type="date"],
+:host-context(.light-mode) .billing-stepper.pro-billing .dob-field input[type="date"],
+body:not(.dark-theme) .billing-stepper.pro-billing .dob-field input[type="date"],
+:host-context(.light) .billing-stepper.pro-billing .patient-step input[type="date"],
+:host-context(body.light) .billing-stepper.pro-billing .patient-step input[type="date"],
+:host-context(.light-mode) .billing-stepper.pro-billing .patient-step input[type="date"],
+body:not(.dark-theme) .billing-stepper.pro-billing .patient-step input[type="date"] {
+  color-scheme: light;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .dob-field input[type="date"]::-webkit-calendar-picker-indicator,
+:host-context(body.light) .billing-stepper.pro-billing .dob-field input[type="date"]::-webkit-calendar-picker-indicator,
+:host-context(.light-mode) .billing-stepper.pro-billing .dob-field input[type="date"]::-webkit-calendar-picker-indicator,
+body:not(.dark-theme) .billing-stepper.pro-billing .dob-field input[type="date"]::-webkit-calendar-picker-indicator,
+:host-context(.light) .billing-stepper.pro-billing .patient-step input[type="date"]::-webkit-calendar-picker-indicator,
+:host-context(body.light) .billing-stepper.pro-billing .patient-step input[type="date"]::-webkit-calendar-picker-indicator,
+:host-context(.light-mode) .billing-stepper.pro-billing .patient-step input[type="date"]::-webkit-calendar-picker-indicator,
+body:not(.dark-theme) .billing-stepper.pro-billing .patient-step input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: none !important;
+  opacity: 0.72 !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .date-picker-icon,
+:host-context(body.light) .billing-stepper.pro-billing .date-picker-icon,
+:host-context(.light-mode) .billing-stepper.pro-billing .date-picker-icon,
+body:not(.dark-theme) .billing-stepper.pro-billing .date-picker-icon,
+:host-context(.light) .billing-stepper.pro-billing .date-field mat-icon,
+:host-context(body.light) .billing-stepper.pro-billing .date-field mat-icon,
+:host-context(.light-mode) .billing-stepper.pro-billing .date-field mat-icon,
+body:not(.dark-theme) .billing-stepper.pro-billing .date-field mat-icon,
+:host-context(.light) .billing-stepper.pro-billing .dob-field mat-icon,
+:host-context(body.light) .billing-stepper.pro-billing .dob-field mat-icon,
+:host-context(.light-mode) .billing-stepper.pro-billing .dob-field mat-icon,
+body:not(.dark-theme) .billing-stepper.pro-billing .dob-field mat-icon {
+  color: rgba(51, 65, 85, 0.72) !important;
+  opacity: 1 !important;
+}
+
+/* BILLING V28 - reduce the bottom of the patient card so footer aligns closer. */
+.billing-stepper.pro-billing .patient-entry-card.compact-patient-card,
+.billing-stepper.pro-billing .patient-section-card.basic-info-card,
+.billing-stepper.pro-billing .patient-form-pro > .patient-section-card:first-child {
+  margin-bottom: 0 !important;
+}
+
+.billing-stepper.pro-billing .patient-card-bottom-row {
+  margin-bottom: 0 !important;
+}
+
+/* BILLING V29 - remove the grey/shadow backdrop behind bottom actions.
+   The actions are outside the patient card, so any heavy bottom shadow from the
+   patient card reads like a footer backdrop. Keep cards clean and compact. */
+.billing-stepper.pro-billing .patient-entry-card.compact-patient-card,
+.billing-stepper.pro-billing .patient-section-card.basic-info-card,
+.billing-stepper.pro-billing .patient-form-pro > .patient-section-card:first-child {
+  box-shadow: none !important;
+  margin-bottom: 0 !important;
+}
+
+.billing-stepper.pro-billing .patient-card-bottom-row,
+.billing-stepper.pro-billing .patient-form-pro {
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+.billing-stepper.pro-billing .step-panel.patient-step {
+  padding-bottom: 0 !important;
+}

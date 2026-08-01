@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist-electron",
+    "module": "CommonJS",
+    "target": "ES2022",
+    "types": [
+      "node"
+    ],
+    "typeRoots": [
+      "./node_modules/@types",
+      "./electron-main/types"
+    ]
+  },
+  "include": [
+    "electron-main/main.ts",
+    "electron-main/preload.ts",
+    "electron-main/services/**/*.ts",
+    "electron-main/types/**/*.d.ts"
+  ]
+}

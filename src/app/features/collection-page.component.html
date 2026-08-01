@@ -1,0 +1,508 @@
+<section class="collection-page">
+      <div class="collection-fixed-head lab-workflow-head">
+        <div class="workflow-title-row">
+          <div>
+            <h2>Lab Workflow</h2>
+            <p>{{workflowSubtitle()}}</p>
+          </div>
+          <button class="btn ghost small" type="button" (click)="load()" *ngIf="workflowStep()!=='reporting'">Refresh</button>
+        </div>
+
+        <div class="workflow-tabs" aria-label="Lab workflow steps">
+          <button type="button" [class.active]="workflowStep()==='requests'" (click)="setWorkflowStep('requests')">
+            <span>Requests</span><b>{{workflowCount('requests')}}</b>
+          </button>
+          <button type="button" [class.active]="workflowStep()==='collection'" (click)="setWorkflowStep('collection')">
+            <span>Collection</span><b>{{workflowCount('collection')}}</b>
+          </button>
+          <button type="button" [class.active]="workflowStep()==='reporting'" (click)="setWorkflowStep('reporting')">
+            <span>Reporting</span><b>{{workflowCount('reporting')}}</b>
+          </button>
+          <button type="button" [class.active]="workflowStep()==='logs'" (click)="setWorkflowStep('logs')">
+            <span>Logs</span><b>{{workflowCount('logs')}}</b>
+          </button>
+        </div>
+
+        <div class="collection-tabs nested-tabs" *ngIf="workflowStep()==='requests'">
+          <button type="button" [class.active]="tab()==='pending'" (click)="setTab('pending')"><span>Pending Requests</span><b>{{tabCount('pending')}}</b></button>
+        </div>
+
+        <div class="collection-tabs nested-tabs" *ngIf="workflowStep()==='collection'">
+          <button type="button" [class.active]="tab()==='collectionpending'" (click)="setTab('collectionpending')"><span>Pending</span><b>{{tabCount('collectionpending')}}</b></button>
+          <button type="button" [class.active]="tab()==='inhouse'" (click)="setTab('inhouse')"><span>In-house</span><b>{{tabCount('inhouse')}}</b></button>
+          <button type="button" [class.active]="tab()==='outsource'" (click)="setTab('outsource')"><span>Outsource</span><b>{{tabCount('outsource')}}</b></button>
+          <button type="button" [class.active]="tab()==='internalcheck'" (click)="setTab('internalcheck')" title="Internal check"><span>Internal</span><b>{{tabCount('internalcheck')}}</b></button>
+          <button type="button" [class.active]="tab()==='rejected'" (click)="setTab('rejected')"><span>Rejected</span><b>{{tabCount('rejected')}}</b></button>
+        </div>
+      </div>
+
+      <div class="confirm-backdrop" *ngIf="leavePromptOpen">
+        <div class="confirm-card">
+          <h3>Unsaved collection entry</h3>
+          <p>Current specimen selection is not saved. Leave without saving?</p>
+          <div class="button-row"><button class="btn ghost" type="button" (click)="leavePromptOpen=false">Stay</button><button class="btn danger" type="button" (click)="confirmLeave()">Leave</button></div>
+        </div>
+      </div>
+
+      <div class="reject-backdrop" *ngIf="rejectModalOpen" (click)="closeRejectModal()">
+        <form class="modal-card reject-card" (ngSubmit)="confirmReject()" (click)="$event.stopPropagation()">
+          <div class="modal-head"><div><h3>Reject specimen</h3><p>{{rejectTarget?.specimen_id}} · {{rejectTarget?.specimen_name}}</p></div><button class="icon" type="button" (click)="closeRejectModal()">✕</button></div>
+          <label>Reason *<textarea required [(ngModel)]="rejectReason" name="rejectReason" placeholder="Hemolysed sample, insufficient quantity, wrong container..." data-collection-autofocus="reject"></textarea></label>
+          <div class="inline-error" *ngIf="rejectError">{{rejectError}}</div>
+          <div class="button-row"><button class="btn ghost" type="button" (click)="closeRejectModal()">Cancel</button><button class="btn danger" type="submit">Reject sample</button></div>
+        </form>
+      </div>
+
+      <div class="reject-backdrop" *ngIf="approvedReportRejectModalOpen" (click)="closeApprovedReportRejectModal()">
+        <form class="modal-card reject-card" (ngSubmit)="confirmApprovedReportReject()" (click)="$event.stopPropagation()">
+          <div class="modal-head"><div><h3>Reject approved report</h3><p>{{approvedReportRejectTarget?.bill_no}} · {{approvedReportRejectTarget?.patient_name}}</p></div><button class="icon" type="button" (click)="closeApprovedReportRejectModal()">✕</button></div>
+          <p class="delete-warning">This reopens the approved report for correction. Use this when an approved report must be corrected/rejected without changing the collected sample.</p>
+          <label>Reason *<textarea required [(ngModel)]="approvedReportRejectReason" name="approvedReportRejectReason" placeholder="Reason for rejecting/reopening the approved report..." data-collection-autofocus="approved-report-reject"></textarea></label>
+          <div class="inline-error" *ngIf="approvedReportRejectError">{{approvedReportRejectError}}</div>
+          <div class="button-row"><button class="btn ghost" type="button" (click)="closeApprovedReportRejectModal()">Cancel</button><button class="btn danger" type="submit">Reject report</button></div>
+        </form>
+      </div>
+
+      <div class="reject-backdrop" *ngIf="dispatchRejectConfirmOpen" (click)="closeDispatchRejectConfirm()">
+        <div class="modal-card reject-card" (click)="$event.stopPropagation()">
+          <div class="modal-head"><div><h3>Reject dispatched sample?</h3><p>{{dispatchRejectTarget?.specimen_id}} · {{dispatchRejectTarget?.specimen_name}}</p></div><button class="icon" type="button" (click)="closeDispatchRejectConfirm()">✕</button></div>
+          <p class="delete-warning"><b>This sample is already dispatched.</b><br>Rejecting it will mark the sample as rejected and stop normal outsource dispatch/result workflow. Continue only after confirming with the vendor or lab process.</p>
+          <div class="button-row"><button class="btn ghost" type="button" (click)="closeDispatchRejectConfirm()">Cancel</button><button class="btn danger" type="button" (click)="continueRejectDispatchedSample()">Continue reject</button></div>
+        </div>
+      </div>
+
+      <div class="reject-backdrop" *ngIf="deleteModalOpen" (click)="closeDeleteModal()">
+        <div class="modal-card reject-card" (click)="$event.stopPropagation()">
+          <div class="modal-head"><div><h3>Delete rejected sample?</h3><p>{{deleteTarget?.specimen_id}} · {{deleteTarget?.specimen_name}}</p></div><button class="icon" type="button" (click)="closeDeleteModal()">✕</button></div>
+          <p class="delete-warning">This removes the rejected specimen entry and sends its tests back to Pending Requests.</p>
+          <div class="button-row"><button class="btn ghost" type="button" (click)="closeDeleteModal()">Cancel</button><button class="btn danger" type="button" (click)="confirmDeleteRejected()">Delete rejected sample</button></div>
+        </div>
+      </div>
+      <div class="reject-backdrop" *ngIf="vendorResultModalOpen" (click)="closeVendorResultModal()">
+        <form class="modal-card vendor-result-card" (ngSubmit)="confirmVendorResult()" (click)="$event.stopPropagation()">
+          <div class="modal-head">
+            <div>
+              <h3>Receive vendor result</h3>
+              <p>{{vendorResultTarget?.specimen_id}} · {{vendorResultTarget?.outsource_vendor_name || 'Vendor'}} · {{vendorResultTarget?.specimen_name}}</p>
+            </div>
+            <button class="icon" type="button" (click)="closeVendorResultModal()">✕</button>
+          </div>
+          <p class="delete-warning">Choose how this outsourced result should be completed. This applies only to outsourced tests in this sample, not in-house tests.</p>
+          <div class="vendor-method-choice">
+            <label [class.active]="vendorResultMethod==='ATTACH_REPORT_ONLY'">
+              <input type="radio" name="vendorResultMethod" value="ATTACH_REPORT_ONLY" [(ngModel)]="vendorResultMethod">
+              <span><b>Attach vendor report PDF/image only</b><small>Use the vendor report as the result. Final report will show “See attached vendor report”.</small></span>
+            </label>
+            <label [class.active]="vendorResultMethod==='ENTER_VALUES'">
+              <input type="radio" name="vendorResultMethod" value="ENTER_VALUES" [(ngModel)]="vendorResultMethod">
+              <span><b>Enter result values in our report</b><small>Mark vendor result received and type values from Reporting.</small></span>
+            </label>
+          </div>
+          <label class="vendor-file-field" *ngIf="vendorResultMethod==='ATTACH_REPORT_ONLY'">Vendor report file / reference
+            <input type="text" [(ngModel)]="vendorReportFile" name="vendorReportFile" placeholder="PDF/image file name or reference">
+            <input type="file" accept=".pdf,image/*" (change)="onVendorFileSelected($event)">
+            <em *ngIf="vendorResultError">{{vendorResultError}}</em>
+          </label>
+          <label class="vendor-file-field">Remarks
+            <textarea [(ngModel)]="vendorResultRemarks" name="vendorResultRemarks" placeholder="Optional vendor remarks"></textarea>
+          </label>
+          <div class="button-row">
+            <button class="btn ghost" type="button" (click)="closeVendorResultModal()">Cancel</button>
+            <button class="btn primary" type="submit">Continue</button>
+          </div>
+        </form>
+      </div>
+
+
+      <div class="reject-backdrop" *ngIf="specimenPromptOpen" (click)="closeSpecimenPrompt()">
+        <div class="modal-card reject-card" (click)="$event.stopPropagation()">
+          <div class="modal-head"><div><h3>Specimen type required</h3><p>Select the actual tube/specimen before saving collection.</p></div><button class="icon" type="button" (click)="closeSpecimenPrompt()">✕</button></div>
+          <div class="missing-list">
+            <div class="missing-item" *ngFor="let t of missingSpecimenTests">
+              <b>{{t.test_name}}</b>
+              <span>{{specimenOptionNames(t)}}</span>
+            </div>
+          </div>
+          <div class="button-row"><button class="btn primary" type="button" (click)="closeSpecimenPrompt()">Select specimen</button></div>
+        </div>
+      </div>
+
+      <div class="reject-backdrop" *ngIf="ppEarlyPromptOpen" (click)="closePpEarlyPrompt()">
+        <div class="modal-card pp-warning-card" (click)="$event.stopPropagation()">
+          <div class="modal-head"><div><h3>Post-prandial collection is early</h3><p>Confirm before moving to the next step.</p></div><button class="icon" type="button" (click)="closePpEarlyPrompt()">✕</button></div>
+          <p class="delete-warning"><b>The selected post-prandial sample is scheduled for later.</b><br>Collecting it before the due time may make the result clinically incorrect.</p>
+          <div class="pp-time-list">
+            <div class="pp-time-item" *ngFor="let t of earlyPpTests">
+              <b>{{t.test_name}}</b>
+              <span>Due at {{dateTime(t.expected_collect_at)}} · Current time {{dateTime(nowForDisplay())}}</span>
+            </div>
+          </div>
+          <div class="button-row pp-warning-actions"><button class="btn ghost" type="button" (click)="closePpEarlyPrompt()">Go back</button><button class="btn primary" type="button" (click)="confirmPpEarlyProceed()">Proceed anyway</button></div>
+        </div>
+      </div>
+
+
+
+      <app-report-typing-page *ngIf="workflowStep()==='reporting'" (changed)="changed.emit()"></app-report-typing-page>
+
+      <form *ngIf="workflowStep()!=='reporting' && mode()==='collect'" class="master-card collect-card" (ngSubmit)="saveCollection()">
+            <div class="section-title form-head"><div><h3>Collect specimen</h3><p>{{activeBill?.bill_no}} · {{activeBill?.patient_name}}</p></div><button class="btn ghost small" type="button" (click)="requestBackToList()">Back to list</button></div>
+            <div class="mini-stepper">
+              <button type="button" [class.active]="step()===1" (click)="step.set(1)"><b>1</b><span>Select tests</span><em>{{pendingStepStatus()}}</em></button>
+              <button type="button" [class.active]="step()===2" (click)="goToCollectionDetails()"><b>2</b><span>Collection details</span><em>{{detailsStepStatus()}}</em></button>
+              <button type="button" [class.active]="step()===3" (click)="step.set(3)"><b>3</b><span>Tubes</span><em>{{tubesStepStatus()}}</em></button>
+              <button type="button" [class.active]="step()===4" (click)="step.set(4)"><b>4</b><span>Review & save</span><em>{{reviewStepStatus()}}</em></button>
+            </div>
+            <div class="flow-status"><b>{{collectStepStatusTitle()}}</b><span>{{collectStepStatusText()}}</span></div>
+
+            <div *ngIf="step()===1" class="step-pane selection-step-pane">
+              <div class="timed-rule-card" *ngIf="timedRuleSummary()"><b>Smart timed collection</b><span>{{timedRuleSummary()}}</span></div>
+              <div class="tool-row"><label class="plain-check"><input type="checkbox" [checked]="allSelected()" (change)="toggleAll($any($event.target).checked)"><span>Select all pending tests</span></label><span>{{selectedTests().length}} selected</span></div>
+              <div class="collection-type-warning" *ngIf="selectedCollectionTypes().length > 1"><b>Different collection types selected</b><span>Select only one collection type for this collection, or change selected tests to the same collection type.</span></div>
+              <div class="select-group-list">
+                <div class="select-group-card" *ngFor="let g of profileGroups(false); trackBy: trackProfileGroup">
+                  <div class="select-group-head">
+                    <label class="group-check"><input type="checkbox" [checked]="groupAllSelected(g)" [indeterminate]="groupPartiallySelected(g)" (change)="toggleGroupSelection(g,$any($event.target).checked)"><span><b>{{g.name}}</b><small>{{g.tests.length}} test{{g.tests.length>1?'s':''}}</small></span></label>
+                    <label class="group-type">Apply collection type<select [ngModel]="groupSampleTypeValue(g)" [ngModelOptions]="{standalone:true}" (ngModelChange)="setGroupSampleType(g,$event)"><option value="MIXED">Mixed</option><option *ngFor="let s of sampleTypes" [value]="s">{{s}}</option></select></label>
+                  </div>
+                  <div class="select-test-list">
+                    <div class="select-test-row" *ngFor="let t of g.tests; let i=index" [class.selected]="t.selected">
+                      <span class="profile-row-index">{{i+1}}</span>
+                      <label class="test-select-name"><input type="checkbox" [(ngModel)]="t.selected" [name]="'sel'+t.report_item_id" (change)="markDirty()"><span><b>{{t.test_name}}</b><small>{{t.department_name || g.name}}</small><em class="timed-badge" *ngIf="t.timed_category && t.timed_category!=='NORMAL'">{{timedCategoryLabel(t)}}</em></span></label>
+                      <label class="row-field collection-type-field">Collection type<select [ngModel]="t.sample_type" [name]="'step1sample'+t.report_item_id" [disabled]="!canChangeCollectionType(t)" (ngModelChange)="onStep1CollectionTypeChange(t,$event)"><option *ngFor="let s of sampleTypes" [value]="s">{{s}}</option></select></label>
+                      <span class="status-pill">{{t.selected ? 'Selected' : 'Not selected'}}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="inline-error" *ngIf="formError">{{formError}}</div>
+              <div class="button-row"><button class="btn primary" type="button" [disabled]="!selectedTests().length" (click)="goToCollectionDetails()">Next: Collection details</button></div>
+            </div>
+
+            <div *ngIf="step()===2" class="step-pane compact-collection-design">
+              <div class="timed-rule-card warning" *ngIf="hasFastingAndPpSelected()"><b>Fasting + PP detected</b><span>Post-prandial tests are separated as collect later by default. Do not collect fasting and PP samples at the same time.</span></div>
+
+              <div class="collection-defaults-card">
+                <div class="defaults-grid">
+                  <label>Default specimen<select [(ngModel)]="bulkSpecimenId" name="bulkSpecimenId" (change)="applyBulkSpecimenId()"><option [ngValue]="0">Use test default</option><option *ngFor="let s of allSpecimenOptions()" [ngValue]="s.id">{{s.name}}</option></select></label>
+                  <label>Default mode<select [(ngModel)]="bulkMode" name="bulkMode" (change)="applyBulkMode()"><option value="INHOUSE">In-house</option><option value="OUTSOURCE">Outsource</option><option value="BOTH">Outsource + internal check</option></select></label>
+                  <label>Default priority<select [(ngModel)]="bulkPriority" name="bulkPriority" (change)="applyBulkPriority()"><option value="ROUTINE">Routine</option><option value="STAT">STAT</option><option value="CRITICAL">Critical</option><option value="VERIFICATION">Verification</option><option value="HOLD">Hold</option></select></label>
+                </div>
+                <div class="defaults-note"><span>ⓘ</span>Collection type was selected in Step 1. Configure specimen, mode, priority, conditional time and remarks here.</div>
+              </div>
+
+              <div class="profile-collection-list">
+                <div class="profile-collect-card" *ngFor="let g of profileGroups(true); trackBy: trackProfileGroup">
+                  <div class="profile-head">
+                    <div class="profile-title"><span class="profile-icon">☷</span><div><b>{{g.name}}</b><small>{{g.tests.length}} test{{g.tests.length>1?'s':''}}</small></div></div>
+                    <div class="profile-controls">
+                      <label>Specimen<select [ngModel]="profileSpecimenValue(g)" [ngModelOptions]="{standalone:true}" (ngModelChange)="setProfileSpecimen(g,$event)"><option [ngValue]="0">Mixed / default</option><option *ngFor="let s of profileSpecimenOptions(g)" [ngValue]="s.id">{{s.name}}</option></select></label>
+                      <label>Mode<select [ngModel]="profileModeValue(g)" [ngModelOptions]="{standalone:true}" (ngModelChange)="setProfileMode(g,$event)"><option value="MIXED">Mixed</option><option value="INHOUSE">In-house</option><option value="OUTSOURCE">Outsource</option><option value="BOTH">Outsource + internal check</option></select></label>
+                      <label *ngIf="profileNeedsVendor(g)">Vendor<select [ngModel]="profileVendorValue(g)" [ngModelOptions]="{standalone:true}" (ngModelChange)="setProfileVendor(g,$event)"><option [ngValue]="0">Select vendor</option><option *ngFor="let v of outsourceVendors" [ngValue]="v.id">{{v.name}}</option></select></label>
+                      <label>Priority<select [ngModel]="profilePriorityValue(g)" [ngModelOptions]="{standalone:true}" (ngModelChange)="setProfilePriority(g,$event)"><option value="MIXED">Mixed</option><option value="ROUTINE">Routine</option><option value="STAT">STAT</option><option value="CRITICAL">Critical</option><option value="VERIFICATION">Verification</option><option value="HOLD">Hold</option></select></label>
+                      <button class="btn primary small" type="button" (click)="applyProfileToAll(g)">Apply to all {{g.tests.length}}</button>
+                    </div>
+                  </div>
+                  <div class="profile-help">Collection type was selected in Step 1. Configure specimen, mode, vendor, priority, time only when needed, and remarks here.</div>
+                  <div class="profile-table clean-profile-table">
+                    <div class="profile-table-head clean-head details-head"><span>#</span><span>Test / Sample</span><span>Specimen</span><span>Mode</span><span>Vendor</span><span>Priority</span><span>Timing</span><span>Remarks</span></div>
+                    <div class="profile-test-row clean-row" *ngFor="let t of g.tests; let i=index" [class.not-selected]="!t.selected" [class.override-on]="t.override">
+                      <span class="profile-row-index">{{i+1}}</span>
+                      <div class="test-name-cell"><b>{{t.test_name}}</b><small>{{t.department_name || g.name}}</small><em class="timed-badge" *ngIf="t.timed_category && t.timed_category!=='NORMAL'">{{timedCategoryLabel(t)}}</em></div>
+
+                      <ng-container *ngIf="singleSpecimen(t); else multiSpecimenField">
+                        <span class="value-pill specimen-fixed">{{singleSpecimen(t)?.name || specimenDisplay(t)}}</span>
+                      </ng-container>
+                      <ng-template #multiSpecimenField>
+                        <label class="row-field" [class.field-error]="t.specimen_missing"><select [(ngModel)]="t.specimen_type_id" [name]="'specimen'+t.report_item_id" (change)="onRowSpecimenChange(t)"><option [ngValue]="0">Select specimen</option><option *ngFor="let s of t.specimen_options" [ngValue]="s.id">{{s.name}}</option></select><em *ngIf="needsSpecimenChoice(t)">multiple options</em></label>
+                      </ng-template>
+
+                      <label class="row-field"><select [(ngModel)]="t.collection_mode" [name]="'mode'+t.report_item_id" (change)="markRowCustom(t)"><option value="INHOUSE">In-house</option><option value="OUTSOURCE">Outsource</option><option value="BOTH">Outsource + internal check</option></select></label>
+                      <label class="row-field vendor-required-field vendor-select-only" *ngIf="requiresVendor(t)" [class.field-error]="isVendorMissing(t)"><select aria-label="Outsource vendor" [(ngModel)]="t.outsource_vendor_id" [name]="'vendor'+t.report_item_id" (change)="markRowCustom(t)"><option [ngValue]="0">Select vendor</option><option *ngFor="let v of outsourceVendors" [ngValue]="v.id">{{v.name}}</option></select><em *ngIf="isVendorMissing(t)">Vendor required</em></label><span class="muted-inline vendor-empty" *ngIf="!requiresVendor(t)">Not needed</span>
+                      <label class="row-field"><select [(ngModel)]="t.sample_priority" [name]="'priority'+t.report_item_id" (change)="markRowCustom(t)"><option value="ROUTINE">Routine</option><option value="STAT">STAT</option><option value="CRITICAL">Critical</option><option value="VERIFICATION">Verification</option><option value="HOLD">Hold</option></select></label>
+                      <label class="row-field" *ngIf="requiresTiming(t)"><input type="time" [ngModel]="collectionTimeValue(t)" [name]="'time'+t.report_item_id" (ngModelChange)="setCollectionTime(t,$event)" title="Collection time"></label><span class="muted-inline" *ngIf="!requiresTiming(t)">Not needed</span>
+                      <label class="row-field"><input type="text" [(ngModel)]="t.remarks" [name]="'remarks'+t.report_item_id" placeholder="Optional remarks" (input)="markRowCustom(t)"></label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="inline-error" *ngIf="formError">{{formError}}</div><div class="hint-card"><b>Specimen ID format</b><span>Generated as ddMMyyyy + specimen code + 4 digit count. Count restarts every day for each specimen.</span></div>
+              <div class="button-row"><button class="btn ghost" type="button" (click)="step.set(1)">Back</button><button class="btn primary" type="button" (click)="goToTubes()">Next: Tubes</button></div>
+            </div>
+
+            <div *ngIf="step()===3" class="step-pane">
+              <div class="timed-rule-card"><b>Samples / containers to prepare</b><span>Grouped by physical specimen/container. Same specimen uses one barcode even when tests have different workflows.</span></div>
+              <div class="tube-board">
+                <div class="tube-card" *ngFor="let g of tubeGroups()" [style.--tube-color]="g.color">
+                  <div class="tube-visual"><span></span></div>
+                  <div class="tube-content">
+                    <div class="tube-title"><b>{{g.label}}</b><em>{{g.tests.length}} test{{g.tests.length>1?'s':''}}</em></div>
+                    <small>{{g.specimen_name}} · {{g.sample_type}} · {{collectionModeLabel(g.mode)}} · {{timingLabel(g.collect_timing)}}</small>
+                    <div class="tube-tests"><span *ngFor="let t of g.tests">{{t.test_name}}</span></div>
+                    <p *ngIf="g.remarks">{{g.remarks}}</p>
+                  </div>
+                </div>
+              </div>
+              <div class="inline-error" *ngIf="formError">{{formError}}</div>
+              <div class="button-row"><button class="btn ghost" type="button" (click)="step.set(2)">Back</button><button class="btn primary" type="button" (click)="step.set(4)">Review</button></div>
+            </div>
+
+            <div *ngIf="step()===4" class="step-pane">
+              <div class="summary-grid">
+                <div class="summary-card"><span>Patient</span><b>{{activeBill?.patient_name}}</b></div>
+                <div class="summary-card"><span>Selected tests</span><b>{{selectedTests().length}}</b></div>
+                <div class="summary-card"><span>Samples/barcodes to create</span><b>{{collectionGroups().length}}</b></div>
+              </div>
+              <table class="master-table"><thead><tr><th>Specimen</th><th>Specimen ID group</th><th>Collection type</th><th>Timing</th><th>Priority</th><th>Tests</th><th>Remarks</th></tr></thead><tbody><tr *ngFor="let g of collectionGroups()"><td><b>{{g.specimen_name}}</b><small>ID generated on save</small></td><td><span class="status-pill">One barcode per specimen</span></td><td>{{g.sample_type}}</td><td><b>{{g.collect_timing==='LATER' ? 'Scheduled' : 'Now'}}</b><small *ngIf="g.expected_collect_at">{{dateTime(g.expected_collect_at)}}</small></td><td>{{priorityLabel(g.sample_priority)}}</td><td>{{g.tests.length}}</td><td>{{g.remarks || '—'}}</td></tr></tbody></table>
+              <div class="button-row"><button class="btn ghost" type="button" (click)="step.set(3)">Back</button><button class="btn primary" type="submit">Save collection</button></div>
+            </div>
+          </form>
+
+      <div class="collection-content" *ngIf="workflowStep()!=='reporting' && mode()!=='collect'" [ngSwitch]="tab()">
+        <div *ngSwitchCase="'pending'" class="panel">
+          <div *ngIf="mode()==='list'" class="master-card">
+            <div class="filter-row"><input placeholder="Search bill / patient / mobile..." [(ngModel)]="pendingSearch" name="pendingSearch"><input type="date" [(ngModel)]="fromDate" name="pendingFromDate"><input type="date" [(ngModel)]="toDate" name="pendingToDate"></div>
+            <table class="master-table">
+              <thead><tr><th>Bill</th><th>Patient</th><th>Billed date</th><th>Collection time</th><th>Action</th></tr></thead>
+              <tbody>
+                <tr *ngFor="let b of filteredPendingBills()" class="pending-clean-row">
+                  <td>
+                    <div class="pending-bill-cell">
+                      <span class="pending-progress-ring" [style.--pct]="pendingProgressPercent(b)"><b>{{pendingVsTotalLabel(b)}}</b></span>
+                      <div><b>{{b.bill_no}}</b><small>{{b.consultant_name || 'No consultant'}}</small></div>
+                    </div>
+                  </td>
+                  <td>
+                    <b>{{b.patient_name}}<ng-container *ngIf="patientAgeGender(b) !== '—'"> · {{patientAgeGender(b)}}</ng-container></b>
+                    <small>{{b.patient_no || '—'}}<ng-container *ngIf="b.mobile"> · {{b.mobile}}</ng-container></small>
+                    <small *ngIf="b.consultant_name" class="ordered-meta">Ordered by consultant: {{b.consultant_name}}</small>
+                  </td>
+                  <td><b>{{dateOnly(b.bill_date || b.created_at)}}</b><small>{{timeOnly(b.bill_date || b.created_at)}}</small></td>
+                  <td>
+                    <div class="timed-stack">
+                      <span class="collection-time-chip" [class.due]="pendingCollectionIsTimed(b)" [class.warning]="pendingCollectionWarning(b)">{{pendingCollectionTimeLabel(b)}}</span>
+                      <span class="collection-time-chip due next" *ngIf="pendingNextCollectionLabel(b)">{{pendingNextCollectionLabel(b)}}</span>
+                      <small *ngIf="pendingCollectionTimeNote(b)" [class.timed-note]="pendingCollectionWarning(b)">{{pendingCollectionTimeNote(b)}}</small>
+                    </div>
+                  </td>
+                  <td><div class="icon-actions"><button class="btn primary small" type="button" (click)="acceptRequest(b)">Approve Request</button></div></td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="empty" *ngIf="!filteredPendingBills().length">No pending requests found.</div>
+          </div>
+
+
+        </div>
+
+        <div *ngSwitchCase="'collectionpending'" class="panel">
+          <div *ngIf="mode()==='list'" class="master-card">
+            <div class="filter-row"><input placeholder="Search bill / patient / mobile..." [(ngModel)]="pendingSearch" name="acceptedPendingSearch"><input type="date" [(ngModel)]="fromDate" name="acceptedPendingFromDate"><input type="date" [(ngModel)]="toDate" name="acceptedPendingToDate"></div>
+            <table class="master-table">
+              <thead><tr><th>Bill</th><th>Patient</th><th>Billed date</th><th>Collection time</th><th>Action</th></tr></thead>
+              <tbody>
+                <tr *ngFor="let b of filteredAcceptedPendingBills()" class="pending-clean-row">
+                  <td>
+                    <div class="pending-bill-cell">
+                      <span class="pending-progress-ring" [style.--pct]="pendingProgressPercent(b)"><b>{{pendingVsTotalLabel(b)}}</b></span>
+                      <div><b>{{b.bill_no}}</b><small>{{b.consultant_name || 'No consultant'}}</small></div>
+                    </div>
+                  </td>
+                  <td>
+                    <b>{{b.patient_name}}<ng-container *ngIf="patientAgeGender(b) !== '—'"> · {{patientAgeGender(b)}}</ng-container></b>
+                    <small>{{b.patient_no || '—'}}<ng-container *ngIf="b.mobile"> · {{b.mobile}}</ng-container></small>
+                    <small *ngIf="b.consultant_name" class="ordered-meta">Ordered by consultant: {{b.consultant_name}}</small>
+                  </td>
+                  <td><b>{{dateOnly(b.bill_date || b.created_at)}}</b><small>{{timeOnly(b.bill_date || b.created_at)}}</small></td>
+                  <td>
+                    <div class="timed-stack">
+                      <span class="collection-time-chip" [class.due]="pendingCollectionIsTimed(b)" [class.warning]="pendingCollectionWarning(b)">{{pendingCollectionTimeLabel(b)}}</span>
+                      <span class="collection-time-chip due next" *ngIf="pendingNextCollectionLabel(b)">{{pendingNextCollectionLabel(b)}}</span>
+                      <small *ngIf="pendingCollectionTimeNote(b)" [class.timed-note]="pendingCollectionWarning(b)">{{pendingCollectionTimeNote(b)}}</small>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="icon-actions">
+                      <button class="btn primary small" type="button" (click)="openCollection(b)">Start Collection</button>
+                      <button class="btn danger small" type="button" (click)="cancelPendingCollection(b)">Cancel Collection</button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="empty" *ngIf="!filteredAcceptedPendingBills().length">No accepted requests waiting for collection.</div>
+          </div>
+        </div>
+
+        <div *ngSwitchCase="'log'" class="panel">
+          <div class="master-card">
+            <div class="section-title"><div><h3>Collection Log</h3><p>Audit trail for rejected, recollected, cancelled, outsource dispatch and internal check actions.</p></div></div>
+            <div class="filter-row log-filter-row"><input placeholder="Search bill / patient / specimen / action..." [(ngModel)]="logSearch" name="logSearch"><select [(ngModel)]="logFilter" name="logFilter"><option value="ALL">All actions</option><option value="REJECTED">Rejected</option><option value="RECOLLECTED">Recollected</option><option value="CANCELLED">Cancelled</option><option value="OUTSOURCE">Outsource</option><option value="INTERNAL">Internal check</option><option value="DISPATCH">Dispatch</option></select><input type="date" [(ngModel)]="fromDate" name="logFromDate"><input type="date" [(ngModel)]="toDate" name="logToDate"></div>
+            <table class="master-table"><thead><tr><th>Date & time</th><th>Action</th><th>Bill / Patient</th><th>Specimen</th><th>Details</th></tr></thead><tbody><tr *ngFor="let l of filteredCollectionLogs()"><td><b>{{dateTime(l.created_at)}}</b></td><td><span class="status-pill">{{logActionLabel(l.action)}}</span></td><td><b>{{l.bill_no || '—'}}</b><small>{{l.patient_name || '—'}}</small></td><td><b>{{l.specimen_id || '—'}}</b><small>{{l.specimen_name || '—'}}</small></td><td>{{l.details || '—'}}</td></tr></tbody></table>
+            <div class="empty" *ngIf="!filteredCollectionLogs().length">No collection log records found.</div>
+          </div>
+        </div>
+
+
+        <div *ngSwitchDefault class="panel">
+          <div class="master-card">
+            <div class="section-title"><div><h3>{{currentListTitle()}}</h3><p>{{tabStatusText()}}</p></div></div>
+            <div class="filter-row collection-filter-row"><input placeholder="Search specimen / bill / patient / test..." [(ngModel)]="collectionSearch" name="collectionSearch"><select [(ngModel)]="collectionGroupMode" name="collectionGroupMode"><option value="SPECIMEN">Show specimens</option><option value="BILL">Group by bill</option></select><input type="date" [(ngModel)]="fromDate" name="fromDate"><input type="date" [(ngModel)]="toDate" name="toDate"></div>
+
+            <div class="bill-worklist" *ngIf="collectionGroupMode==='BILL' && collectionBillGroups().length; else specimenCollectionList">
+              <article class="bill-work-card" *ngFor="let g of collectionBillGroups()" [class.expanded]="isBillExpanded(g)">
+                <div class="bill-summary-row">
+                  <div class="sample-total-block bill-sample-count-block">
+                    <span class="mini-icon">▦</span>
+                    <div><b>{{g.sampleCount}}</b><small>{{g.sampleCount===1 ? 'sample' : 'samples'}}</small></div>
+                  </div>
+                  <div class="bill-id-block">
+                    <b>{{g.bill_no || 'Bill not available'}}</b>
+                    <small>{{g.billedParameters}} parameters billed</small>
+                  </div>
+                  <div class="patient-block">
+                    <b>{{g.patient_name}} <span *ngIf="g.age || g.gender">· {{patientAgeGender(g)}}</span></b>
+                    <small>{{g.patient_no || 'Patient'}}</small>
+                  </div>
+                  <div class="mode-block">
+                    <b>{{g.modeLabel}}</b>
+                    <small>{{g.priorityLabel}}</small>
+                  </div>
+                  <div class="date-block">
+                    <span>Last collected</span>
+                    <b>{{dateTime(g.latestCollectedAt)}}</b>
+                  </div>
+                  <div class="dual-status-block">
+                    <ng-container *ngIf="isRejectedCollectionGroup(g); else groupedNormalStatus">
+                      <span class="clean-status rejected">Rejected</span>
+                    </ng-container>
+                    <ng-template #groupedNormalStatus>
+                      <span class="clean-status ok">Sample collected</span>
+                      <span class="clean-status" [class.ok]="g.reportStatus==='Report approved'" [class.pending]="g.reportStatus!=='Report approved'">{{g.reportStatus}}</span>
+                    </ng-template>
+                  </div>
+                  <div class="work-actions menu-actions">
+                    <button class="action-menu-trigger" type="button" title="Actions" (click)="toggleActionMenu(billExpandKey(g), $event); $event.stopPropagation()">⋮</button>
+                    <div class="action-menu" *ngIf="isActionMenuOpen(billExpandKey(g))" [ngStyle]="actionMenuStyle()" (click)="$event.stopPropagation()">
+                      <button type="button" (click)="viewBillDetailsPdf(g); closeActionMenu()"><span>👁</span>View details</button>
+                      <button type="button" (click)="printBillDetails(g); closeActionMenu()"><span>🖨</span>Print details</button>
+                      <button type="button" (click)="printBillBarcodes(g); closeActionMenu()"><span>▥</span>Print barcodes</button>
+                      <button type="button" (click)="toggleBillExpand(g); closeActionMenu()"><span>{{isBillExpanded(g) ? '⌃' : '⌄'}}</span>{{isBillExpanded(g) ? 'Hide samples' : 'Show samples'}}</button>
+                      <button *ngIf="tab()==='rejected'" type="button" (click)="recollectBillSamples(g); closeActionMenu()"><span>↺</span>Recollect</button>
+                      <button *ngIf="tab()==='rejected'" type="button" class="danger" (click)="deleteRejectedBillSamples(g); closeActionMenu()"><span>🗑</span>Delete rejected</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="specimen-expanded" *ngIf="isBillExpanded(g)">
+                  <div class="expanded-head">
+                    <div><b>Samples and tests in this bill</b><small>{{g.sampleCount}} samples · {{g.billedParameters}} parameters billed</small></div>
+                    <span>Use the view icon to open a printable bill/sample details page.</span>
+                  </div>
+                  <div class="sample-detail-list">
+                    <div class="sample-detail-card" *ngFor="let c of g.samples">
+                      <div class="sample-detail-head">
+                        <div><b>{{c.specimen_id}}</b><small>{{c.specimen_name || 'Specimen'}} · {{c.sample_type || '—'}} · {{dateTime(c.collected_at)}}</small></div>
+                        <div class="work-actions inline-actions menu-actions">
+                          <button class="action-menu-trigger compact" type="button" title="Actions" (click)="toggleActionMenu(collectionExpandKey(c), $event); $event.stopPropagation()">⋮</button>
+                          <div class="action-menu" *ngIf="isActionMenuOpen(collectionExpandKey(c))" [ngStyle]="actionMenuStyle()" (click)="$event.stopPropagation()">
+                            <button type="button" (click)="printCollectionDetails(c); closeActionMenu()"><span>👁</span>View details</button>
+                            <button type="button" (click)="printCollectionDetails(c); closeActionMenu()"><span>🖨</span>Print details</button>
+                            <button type="button" (click)="printBarcode(c); closeActionMenu()"><span>▥</span>Print barcode</button>
+                            <button type="button" (click)="toggleCollectionExpand(c); closeActionMenu()"><span>{{isCollectionExpanded(c) ? '⌃' : '⌄'}}</span>{{isCollectionExpanded(c) ? 'Hide tests' : 'Show tests'}}</button>
+                            <button *ngIf="tab()==='outsource'" type="button" (click)="printDispatch(c); closeActionMenu()"><span>⇱</span>Print dispatch</button>
+                            <button *ngIf="tab()==='outsource' && c.dispatch_status!=='DISPATCHED' && c.dispatch_status!=='RESULT_RECEIVED'" type="button" (click)="setDispatchStatus(c,'DISPATCHED'); closeActionMenu()"><span>↗</span>Dispatch</button>
+                            <button *ngIf="tab()==='outsource' && c.dispatch_status==='DISPATCHED'" type="button" (click)="setDispatchStatus(c,'RESULT_RECEIVED'); closeActionMenu()"><span>✓</span>Received</button>
+                            <button *ngIf="isOutsourceWorkflow(c)" type="button" (click)="openVendorResult(c); closeActionMenu()"><span>⇣</span>Receive vendor result</button>
+                            <button *ngIf="hasVendorReport(c)" type="button" (click)="printVendorReport(c); closeActionMenu()"><span>▤</span>Print vendor report</button>
+                            <button *ngIf="tab()!=='rejected' && canRejectCollection(c)" type="button" class="danger" (click)="openReject(c); closeActionMenu()"><span>✕</span>Reject sample</button>
+                            <button *ngIf="tab()!=='rejected' && !canRejectCollection(c)" type="button" class="danger" (click)="showRejectLockedMessage(c); closeActionMenu()"><span>⚠</span>Cannot reject sample</button>
+                            <button *ngIf="canShowRejectReportAction(c)" type="button" class="danger" (click)="openApprovedReportReject(c); closeActionMenu()"><span>✕</span>Reject report</button>
+                            <button *ngIf="tab()==='rejected'" type="button" (click)="recollect(c); closeActionMenu()"><span>↺</span>Recollect</button>
+                            <button *ngIf="tab()==='rejected'" type="button" class="danger" (click)="openDeleteRejected(c); closeActionMenu()"><span>🗑</span>Delete rejected</button>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="test-chip-grid"><span *ngFor="let test of collectionTestNames(c)">{{test}}</span></div>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            </div>
+
+            <ng-template #specimenCollectionList>
+              <div class="specimen-worklist" *ngIf="filteredCollections().length; else noCollectionRecords">
+                <article class="specimen-work-card" *ngFor="let c of filteredCollections()" [class.expanded]="isCollectionExpanded(c)" [style.--tube-color]="collectionTubeColor(c)">
+                  <div class="specimen-summary-row specimen-mode-row">
+                    <div class="sample-total-block specimen-only tube-count-block" [style.--tube-color]="collectionTubeColor(c)">
+                      <span class="mini-tube-icon"><i></i></span>
+                      <div><b>{{collectionTestCount(c)}}</b><small>{{collectionTestCount(c)===1 ? 'test' : 'tests'}}</small></div>
+                    </div>
+                    <div class="specimen-id-block">
+                      <b>{{c.specimen_id}}</b>
+                      <small>{{c.specimen_name || 'Specimen'}} · {{c.sample_type || '—'}}</small>
+                    </div>
+                    <div class="patient-block">
+                      <b>{{c.patient_name}} <span *ngIf="c.age || c.gender">· {{patientAgeGender(c)}}</span></b>
+                      <small>{{c.bill_no}} · {{collectionParameterCount(c)}} parameters billed</small>
+                    </div>
+                    <div class="mode-block">
+                      <b>{{collectionModeLabel(c)}}</b>
+                      <small *ngIf="c.collection_mode==='OUTSOURCE' && c.outsource_vendor_name">{{c.outsource_vendor_name}}</small>
+                      <small *ngIf="c.collection_mode!=='OUTSOURCE' || !c.outsource_vendor_name">{{priorityLabel(c.sample_priority)}}</small>
+                    </div>
+                    <div class="date-block">
+                      <span>Collected</span>
+                      <b>{{dateTime(c.collected_at)}}</b>
+                    </div>
+                    <div class="dual-status-block">
+                      <ng-container *ngIf="isRejectedCollection(c); else specimenNormalStatus">
+                        <span class="clean-status rejected">Rejected</span>
+                      </ng-container>
+                      <ng-template #specimenNormalStatus>
+                        <span class="clean-status ok">Sample collected</span>
+                        <span class="clean-status" [class.ok]="reportWorkflowStatus(c)==='Report approved'" [class.pending]="reportWorkflowStatus(c)!=='Report approved'">{{reportWorkflowStatus(c)}}</span>
+                      </ng-template>
+                      <small *ngIf="collectionModeLabel(c).startsWith('Outsource') && !isRejectedCollection(c)">{{dispatchLabel(c.dispatch_status)}}</small>
+                    </div>
+                    <div class="work-actions menu-actions">
+                      <button class="action-menu-trigger" type="button" title="Actions" (click)="toggleActionMenu(collectionExpandKey(c), $event); $event.stopPropagation()">⋮</button>
+                      <div class="action-menu" *ngIf="isActionMenuOpen(collectionExpandKey(c))" [ngStyle]="actionMenuStyle()" (click)="$event.stopPropagation()">
+                        <button type="button" (click)="printCollectionDetails(c); closeActionMenu()"><span>👁</span>View details</button>
+                        <button type="button" (click)="printCollectionDetails(c); closeActionMenu()"><span>🖨</span>Print details</button>
+                        <button type="button" (click)="printBarcode(c); closeActionMenu()"><span>▥</span>Print barcode</button>
+                        <button type="button" (click)="toggleCollectionExpand(c); closeActionMenu()"><span>{{isCollectionExpanded(c) ? '⌃' : '⌄'}}</span>{{isCollectionExpanded(c) ? 'Hide tests' : 'Show tests'}}</button>
+                        <button *ngIf="tab()==='outsource'" type="button" (click)="printDispatch(c); closeActionMenu()"><span>⇱</span>Print dispatch</button>
+                        <button *ngIf="tab()==='outsource' && c.dispatch_status!=='DISPATCHED' && c.dispatch_status!=='RESULT_RECEIVED'" type="button" (click)="setDispatchStatus(c,'DISPATCHED'); closeActionMenu()"><span>↗</span>Dispatch</button>
+                        <button *ngIf="tab()==='outsource' && c.dispatch_status==='DISPATCHED'" type="button" (click)="setDispatchStatus(c,'RESULT_RECEIVED'); closeActionMenu()"><span>✓</span>Received</button>
+                        <button *ngIf="isOutsourceWorkflow(c)" type="button" (click)="openVendorResult(c); closeActionMenu()"><span>⇣</span>Receive vendor result</button>
+                        <button *ngIf="hasVendorReport(c)" type="button" (click)="printVendorReport(c); closeActionMenu()"><span>▤</span>Print vendor report</button>
+                        <button *ngIf="tab()!=='rejected' && canRejectCollection(c)" type="button" class="danger" (click)="openReject(c); closeActionMenu()"><span>✕</span>Reject sample</button>
+                        <button *ngIf="tab()!=='rejected' && !canRejectCollection(c)" type="button" class="danger" (click)="showRejectLockedMessage(c); closeActionMenu()"><span>⚠</span>Cannot reject sample</button>
+                        <button *ngIf="canShowRejectReportAction(c)" type="button" class="danger" (click)="openApprovedReportReject(c); closeActionMenu()"><span>✕</span>Reject report</button>
+                        <button *ngIf="tab()==='rejected'" type="button" (click)="recollect(c); closeActionMenu()"><span>↺</span>Recollect</button>
+                        <button *ngIf="tab()==='rejected'" type="button" class="danger" (click)="openDeleteRejected(c); closeActionMenu()"><span>🗑</span>Delete rejected</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="specimen-expanded" *ngIf="isCollectionExpanded(c)">
+                    <div class="expanded-head">
+                      <div><b>Tests</b><small>{{collectionTestCount(c)}} {{collectionTestCount(c)===1 ? 'test' : 'tests'}} · {{collectionParameterCount(c)}} parameters billed</small></div>
+                      <span>{{c.remarks || c.reject_reason || 'No remarks'}}</span>
+                    </div>
+                    <div class="test-chip-grid">
+                      <span *ngFor="let test of collectionTestNames(c)">{{test}}</span>
+                    </div>
+                  </div>
+                </article>
+              </div>
+            </ng-template>
+            <ng-template #noCollectionRecords><div class="empty">No records found.</div></ng-template>
+
+
+          </div>
+        </div>
+      </div>
+
+
+
+    </section>

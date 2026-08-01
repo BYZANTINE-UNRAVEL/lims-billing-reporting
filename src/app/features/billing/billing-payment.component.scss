@@ -1,0 +1,501 @@
+/* V79 final payment left-side redesign: offline SVG icons, compact rich cards, light/dark safe */
+.billing-stepper.pro-billing .payment-redesign-v79 {
+  align-items: start;
+  gap: 18px;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .payment-left-stack {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-left-card {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(17, 24, 39, 0.92));
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.22);
+  padding: 18px;
+  color: #e5eefc;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-card-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 14px;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .title-inline-v79 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-card-title h4 {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 18px;
+  line-height: 1.1;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .offline-card-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.20), rgba(124, 58, 237, 0.12));
+  border: 1px solid rgba(129, 140, 248, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .offline-card-icon svg {
+  width: 21px;
+  height: 21px;
+  fill: #a5b4fc;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-grid-v79 {
+  display: grid;
+  grid-template-columns: 1.15fr .75fr .85fr 1.1fr;
+  gap: 0;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell {
+  padding: 10px 16px 12px 0;
+  min-width: 0;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell + .patient-detail-cell:not(.wide) {
+  padding-left: 18px;
+  border-left: 1px solid rgba(148, 163, 184, 0.20);
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell.wide {
+  grid-column: span 2;
+  margin-top: 10px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell span {
+  display: block;
+  margin-bottom: 8px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell b {
+  display: block;
+  color: #f8fafc;
+  font-size: 15px;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .summary-card-head.final-card-title {
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .summary-card-head.final-card-title > span {
+  border-radius: 12px;
+  padding: 8px 13px;
+  background: rgba(99, 102, 241, 0.13);
+  border: 1px solid rgba(129, 140, 248, 0.22);
+  color: #c7d2fe;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line {
+  min-height: 45px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 8px;
+  margin: 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  color: #e2e8f0;
+  font-size: 14px;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line span {
+  color: inherit;
+  font-weight: 700;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line b {
+  color: #f8fafc;
+  font-weight: 900;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.discount {
+  color: #22c55e;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.discount b {
+  color: #4ade80;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.roundoff b {
+  color: #818cf8;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.total.payable {
+  margin-top: 8px;
+  min-height: 54px;
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.16), rgba(129, 140, 248, 0.07));
+  font-size: 18px;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.total.payable b {
+  color: #818cf8;
+  font-size: 25px;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.due {
+  margin-top: 8px;
+  min-height: 54px;
+  border: 0;
+  background: linear-gradient(90deg, rgba(248, 113, 113, 0.14), rgba(244, 63, 94, 0.07));
+  font-size: 18px;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.due b {
+  color: #fb7185;
+  font-size: 25px;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.paid-status {
+  border-bottom: 0;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.paid-status b {
+  min-width: 82px;
+  text-align: center;
+  border-radius: 10px;
+  padding: 6px 12px;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #f59e0b;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.paid-status b.status-excess,
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.paid-status b:not(.status-due) {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.24);
+  color: #22c55e;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.paid-status b.status-due {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.25);
+  color: #f59e0b;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-left-card,
+:host-context(body.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-left-card,
+:host-context(.light-mode) .billing-stepper.pro-billing .payment-redesign-v79 .final-left-card {
+  background: linear-gradient(145deg, #ffffff, #fbfdff);
+  border-color: #dfe5ef;
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.07);
+  color: #0f172a;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-card-title h4,
+:host-context(body.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-card-title h4,
+:host-context(.light-mode) .billing-stepper.pro-billing .payment-redesign-v79 .final-card-title h4,
+:host-context(.light) .billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell b,
+:host-context(body.light) .billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell b,
+:host-context(.light-mode) .billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell b,
+:host-context(.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line b,
+:host-context(body.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line b,
+:host-context(.light-mode) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line b {
+  color: #0f172a;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell span,
+:host-context(body.light) .billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell span,
+:host-context(.light-mode) .billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell span {
+  color: #515d73;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell + .patient-detail-cell:not(.wide),
+:host-context(body.light) .billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell + .patient-detail-cell:not(.wide),
+:host-context(.light-mode) .billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell + .patient-detail-cell:not(.wide),
+:host-context(.light) .billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell.wide,
+:host-context(body.light) .billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell.wide,
+:host-context(.light-mode) .billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell.wide,
+:host-context(.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line,
+:host-context(body.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line,
+:host-context(.light-mode) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line {
+  border-color: #e2e8f0;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.discount,
+:host-context(body.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.discount,
+:host-context(.light-mode) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.discount,
+:host-context(.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.discount b,
+:host-context(body.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.discount b,
+:host-context(.light-mode) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.discount b {
+  color: #16803a;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .payment-redesign-v79 .offline-card-icon,
+:host-context(body.light) .billing-stepper.pro-billing .payment-redesign-v79 .offline-card-icon,
+:host-context(.light-mode) .billing-stepper.pro-billing .payment-redesign-v79 .offline-card-icon {
+  background: linear-gradient(135deg, #f1efff, #f7f7ff);
+  border-color: #ded9ff;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .payment-redesign-v79 .offline-card-icon svg,
+:host-context(body.light) .billing-stepper.pro-billing .payment-redesign-v79 .offline-card-icon svg,
+:host-context(.light-mode) .billing-stepper.pro-billing .payment-redesign-v79 .offline-card-icon svg {
+  fill: #4f46e5;
+}
+
+@media (max-width: 980px) {
+  .billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-grid-v79 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell,
+  .billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell + .patient-detail-cell:not(.wide) {
+    border-left: 0;
+    padding-left: 0;
+  }
+  .billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell.wide {
+    grid-column: span 1;
+  }
+}
+
+@media (max-width: 620px) {
+  .billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-grid-v79 {
+    grid-template-columns: 1fr;
+  }
+  .billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell.wide {
+    grid-column: auto;
+  }
+}
+
+/* V80: compact final-summary left side + remove duplicate step header in payment step */
+.billing-stepper.pro-billing .payment-step > .panel-title {
+  display: none !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 {
+  gap: 12px !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .payment-left-stack {
+  gap: 10px !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-left-card {
+  border-radius: 16px !important;
+  padding: 12px 14px !important;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08) !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-card-title,
+.billing-stepper.pro-billing .payment-redesign-v79 .summary-card-head.final-card-title {
+  gap: 9px !important;
+  margin-bottom: 10px !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .title-inline-v79 {
+  gap: 9px !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .offline-card-icon {
+  width: 31px !important;
+  height: 31px !important;
+  border-radius: 10px !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .offline-card-icon svg {
+  width: 17px !important;
+  height: 17px !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-card-title h4 {
+  font-size: 15px !important;
+  line-height: 1.15 !important;
+  font-weight: 850 !important;
+  letter-spacing: -0.02em !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-grid-v79 {
+  grid-template-columns: 1.1fr .78fr .88fr 1.05fr !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell {
+  padding: 7px 12px 8px 0 !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell + .patient-detail-cell:not(.wide) {
+  padding-left: 12px !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell.wide {
+  margin-top: 6px !important;
+  padding-top: 10px !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell span {
+  margin-bottom: 5px !important;
+  font-size: 11px !important;
+  line-height: 1.15 !important;
+  font-weight: 800 !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .patient-detail-cell b {
+  font-size: 12.5px !important;
+  line-height: 1.25 !important;
+  font-weight: 800 !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .summary-card-head.final-card-title > span {
+  padding: 5px 9px !important;
+  border-radius: 10px !important;
+  font-size: 11px !important;
+  font-weight: 850 !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line {
+  min-height: 33px !important;
+  padding: 6px 6px !important;
+  gap: 10px !important;
+  font-size: 12.5px !important;
+  line-height: 1.2 !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line span {
+  font-weight: 650 !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line b {
+  font-weight: 850 !important;
+  font-size: 12.5px !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.total.payable,
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.due {
+  min-height: 42px !important;
+  margin-top: 6px !important;
+  padding: 8px 10px !important;
+  font-size: 15px !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.total.payable b,
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.due b {
+  font-size: 20px !important;
+  font-weight: 900 !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.paid-status b {
+  min-width: 66px !important;
+  padding: 4px 9px !important;
+  border-radius: 9px !important;
+  font-size: 10.5px !important;
+  font-weight: 850 !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line,
+:host-context(body.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line,
+:host-context(.light-mode) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line,
+:host-context(body:not(.dark-theme)) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line {
+  color: #172033 !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line span,
+:host-context(body.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line span,
+:host-context(.light-mode) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line span,
+:host-context(body:not(.dark-theme)) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line span {
+  color: inherit !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.discount,
+:host-context(body.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.discount,
+:host-context(.light-mode) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.discount,
+:host-context(body:not(.dark-theme)) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.discount,
+:host-context(.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.discount b,
+:host-context(body.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.discount b,
+:host-context(.light-mode) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.discount b,
+:host-context(body:not(.dark-theme)) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.discount b {
+  color: #15803d !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.roundoff b,
+:host-context(body.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.roundoff b,
+:host-context(.light-mode) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.roundoff b,
+:host-context(body:not(.dark-theme)) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.roundoff b {
+  color: #3730a3 !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.total.payable b,
+:host-context(body.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.total.payable b,
+:host-context(.light-mode) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.total.payable b,
+:host-context(body:not(.dark-theme)) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.total.payable b {
+  color: #4f46e5 !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.due b,
+:host-context(body.light) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.due b,
+:host-context(.light-mode) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.due b,
+:host-context(body:not(.dark-theme)) .billing-stepper.pro-billing .payment-redesign-v79 .final-bill-summary-v79 .summary-line.due b {
+  color: #ef4444 !important;
+}
+
+/* V81: compact, readable item count badge in final summary */
+.billing-stepper.pro-billing .payment-redesign-v79 .summary-card-head.final-card-title {
+  align-items: center !important;
+  min-height: 30px !important;
+}
+
+.billing-stepper.pro-billing .payment-redesign-v79 .summary-card-head.final-card-title > span {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 52px !important;
+  height: 24px !important;
+  padding: 0 9px !important;
+  border-radius: 9px !important;
+  font-size: 10.5px !important;
+  line-height: 1 !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.01em !important;
+  opacity: 1 !important;
+  white-space: nowrap !important;
+  flex: 0 0 auto !important;
+  box-shadow: none !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .payment-redesign-v79 .summary-card-head.final-card-title > span,
+:host-context(body.light) .billing-stepper.pro-billing .payment-redesign-v79 .summary-card-head.final-card-title > span,
+:host-context(.light-mode) .billing-stepper.pro-billing .payment-redesign-v79 .summary-card-head.final-card-title > span,
+:host-context(body:not(.dark-theme)) .billing-stepper.pro-billing .payment-redesign-v79 .summary-card-head.final-card-title > span {
+  color: #3730a3 !important;
+  background: rgba(99, 102, 241, 0.10) !important;
+  border: 1px solid rgba(99, 102, 241, 0.24) !important;
+}
+
+:host-context(.dark-theme) .billing-stepper.pro-billing .payment-redesign-v79 .summary-card-head.final-card-title > span,
+:host-context(body.dark-theme) .billing-stepper.pro-billing .payment-redesign-v79 .summary-card-head.final-card-title > span {
+  color: #c7d2fe !important;
+  background: rgba(99, 102, 241, 0.16) !important;
+  border: 1px solid rgba(129, 140, 248, 0.28) !important;
+}

@@ -1,0 +1,443 @@
+/* V68 selected-items true compact single-line rows + dark-safe type toggle */
+.billing-stepper.pro-billing .select-items-actions-only {
+  display: none !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .selected-tests-head {
+  margin-bottom: 10px !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .selected-tests-head p {
+  display: none !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .clear-selected-tests {
+  gap: 0 !important;
+  min-height: 30px !important;
+  padding: 0 10px !important;
+  border-radius: 9px !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-list {
+  gap: 4px !important;
+  max-height: 456px !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-head,
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-row {
+  grid-template-columns: minmax(178px, 1.45fr) 82px 72px 46px 78px 30px !important;
+  gap: 6px !important;
+  align-items: center !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-head {
+  padding: 2px 8px 5px !important;
+  font-size: 9.5px !important;
+  line-height: 1 !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-row {
+  min-height: 42px !important;
+  padding: 5px 8px !important;
+  border-radius: 10px !important;
+  grid-auto-rows: 1fr !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-row .selected-test-name {
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  min-width: 0 !important;
+  cursor: grab !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-row .selected-test-name:active {
+  cursor: grabbing !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-row .selected-test-name b {
+  display: block !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+  font-weight: 800 !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-row .selected-test-name small {
+  display: none !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-row .v54-drag-dots {
+  flex: 0 0 auto !important;
+  font-size: 13px !important;
+  line-height: 1 !important;
+  letter-spacing: -2px !important;
+  opacity: 0.78 !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .rate-edit-box {
+  height: 28px !important;
+  min-height: 28px !important;
+  border-radius: 8px !important;
+  background: linear-gradient(135deg, rgba(20, 31, 53, 0.98), rgba(11, 22, 39, 0.98)) !important;
+  border: 1px solid rgba(148, 163, 184, 0.18) !important;
+  color: #f8fafc !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .money-edit-box {
+  grid-template-columns: 12px 1fr !important;
+  gap: 2px !important;
+  padding: 0 7px !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .money-edit-box span {
+  font-size: 10.5px !important;
+  color: rgba(226, 232, 240, 0.75) !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .rate-edit-box input,
+.billing-stepper.pro-billing .select-items-v44 .discount-inline input {
+  font-size: 11.5px !important;
+  line-height: 1 !important;
+  font-weight: 800 !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .discount-type-toggle.rate-edit-box {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+  cursor: pointer !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .discount-type-toggle.rate-edit-box:hover:not(:disabled) {
+  border-color: rgba(167, 139, 250, 0.75) !important;
+  background: linear-gradient(135deg, rgba(37, 39, 83, 0.98), rgba(18, 28, 52, 0.98)) !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-row .final-rate {
+  font-size: 12px !important;
+  line-height: 1 !important;
+  text-align: right !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-row .remove-selected-test {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  border-radius: 8px !important;
+  font-size: 18px !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-row.cdk-drag-preview {
+  min-height: 42px !important;
+  background: linear-gradient(135deg, rgba(20, 31, 53, 0.98), rgba(11, 22, 39, 0.98)) !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .select-items-v44 .rate-edit-box,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-v44 .rate-edit-box {
+  background: #f8fafc !important;
+  border-color: #d8dee9 !important;
+  color: #0f172a !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .select-items-v44 .discount-type-toggle.rate-edit-box,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-v44 .discount-type-toggle.rate-edit-box {
+  background: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+@media (max-width: 1100px) {
+  .billing-stepper.pro-billing .select-items-v44 .compact-rate-row {
+    grid-template-columns: minmax(130px, 1fr) 70px 64px 42px 70px 28px !important;
+  }
+}
+
+/* V69: selected-items light-mode readability + tighter compact rows.
+   Keep the selected rows only: hide the title/review/Clear All header that was crowding the panel. */
+.billing-stepper.pro-billing .select-items-v44 .selected-tests-head {
+  display: none !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-list {
+  gap: 3px !important;
+  max-height: 470px !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-head,
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-row {
+  grid-template-columns: minmax(170px, 1.5fr) 78px 66px 42px 74px 28px !important;
+  gap: 5px !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-head {
+  padding: 0 8px 6px !important;
+  margin-top: 0 !important;
+  color: rgba(203, 213, 225, 0.82) !important;
+  font-size: 9px !important;
+  font-weight: 850 !important;
+  letter-spacing: 0.075em !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-row {
+  min-height: 38px !important;
+  padding: 4px 7px !important;
+  border-radius: 9px !important;
+  background: linear-gradient(135deg, rgba(17, 29, 50, 0.98), rgba(8, 17, 31, 0.98)) !important;
+  border-color: rgba(124, 139, 165, 0.18) !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-row .selected-test-name {
+  gap: 6px !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-row .selected-test-name b {
+  font-size: 11px !important;
+  line-height: 1 !important;
+  font-weight: 820 !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-row .v54-drag-dots {
+  font-size: 12px !important;
+  opacity: 0.7 !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .rate-edit-box {
+  height: 25px !important;
+  min-height: 25px !important;
+  border-radius: 7px !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .rate-edit-box input,
+.billing-stepper.pro-billing .select-items-v44 .discount-inline input,
+.billing-stepper.pro-billing .select-items-v44 .discount-type-toggle.rate-edit-box,
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-row .final-rate {
+  font-size: 10.8px !important;
+  font-weight: 850 !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .money-edit-box {
+  grid-template-columns: 10px 1fr !important;
+  padding: 0 6px !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .money-edit-box span {
+  font-size: 10px !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .compact-rate-row .remove-selected-test {
+  width: 25px !important;
+  height: 25px !important;
+  min-width: 25px !important;
+  border-radius: 7px !important;
+  font-size: 17px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Light mode: readable headers, richer selected row cards, and visible remove button. */
+:host-context(.light) .billing-stepper.pro-billing .select-items-v44 .compact-rate-head,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-v44 .compact-rate-head,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-v44 .compact-rate-head {
+  color: #475569 !important;
+  opacity: 1 !important;
+  text-shadow: none !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row {
+  background: linear-gradient(135deg, #ffffff 0%, #f7fbff 52%, #eef6ff 100%) !important;
+  border-color: rgba(99, 102, 241, 0.20) !important;
+  box-shadow: 0 7px 18px rgba(15, 23, 42, 0.06), inset 3px 0 0 rgba(99, 102, 241, 0.34) !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row:nth-child(2n),
+:host-context(body.light) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row:nth-child(2n),
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row:nth-child(2n) {
+  background: linear-gradient(135deg, #ffffff 0%, #f9fffb 48%, #eefdf4 100%) !important;
+  border-color: rgba(34, 197, 94, 0.18) !important;
+  box-shadow: 0 7px 18px rgba(15, 23, 42, 0.055), inset 3px 0 0 rgba(34, 197, 94, 0.32) !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row .selected-test-name b,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row .selected-test-name b,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row .selected-test-name b,
+:host-context(.light) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row .final-rate,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row .final-rate,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row .final-rate {
+  color: #0f172a !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row .v54-drag-dots,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row .v54-drag-dots,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row .v54-drag-dots {
+  color: #64748b !important;
+  opacity: 0.92 !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .select-items-v44 .rate-edit-box,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-v44 .rate-edit-box,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-v44 .rate-edit-box,
+:host-context(.light) .billing-stepper.pro-billing .select-items-v44 .discount-type-toggle.rate-edit-box,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-v44 .discount-type-toggle.rate-edit-box,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-v44 .discount-type-toggle.rate-edit-box {
+  background: linear-gradient(135deg, #f8fafc, #eef4ff) !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .select-items-v44 .rate-edit-box input,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-v44 .rate-edit-box input,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-v44 .rate-edit-box input,
+:host-context(.light) .billing-stepper.pro-billing .select-items-v44 .money-edit-box span,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-v44 .money-edit-box span,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-v44 .money-edit-box span {
+  color: #0f172a !important;
+  opacity: 1 !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row .remove-selected-test,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row .remove-selected-test,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row .remove-selected-test {
+  background: #eef2ff !important;
+  border: 1px solid #c7d2fe !important;
+  color: #1e293b !important;
+  opacity: 1 !important;
+  text-shadow: none !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row .remove-selected-test:hover:not(:disabled),
+:host-context(body.light) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row .remove-selected-test:hover:not(:disabled),
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-v44 .compact-rate-row .remove-selected-test:hover:not(:disabled) {
+  background: #fee2e2 !important;
+  border-color: #fecaca !important;
+  color: #b91c1c !important;
+}
+
+@media (max-width: 1100px) {
+  .billing-stepper.pro-billing .select-items-v44 .compact-rate-row {
+    grid-template-columns: minmax(122px, 1fr) 64px 58px 38px 64px 26px !important;
+    gap: 4px !important;
+  }
+}
+
+
+/* V70: dynamic select-items actions + stable compact numeric inputs.
+   AppShell fixed footer is hidden on Select Items; actions live inside the card area. */
+.billing-stepper.pro-billing .select-items-v44 .select-items-dynamic-actions {
+  grid-column: 1 / -1 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+  padding: 8px 4px 0 !important;
+  margin-top: 2px !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .select-items-dynamic-actions .btn {
+  min-height: 38px !important;
+  height: 38px !important;
+  border-radius: 12px !important;
+  padding: 0 26px !important;
+  font-size: 13px !important;
+  font-weight: 850 !important;
+  line-height: 1 !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .select-items-dynamic-actions .select-items-continue {
+  min-width: 220px !important;
+  background: linear-gradient(135deg, #6d5cff, #2351de) !important;
+  color: #fff !important;
+  box-shadow: 0 16px 34px rgba(37, 99, 235, 0.24) !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .select-items-dynamic-actions .select-items-back {
+  min-width: 130px !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .rate-edit-box {
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .money-edit-box {
+  display: grid !important;
+  align-items: center !important;
+  overflow: hidden !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .rate-edit-box input,
+.billing-stepper.pro-billing .select-items-v44 .discount-inline input {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  color: inherit !important;
+  box-sizing: border-box !important;
+  line-height: 1 !important;
+  appearance: textfield !important;
+  -moz-appearance: textfield !important;
+  text-overflow: clip !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .money-edit-box input {
+  text-align: right !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .discount-inline input {
+  text-align: center !important;
+}
+
+.billing-stepper.pro-billing .select-items-v44 .rate-edit-box input::-webkit-outer-spin-button,
+.billing-stepper.pro-billing .select-items-v44 .rate-edit-box input::-webkit-inner-spin-button,
+.billing-stepper.pro-billing .select-items-v44 .discount-inline input::-webkit-outer-spin-button,
+.billing-stepper.pro-billing .select-items-v44 .discount-inline input::-webkit-inner-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .select-items-v44 .select-items-dynamic-actions .select-items-back,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-v44 .select-items-dynamic-actions .select-items-back,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-v44 .select-items-dynamic-actions .select-items-back {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #d8dee9 !important;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08) !important;
+}
+
+@media (max-width: 900px) {
+  .billing-stepper.pro-billing .select-items-v44 .select-items-dynamic-actions {
+    flex-direction: column-reverse !important;
+    align-items: stretch !important;
+  }
+  .billing-stepper.pro-billing .select-items-v44 .select-items-dynamic-actions .btn {
+    width: 100% !important;
+  }
+}

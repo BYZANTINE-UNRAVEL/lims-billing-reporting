@@ -1,0 +1,785 @@
+/* V30 Registration-first billing stepper */
+.registration-flow-stepper{
+  display:grid!important;
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  gap:10px!important;
+  padding:10px!important;
+}
+.registration-flow-stepper .step-tab{
+  min-height:58px!important;
+  padding:10px 14px!important;
+  border-radius:16px!important;
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:flex-start!important;
+  justify-content:center!important;
+  gap:3px!important;
+}
+.registration-flow-stepper .step-tab small{
+  font-size:10px!important;
+  font-weight:1000!important;
+  letter-spacing:.08em!important;
+  text-transform:uppercase!important;
+  color:color-mix(in srgb,var(--muted) 82%,var(--text))!important;
+}
+.registration-flow-stepper .step-tab.active small,
+.registration-flow-stepper .step-tab.done small{color:rgba(255,255,255,.86)!important;}
+.registration-flow-stepper .step-tab b{font-size:13px!important;line-height:1.15!important;}
+.registration-step{max-width:none!important;}
+.registration-type-card{
+  margin:0!important;
+  padding:18px!important;
+  border-radius:22px!important;
+  background:color-mix(in srgb,var(--surface) 92%,var(--primary) 4%)!important;
+  box-shadow:0 12px 28px rgba(15,23,42,.08)!important;
+}
+.registration-heading{margin-bottom:14px!important;}
+.registration-grid{
+  display:grid!important;
+  grid-template-columns:minmax(220px,.55fr) minmax(420px,1fr)!important;
+  gap:16px!important;
+  align-items:start!important;
+}
+.registration-grid .field{position:relative!important;min-width:0!important;}
+.registration-grid .field label{
+  display:block!important;
+  margin-bottom:7px!important;
+  font-size:12px!important;
+  font-weight:1000!important;
+  color:color-mix(in srgb,var(--text) 82%,var(--muted))!important;
+}
+.registration-grid select,
+.registration-grid input{
+  width:100%!important;
+  height:50px!important;
+  min-height:50px!important;
+  border-radius:16px!important;
+  border:1px solid color-mix(in srgb,var(--border) 72%,var(--text))!important;
+  background:var(--surface)!important;
+  color:var(--text)!important;
+  font-weight:850!important;
+  font-size:14px!important;
+  padding:0 15px!important;
+}
+.registration-grid input:disabled{
+  opacity:1!important;
+  background:color-mix(in srgb,var(--surface-2) 88%,var(--primary) 7%)!important;
+  color:color-mix(in srgb,var(--text) 82%,var(--muted))!important;
+}
+.registration-reference-row{display:grid!important;grid-template-columns:minmax(0,1fr) 52px!important;gap:10px!important;}
+.registration-reference-row .mini-plus,
+.registration-type-field .mini-plus{height:50px!important;min-height:50px!important;border-radius:16px!important;}
+.registration-reference-results{left:0!important;right:62px!important;top:calc(100% + 8px)!important;z-index:150!important;}
+.registration-hint{margin-top:7px!important;color:color-mix(in srgb,var(--muted) 88%,var(--text))!important;}
+.patient-detail-tabs{margin-top:14px!important;}
+@media(max-width:980px){
+  .registration-flow-stepper{grid-template-columns:repeat(2,minmax(0,1fr))!important;}
+  .registration-grid{grid-template-columns:1fr!important;}
+}
+@media(max-width:640px){
+  .registration-flow-stepper{grid-template-columns:1fr!important;}
+  .registration-flow-stepper .step-tab{min-height:52px!important;}
+  .registration-type-card{padding:15px!important;border-radius:18px!important;}
+}
+
+/* V31 Registration step visual correction
+   - Keep Payment/Receipt step
+   - Avoid native select popup so dark/light theme matches app UI */
+.registration-flow-stepper .step-tab b{
+  white-space:nowrap!important;
+}
+.registration-type-card{
+  background:var(--surface)!important;
+  border:1px solid var(--border)!important;
+  box-shadow:none!important;
+}
+.registration-type-combo{
+  position:relative!important;
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) 52px!important;
+  gap:10px!important;
+}
+.registration-type-trigger{
+  width:100%!important;
+  height:50px!important;
+  min-height:50px!important;
+  border-radius:16px!important;
+  border:1px solid color-mix(in srgb,var(--border) 72%,var(--text))!important;
+  background:var(--surface)!important;
+  color:var(--text)!important;
+  font-weight:900!important;
+  font-size:14px!important;
+  padding:0 15px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:12px!important;
+  cursor:pointer!important;
+  box-shadow:none!important;
+}
+.registration-type-trigger:disabled{
+  opacity:.72!important;
+  cursor:not-allowed!important;
+}
+.registration-type-trigger.open,
+.registration-type-trigger:focus-visible{
+  outline:none!important;
+  border-color:color-mix(in srgb,var(--primary) 70%,var(--border))!important;
+  box-shadow:0 0 0 4px color-mix(in srgb,var(--primary) 16%,transparent)!important;
+}
+.registration-type-trigger svg{
+  width:18px!important;
+  height:18px!important;
+  flex:0 0 auto!important;
+  stroke:currentColor!important;
+  stroke-width:2.4!important;
+  fill:none!important;
+}
+.registration-type-menu{
+  position:absolute!important;
+  top:calc(100% + 8px)!important;
+  left:0!important;
+  right:62px!important;
+  z-index:250!important;
+  padding:6px!important;
+  border-radius:16px!important;
+  border:1px solid var(--border)!important;
+  background:var(--surface)!important;
+  box-shadow:0 18px 44px rgba(15,23,42,.18)!important;
+  overflow:hidden!important;
+}
+.registration-type-menu button{
+  width:100%!important;
+  min-height:38px!important;
+  border:0!important;
+  border-radius:12px!important;
+  background:transparent!important;
+  color:var(--text)!important;
+  text-align:left!important;
+  padding:8px 12px!important;
+  font-size:14px!important;
+  font-weight:850!important;
+  cursor:pointer!important;
+}
+.registration-type-menu button:hover,
+.registration-type-menu button.active{
+  background:color-mix(in srgb,var(--primary) 14%,transparent)!important;
+  color:var(--primary)!important;
+}
+body.dark .registration-type-menu,
+.dark .registration-type-menu,
+[data-theme='dark'] .registration-type-menu{
+  background:color-mix(in srgb,var(--surface) 94%,#000 6%)!important;
+  border-color:color-mix(in srgb,var(--border) 78%,#fff 8%)!important;
+  box-shadow:0 18px 44px rgba(0,0,0,.42)!important;
+}
+body.dark .registration-type-menu button:hover,
+body.dark .registration-type-menu button.active,
+.dark .registration-type-menu button:hover,
+.dark .registration-type-menu button.active,
+[data-theme='dark'] .registration-type-menu button:hover,
+[data-theme='dark'] .registration-type-menu button.active{
+  background:color-mix(in srgb,var(--primary) 28%,transparent)!important;
+  color:#fff!important;
+}
+@media(max-width:720px){
+  .registration-type-menu{right:62px!important;}
+  .registration-flow-stepper .step-tab b{white-space:normal!important;}
+}
+
+/* V32: Registration type uses the same native themed select pattern already used in Billing. */
+.registration-type-combo{
+  position:relative!important;
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) 54px!important;
+  gap:10px!important;
+  align-items:end!important;
+}
+.registration-type-combo select{
+  width:100%!important;
+  min-height:52px!important;
+  height:52px!important;
+  border-radius:13px!important;
+  border:1px solid color-mix(in srgb,var(--border) 70%,var(--text) 14%)!important;
+  background:color-mix(in srgb,var(--input) 92%,var(--panel) 8%)!important;
+  color:var(--text)!important;
+  font-size:14px!important;
+  font-weight:750!important;
+  padding:0 44px 0 16px!important;
+  outline:none!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04)!important;
+}
+.registration-type-combo select:focus{
+  border-color:#3b82f6!important;
+  box-shadow:0 0 0 3px rgba(59,130,246,.16)!important;
+}
+.registration-type-combo select option{
+  background:#0b1220!important;
+  color:#e5eefc!important;
+  font-weight:750!important;
+}
+.registration-type-combo select option:checked,
+.registration-type-combo select option:hover{
+  background:#1d4ed8!important;
+  color:#fff!important;
+}
+body.dark-theme .registration-type-combo select{
+  color-scheme:dark!important;
+  background:linear-gradient(180deg,rgba(15,23,42,.86),rgba(10,19,35,.94))!important;
+  border-color:rgba(148,163,184,.30)!important;
+  color:#eaf2ff!important;
+}
+body:not(.dark-theme) .registration-type-combo select{
+  color-scheme:light!important;
+  background:#fff!important;
+  color:#0f172a!important;
+}
+body:not(.dark-theme) .registration-type-combo select option{
+  background:#fff!important;
+  color:#0f172a!important;
+}
+.registration-type-trigger,
+.registration-type-menu{
+  display:none!important;
+}
+
+
+/* V33 registration step: use existing billing field look, restore 4-step header, remove ugly light-mode grey */
+.billing-stepper.pro-billing > .stepper-head.registration-flow-stepper,
+.billing-stepper.pro-billing .registration-flow-stepper {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  height: 50px !important;
+  min-height: 50px !important;
+  padding: 5px !important;
+  margin: 0 0 12px !important;
+  overflow: visible !important;
+}
+
+.billing-stepper.pro-billing > .stepper-head.registration-flow-stepper > .step-tab,
+.billing-stepper.pro-billing .registration-flow-stepper .step-tab {
+  height: 40px !important;
+  min-height: 40px !important;
+  padding: 0 14px !important;
+  border-radius: 14px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0 !important;
+  text-align: center !important;
+  min-width: 0 !important;
+}
+
+.billing-stepper.pro-billing > .stepper-head.registration-flow-stepper > .step-tab small,
+.billing-stepper.pro-billing .registration-flow-stepper .step-tab small {
+  display: none !important;
+}
+
+.billing-stepper.pro-billing > .stepper-head.registration-flow-stepper > .step-tab b,
+.billing-stepper.pro-billing .registration-flow-stepper .step-tab b {
+  display: block !important;
+  font-size: 12.8px !important;
+  font-weight: 900 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  color: inherit !important;
+}
+
+.billing-stepper.pro-billing .registration-step {
+  padding: 0 !important;
+}
+
+.billing-stepper.pro-billing .registration-type-card {
+  margin: 0 0 12px !important;
+  padding: 14px 18px 16px !important;
+  border-radius: 18px !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}
+
+.billing-stepper.pro-billing .registration-heading {
+  min-height: 28px !important;
+  margin: 0 0 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 10px !important;
+}
+
+.billing-stepper.pro-billing .registration-heading .section-icon {
+  width: 22px !important;
+  min-width: 22px !important;
+  height: 22px !important;
+  flex-basis: 22px !important;
+  border-radius: 7px !important;
+  font-size: 10px !important;
+}
+
+.billing-stepper.pro-billing .registration-heading .inline-heading-copy {
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+}
+
+.billing-stepper.pro-billing .registration-heading h4 {
+  margin: 0 !important;
+  font-size: 15px !important;
+  line-height: 1.1 !important;
+  font-weight: 950 !important;
+}
+
+.billing-stepper.pro-billing .registration-heading p {
+  margin: 0 !important;
+  font-size: 11px !important;
+  line-height: 1.1 !important;
+  font-weight: 800 !important;
+  color: var(--muted) !important;
+}
+
+.billing-stepper.pro-billing .registration-grid {
+  display: grid !important;
+  grid-template-columns: minmax(180px, .55fr) minmax(320px, 1fr) !important;
+  column-gap: 18px !important;
+  row-gap: 10px !important;
+  align-items: start !important;
+}
+
+.billing-stepper.pro-billing .registration-grid .field {
+  min-height: 50px !important;
+  max-height: none !important;
+  position: relative !important;
+}
+
+.billing-stepper.pro-billing .registration-grid .field label {
+  height: 15px !important;
+  min-height: 15px !important;
+  line-height: 14px !important;
+  margin: 0 0 4px !important;
+  padding: 0 !important;
+  font-size: 11.2px !important;
+  font-weight: 800 !important;
+  color: var(--text) !important;
+}
+
+.billing-stepper.pro-billing .registration-type-combo,
+.billing-stepper.pro-billing .registration-reference-row {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 26px !important;
+  gap: 6px !important;
+  height: 31px !important;
+  min-height: 31px !important;
+  align-items: center !important;
+}
+
+.billing-stepper.pro-billing .registration-grid select,
+.billing-stepper.pro-billing .registration-grid input,
+.billing-stepper.pro-billing .registration-type-combo select,
+.billing-stepper.pro-billing .registration-reference-row input {
+  width: 100% !important;
+  height: 31px !important;
+  min-height: 31px !important;
+  max-height: 31px !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(148, 163, 184, .26) !important;
+  background: var(--input) !important;
+  color: var(--text) !important;
+  box-shadow: none !important;
+  font-size: 11.8px !important;
+  font-weight: 650 !important;
+  padding: 0 10px !important;
+  outline: none !important;
+}
+
+.billing-stepper.pro-billing .registration-type-combo select {
+  padding-right: 30px !important;
+}
+
+.billing-stepper.pro-billing .registration-grid select:focus,
+.billing-stepper.pro-billing .registration-grid input:focus {
+  border-color: color-mix(in srgb, var(--primary) 70%, var(--border)) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent) !important;
+}
+
+.billing-stepper.pro-billing .registration-grid input[readonly],
+.billing-stepper.pro-billing .registration-grid input:disabled {
+  opacity: 1 !important;
+  background: var(--input) !important;
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+  cursor: default !important;
+}
+
+.billing-stepper.pro-billing .registration-reference-row .mini-plus,
+.billing-stepper.pro-billing .registration-type-field .mini-plus,
+.billing-stepper.pro-billing .registration-type-combo .mini-plus {
+  width: 26px !important;
+  min-width: 26px !important;
+  height: 31px !important;
+  min-height: 31px !important;
+  border-radius: 8px !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  opacity: .74 !important;
+  box-shadow: none !important;
+}
+
+.billing-stepper.pro-billing .registration-hint {
+  display: none !important;
+}
+
+.billing-stepper.pro-billing .registration-reference-results {
+  left: 0 !important;
+  right: 32px !important;
+  top: calc(100% + 6px) !important;
+  z-index: 220 !important;
+}
+
+body:not(.dark-theme) .billing-stepper.pro-billing .registration-type-card,
+body:not(.dark-theme) .billing-stepper.pro-billing .registration-grid select,
+body:not(.dark-theme) .billing-stepper.pro-billing .registration-grid input,
+body:not(.dark-theme) .billing-stepper.pro-billing .registration-grid input[readonly] {
+  background: #fff !important;
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+
+body:not(.dark-theme) .billing-stepper.pro-billing .registration-grid select,
+body:not(.dark-theme) .billing-stepper.pro-billing .registration-grid input {
+  border-color: #cbd5e1 !important;
+}
+
+body:not(.dark-theme) .billing-stepper.pro-billing .registration-grid select option {
+  background: #fff !important;
+  color: #0f172a !important;
+}
+
+body.dark-theme .billing-stepper.pro-billing .registration-grid select,
+body.dark-theme .billing-stepper.pro-billing .registration-grid input,
+body.dark-theme .billing-stepper.pro-billing .registration-grid input[readonly] {
+  background: color-mix(in srgb, var(--surface) 92%, #000 8%) !important;
+  border-color: rgba(148, 163, 184, .30) !important;
+  color: #eaf2ff !important;
+  -webkit-text-fill-color: #eaf2ff !important;
+}
+
+@media (max-width: 1180px) {
+  .billing-stepper.pro-billing > .stepper-head.registration-flow-stepper,
+  .billing-stepper.pro-billing .registration-flow-stepper {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    height: auto !important;
+  }
+  .billing-stepper.pro-billing .registration-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .billing-stepper.pro-billing > .stepper-head.registration-flow-stepper,
+  .billing-stepper.pro-billing .registration-flow-stepper {
+    grid-template-columns: 1fr !important;
+  }
+  .billing-stepper.pro-billing .registration-heading .inline-heading-copy {
+    display: block !important;
+  }
+}
+
+/* V34: Registration Reference uses Angular Material autocomplete with matching-field highlight. */
+.billing-stepper.pro-billing .registration-reference-row.mat-reference-row {
+  position: relative !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 26px !important;
+  gap: 6px !important;
+  height: 31px !important;
+  min-height: 31px !important;
+  align-items: center !important;
+}
+
+.billing-stepper.pro-billing .registration-reference-row.mat-reference-row input[matinput],
+.billing-stepper.pro-billing .registration-reference-row.mat-reference-row input[matInput],
+.billing-stepper.pro-billing .registration-reference-row.mat-reference-row input.mat-mdc-input-element {
+  width: 100% !important;
+  height: 31px !important;
+  min-height: 31px !important;
+  max-height: 31px !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(148, 163, 184, .26) !important;
+  background: var(--input) !important;
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+  box-shadow: none !important;
+  font-size: 11.8px !important;
+  font-weight: 650 !important;
+  padding: 0 10px !important;
+  outline: none !important;
+}
+
+.billing-stepper.pro-billing .registration-reference-row.mat-reference-row input.mat-mdc-input-element:focus {
+  border-color: color-mix(in srgb, var(--primary) 70%, var(--border)) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent) !important;
+}
+
+body:not(.dark-theme) .billing-stepper.pro-billing .registration-reference-row.mat-reference-row input.mat-mdc-input-element {
+  background: #fff !important;
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+:host ::ng-deep .registration-reference-panel.mat-mdc-autocomplete-panel {
+  padding: 5px !important;
+  border-radius: 10px !important;
+  border: 1px solid color-mix(in srgb, var(--primary) 38%, var(--border)) !important;
+  background: var(--panel, #0b1220) !important;
+  box-shadow: 0 18px 44px rgba(2, 6, 23, .38) !important;
+  max-height: 230px !important;
+}
+
+:host ::ng-deep .registration-reference-panel .mat-mdc-option {
+  min-height: 46px !important;
+  border-radius: 8px !important;
+  padding: 6px 10px !important;
+  color: var(--text) !important;
+  font-size: 12px !important;
+}
+
+:host ::ng-deep .registration-reference-panel .mat-mdc-option:hover,
+:host ::ng-deep .registration-reference-panel .mat-mdc-option.mdc-list-item--selected,
+:host ::ng-deep .registration-reference-panel .mat-mdc-option.mat-mdc-option-active {
+  background: color-mix(in srgb, var(--primary) 72%, #111827) !important;
+  color: #fff !important;
+}
+
+:host ::ng-deep .registration-reference-panel .mat-mdc-option .mdc-list-item__primary-text {
+  width: 100% !important;
+  color: inherit !important;
+}
+
+:host ::ng-deep .registration-reference-panel .reference-option-content {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  line-height: 1.2 !important;
+  color: inherit !important;
+}
+
+:host ::ng-deep .registration-reference-panel .reference-option-content b {
+  font-size: 12.5px !important;
+  font-weight: 850 !important;
+  color: inherit !important;
+}
+
+:host ::ng-deep .registration-reference-panel .reference-option-content span {
+  font-size: 10.8px !important;
+  font-weight: 650 !important;
+  color: color-mix(in srgb, currentColor 72%, transparent) !important;
+}
+
+:host ::ng-deep .registration-reference-panel .reference-match-highlight {
+  padding: 0 2px !important;
+  border-radius: 4px !important;
+  background: color-mix(in srgb, var(--primary) 24%, transparent) !important;
+  color: inherit !important;
+  font-weight: 950 !important;
+}
+
+:host ::ng-deep .registration-reference-panel .mat-mdc-option:hover .reference-match-highlight,
+:host ::ng-deep .registration-reference-panel .mat-mdc-option.mdc-list-item--selected .reference-match-highlight,
+:host ::ng-deep .registration-reference-panel .mat-mdc-option.mat-mdc-option-active .reference-match-highlight {
+  background: rgba(255,255,255,.22) !important;
+  color: #fff !important;
+}
+
+:host ::ng-deep .registration-reference-panel .registration-reference-empty {
+  opacity: .72 !important;
+}
+
+body:not(.dark-theme) .registration-reference-panel.mat-mdc-autocomplete-panel {
+  background: #fff !important;
+  border-color: #bfdbfe !important;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, .18) !important;
+}
+
+body:not(.dark-theme) .registration-reference-panel .mat-mdc-option {
+  color: #0f172a !important;
+}
+
+body:not(.dark-theme) .registration-reference-panel .mat-mdc-option:hover,
+body:not(.dark-theme) .registration-reference-panel .mat-mdc-option.mdc-list-item--selected,
+body:not(.dark-theme) .registration-reference-panel .mat-mdc-option.mat-mdc-option-active {
+  background: #2563eb !important;
+  color: #fff !important;
+}
+
+body:not(.dark-theme) .registration-reference-panel .reference-match-highlight {
+  background: #dbeafe !important;
+  color: #1d4ed8 !important;
+}
+
+body:not(.dark-theme) .registration-reference-panel .mat-mdc-option:hover .reference-match-highlight,
+body:not(.dark-theme) .registration-reference-panel .mat-mdc-option.mdc-list-item--selected .reference-match-highlight,
+body:not(.dark-theme) .registration-reference-panel .mat-mdc-option.mat-mdc-option-active .reference-match-highlight {
+  background: rgba(255,255,255,.28) !important;
+  color: #fff !important;
+}
+
+/* v39: Remove the unwanted rectangular focus/backdrop around patient autocomplete search.
+   The search control should display only the rounded pill input, matching the Billing header search. */
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+}
+
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field:focus,
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field:focus-within,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field:focus,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field:focus-within,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field:focus,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field:focus-within,
+.billing-stepper.pro-billing .top-patient-search:focus-within {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+}
+
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field > input,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field > input,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field > input {
+  outline: 0 !important;
+  box-shadow: none !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+}
+
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field > input:focus,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field > input:focus,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field > input:focus {
+  outline: 0 !important;
+  border-color: rgba(96, 165, 250, 0.55) !important;
+  box-shadow: none !important;
+}
+
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field > input.mat-mdc-input-element,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field > input.mat-mdc-input-element,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field > input.mat-mdc-input-element {
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+/* v40: patient autocomplete selected state cleanup.
+   The lookup wrapper must be invisible; only the rounded input pill is visible.
+   Also expose the selected patient ID as a compact chip next to the patient mode controls. */
+.billing-stepper.pro-billing .patient-lookup-row {
+  grid-template-columns: minmax(360px, .86fr) minmax(360px, .8fr) max-content max-content !important;
+}
+
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+  outline-offset: 0 !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field:focus,
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field:focus-visible,
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field:focus-within,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field:focus,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field:focus-visible,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field:focus-within,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field:focus,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field:focus-visible,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field:focus-within {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+  outline-offset: 0 !important;
+}
+
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field::before,
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field::after,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field::before,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field::after,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field::before,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field::after {
+  content: none !important;
+  display: none !important;
+  opacity: 0 !important;
+}
+
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field > input,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field > input,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field > input,
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field > input.mat-mdc-input-element,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field > input.mat-mdc-input-element,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field > input.mat-mdc-input-element {
+  border-radius: 999px !important;
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+  background-clip: padding-box !important;
+}
+
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field > input:focus,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field > input:focus,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field > input:focus,
+.billing-stepper.pro-billing .patient-search.top-patient-search.patient-lookup-field > input:focus-visible,
+.billing-stepper.pro-billing .top-patient-search.patient-lookup-field > input:focus-visible,
+.billing-stepper.pro-billing .patient-search.patient-lookup-field > input:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+}
+
+.billing-stepper.pro-billing .patient-selected-id-chip {
+  min-height: 38px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
+  padding: 0 16px !important;
+  border-radius: 999px !important;
+  border: 1px solid color-mix(in srgb, var(--primary) 34%, var(--border)) !important;
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface)) !important;
+  color: color-mix(in srgb, var(--primary) 78%, var(--text)) !important;
+  font-size: 12px !important;
+  font-weight: 950 !important;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, .08) !important;
+}
+
+.billing-stepper.pro-billing .patient-reg-date-chip {
+  white-space: nowrap !important;
+}
+
+.billing-stepper.pro-billing .basic-info-card .inline-heading-copy h4 {
+  white-space: nowrap !important;
+}
+
+@media (max-width: 1180px) {
+  .billing-stepper.pro-billing .patient-lookup-row {
+    grid-template-columns: 1fr !important;
+  }
+  .billing-stepper.pro-billing .patient-selected-id-chip,
+  .billing-stepper.pro-billing .patient-reg-date-chip {
+    justify-self: start !important;
+  }
+}

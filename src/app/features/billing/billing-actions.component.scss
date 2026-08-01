@@ -1,0 +1,247 @@
+/* V74: one dynamic action footer for every billing step */
+.billing-stepper.pro-billing .billing-scroll {
+  padding-bottom: 20px;
+}
+
+.billing-stepper.pro-billing .billing-dynamic-step-footer {
+  margin: 18px 0 4px;
+  padding: 16px 18px;
+  display: grid;
+  grid-template-columns: minmax(160px, 260px) minmax(220px, 1fr);
+  gap: 18px;
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(17, 24, 39, 0.88));
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.22);
+}
+
+.billing-stepper.pro-billing .billing-dynamic-step-footer ng-container[ng-reflect-ng-switch-case],
+.billing-stepper.pro-billing .billing-dynamic-step-footer > ng-container {
+  display: contents;
+}
+
+.billing-stepper.pro-billing .billing-dynamic-step-footer .btn {
+  min-height: 52px;
+  border-radius: 15px;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+
+.billing-stepper.pro-billing .billing-dynamic-step-footer .dynamic-step-back {
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  color: #f8fafc;
+}
+
+.billing-stepper.pro-billing .billing-dynamic-step-footer .dynamic-step-next {
+  background: linear-gradient(135deg, #5b5cf6, #2563eb);
+  border: 1px solid rgba(129, 140, 248, 0.5);
+  color: #fff;
+  box-shadow: 0 16px 36px rgba(37, 99, 235, 0.3);
+}
+
+.billing-stepper.pro-billing .billing-dynamic-step-footer .btn:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+:host-context(.light) .billing-stepper.pro-billing .billing-dynamic-step-footer,
+:host-context(body.light) .billing-stepper.pro-billing .billing-dynamic-step-footer,
+:host-context(.light-mode) .billing-stepper.pro-billing .billing-dynamic-step-footer {
+  background: linear-gradient(135deg, #ffffff, #f4f7fb);
+  border-color: rgba(99, 102, 241, 0.18);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
+}
+
+:host-context(.light) .billing-stepper.pro-billing .billing-dynamic-step-footer .dynamic-step-back,
+:host-context(body.light) .billing-stepper.pro-billing .billing-dynamic-step-footer .dynamic-step-back,
+:host-context(.light-mode) .billing-stepper.pro-billing .billing-dynamic-step-footer .dynamic-step-back {
+  background: #ffffff;
+  border-color: rgba(100, 116, 139, 0.22);
+  color: #0f172a;
+}
+
+@media (max-width: 760px) {
+  .billing-stepper.pro-billing .billing-dynamic-step-footer {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .billing-stepper.pro-billing .billing-dynamic-step-footer .btn {
+    width: 100%;
+  }
+}
+
+/* V76: stronger light-mode search-result highlighting.
+   Make matched terms readable and selected/active rows look intentional, not washed out. */
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-search-popover,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-search-popover,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-search-popover {
+  background: #ffffff !important;
+  border-color: #8b5cf6 !important;
+  box-shadow: 0 22px 58px rgba(15, 23, 42, .20), 0 0 0 1px rgba(139, 92, 246, .20) !important;
+}
+
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-result-row,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-result-row,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-result-row {
+  background: linear-gradient(90deg, #ffffff 0%, #f8fafc 100%) !important;
+  border-color: #dbe4f0 !important;
+  color: #0f172a !important;
+}
+
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-result-row.match,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-result-row.match,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-result-row.match {
+  background: linear-gradient(90deg, #f5f3ff 0%, #eef2ff 52%, #ecfeff 100%) !important;
+}
+
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-result-row.selected,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-result-row.selected,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-result-row.selected {
+  background: linear-gradient(90deg, #ede9fe 0%, #e0e7ff 48%, #dbeafe 100%) !important;
+  border-color: #8b5cf6 !important;
+  box-shadow: inset 4px 0 0 #7c3aed, 0 10px 24px rgba(124, 58, 237, .14) !important;
+}
+
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-result-row.active,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-result-row.active,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-result-row.active,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-result-row:focus-visible,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-result-row:focus-visible,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-result-row:focus-visible {
+  outline: 2px solid #7c3aed !important;
+  outline-offset: -2px !important;
+  background: linear-gradient(90deg, #ede9fe 0%, #ddd6fe 52%, #dbeafe 100%) !important;
+}
+
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-result-row .mat-mdc-checkbox,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-result-row .mat-mdc-checkbox,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-result-row .mat-mdc-checkbox {
+  --mdc-checkbox-selected-checkmark-color: #ffffff;
+  --mdc-checkbox-selected-focus-icon-color: #4f46e5;
+  --mdc-checkbox-selected-hover-icon-color: #4f46e5;
+  --mdc-checkbox-selected-icon-color: #4f46e5;
+  --mdc-checkbox-unselected-icon-color: #111827;
+  --mdc-checkbox-unselected-hover-icon-color: #4f46e5;
+  --mdc-checkbox-unselected-focus-icon-color: #4f46e5;
+}
+
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-result-title b,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-result-title b,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-result-title b {
+  color: #0f172a !important;
+}
+
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-result-title small,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-result-title small,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-result-title small,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-result-desc,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-result-desc,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-result-desc {
+  color: #475569 !important;
+}
+
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-result-price,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-result-price,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-result-price {
+  color: #0f172a !important;
+}
+
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template mark.reference-match-highlight,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template mark.reference-match-highlight,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template mark.reference-match-highlight,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-results mark,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-results mark,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-results mark {
+  background: linear-gradient(180deg, #fde68a 0%, #fbbf24 100%) !important;
+  color: #111827 !important;
+  border: 1px solid rgba(217, 119, 6, .22) !important;
+  border-radius: 6px !important;
+  padding: 0 4px !important;
+  font-weight: 950 !important;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* V77: typed search match highlight - replace cream badge with clean purple highlight */
+.billing-stepper.pro-billing mark.reference-match-highlight,
+.billing-stepper.pro-billing .template-results mark {
+  background: linear-gradient(180deg, rgba(167, 139, 250, .22), rgba(99, 102, 241, .34)) !important;
+  color: #ede9fe !important;
+  border: 1px solid rgba(167, 139, 250, .42) !important;
+  border-radius: 6px !important;
+  padding: 0 3px !important;
+  font-weight: 950 !important;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.billing-stepper.pro-billing .template-result-row.selected mark.reference-match-highlight,
+.billing-stepper.pro-billing .template-result-row.selected .template-results mark,
+.billing-stepper.pro-billing .template-result-row.selected mark {
+  background: rgba(255, 255, 255, .18) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, .34) !important;
+}
+
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template mark.reference-match-highlight,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template mark.reference-match-highlight,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template mark.reference-match-highlight,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-results mark,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-results mark,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-results mark {
+  background: linear-gradient(180deg, rgba(99, 102, 241, .16), rgba(99, 102, 241, .30)) !important;
+  color: #312e81 !important;
+  border: 1px solid rgba(99, 102, 241, .30) !important;
+  border-radius: 6px !important;
+  padding: 0 3px !important;
+  font-weight: 950 !important;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-result-row.selected mark.reference-match-highlight,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-result-row.selected mark.reference-match-highlight,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-result-row.selected mark.reference-match-highlight,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-result-row.selected mark,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-result-row.selected mark,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-result-row.selected mark {
+  background: rgba(255, 255, 255, .62) !important;
+  color: #1e1b4b !important;
+  border-color: rgba(99, 102, 241, .38) !important;
+}
+
+/* V78: no-cream typed match highlight in light mode */
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template mark.reference-match-highlight,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template mark.reference-match-highlight,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template mark.reference-match-highlight,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-results mark,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-results mark,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-results mark {
+  background: linear-gradient(180deg, rgba(99, 102, 241, .18), rgba(79, 70, 229, .30)) !important;
+  color: #312e81 !important;
+  border: 1px solid rgba(79, 70, 229, .34) !important;
+  border-radius: 6px !important;
+  padding: 0 3px !important;
+  font-weight: 950 !important;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  text-shadow: none !important;
+}
+
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-result-row.selected mark.reference-match-highlight,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-result-row.selected mark.reference-match-highlight,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-result-row.selected mark.reference-match-highlight,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-result-row.selected mark,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-result-row.selected mark,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-result-row.selected mark {
+  background: rgba(255, 255, 255, .64) !important;
+  color: #1e1b4b !important;
+  border-color: rgba(79, 70, 229, .42) !important;
+  text-shadow: none !important;
+}
