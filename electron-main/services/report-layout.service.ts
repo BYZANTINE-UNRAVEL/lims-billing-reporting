@@ -137,11 +137,25 @@ export abstract class ReportLayoutService extends ReportCoreService {
       .filter(x => !!x && x !== '-');
   }
 
+  /** Collection timing labels must never print as specimen under the test name. */
+  protected isCollectionTypeLabel(value: any): boolean {
+    const t = String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+    return [
+      'random', 'fasting', 'post-prandial', 'post prandial', 'timed', 'other',
+      'collection', 'unspecified', 'multiple collection types', 'collection type not set'
+    ].includes(t);
+  }
+
+  protected isGenericSpecimenPlaceholder(value: any): boolean {
+    return String(value ?? '').trim().toLowerCase() === 'specimen';
+  }
+
   protected joinUniqueSpecimens(values: any[]): string {
     const seen = new Set<string>();
     const out: string[] = [];
     for (const value of values) {
       for (const text of this.splitSpecimenValues(value)) {
+        if (this.isCollectionTypeLabel(text) || this.isGenericSpecimenPlaceholder(text)) continue;
         const key = text.toLowerCase();
         if (!seen.has(key)) { seen.add(key); out.push(text); }
       }
@@ -162,16 +176,40 @@ export abstract class ReportLayoutService extends ReportCoreService {
     } catch { return ''; }
   }
 
+  protected reportItemCollectionText(item: any): string {
+    const fromCollection = String(item?.collection_type || '').trim();
+    if (fromCollection && !this.isGenericSpecimenPlaceholder(fromCollection)) return fromCollection;
+    const fromSample = String(item?.sample_type || '').trim();
+    if (fromSample && this.isCollectionTypeLabel(fromSample)) return fromSample;
+    return '';
+  }
+
   protected reportItemSpecimenText(item: any): string {
     if (!item?.test_id) return '';
-    return this.joinUniqueSpecimens([
+    // Real specimen names only. Collection type is optional via report.simple.collectionVisible.
+    const primary = this.joinUniqueSpecimens([
       item.mapped_specimen_names,
       item.specimen_names,
       this.mappedSpecimensForTest(item.test_id),
-      item.specimen_name,
-      item.sample_type,
-      item.specimen
+      item.specimen_name
     ]);
+    let specimen = primary;
+    if (!specimen) {
+      const fallback = String(item.sample_type || item.specimen || '').trim();
+      if (fallback
+        && !this.isCollectionTypeLabel(fallback)
+        && !this.isGenericSpecimenPlaceholder(fallback)
+        && String(item.collection_type || '').trim().toLowerCase() !== fallback.toLowerCase()) {
+        specimen = fallback;
+      }
+    }
+    const showCollection = this.reportBool('report.simple.collectionVisible', false);
+    if (!showCollection) return specimen;
+    const collection = this.reportItemCollectionText(item);
+    if (!collection) return specimen;
+    if (!specimen) return collection;
+    if (specimen.toLowerCase().split(/\s*\/\s*/).includes(collection.toLowerCase())) return specimen;
+    return `${specimen} / ${collection}`;
   }
 
   protected uniqueJoinedSpecimens(items: any[], fallbackRow?: any): string {
@@ -180,7 +218,13 @@ export abstract class ReportLayoutService extends ReportCoreService {
       if (!item?.test_id) continue;
       values.push(this.reportItemSpecimenText(item));
     }
-    values.push(fallbackRow?.mapped_specimen_names, fallbackRow?.specimen_names, fallbackRow?.specimen_name, fallbackRow?.sample_type, fallbackRow?.specimen, fallbackRow?.sample_id);
+    values.push(
+      fallbackRow?.mapped_specimen_names,
+      fallbackRow?.specimen_names,
+      fallbackRow?.specimen_name,
+      this.isCollectionTypeLabel(fallbackRow?.sample_type) ? '' : fallbackRow?.sample_type,
+      this.isGenericSpecimenPlaceholder(fallbackRow?.specimen) || this.isCollectionTypeLabel(fallbackRow?.specimen) ? '' : fallbackRow?.specimen
+    );
     return this.joinUniqueSpecimens(values);
   }
 
@@ -491,13 +535,15 @@ export abstract class ReportLayoutService extends ReportCoreService {
       { text: rawSign?.extra || rawSign?.extraText || '', fontSize: 8, bold: false }
     ];
     const emptyMode = String(rawSign?.emptyLineMode || this.reportSetting('report.simple.signatureEmptyLineMode', 'reserve')).toLowerCase();
-    rawLines.slice(0, 12).forEach((line: any, idx: number) => {
-      const text = String(line?.text || '').trim();
-      if (!text && emptyMode !== 'reserve') return;
-      const node = this.signatureTextStyle({ ...line, text }, textAlignment, Math.min(idx + 1, 4));
-      if (!text) node.text = ' ';
-      stack.push(node);
-    });
+    if (rawSign?.textEnabled !== false) {
+      rawLines.slice(0, 12).forEach((line: any, idx: number) => {
+        const text = String(line?.text || '').trim();
+        if (!text && emptyMode !== 'reserve') return;
+        const node = this.signatureTextStyle({ ...line, text }, textAlignment, Math.min(idx + 1, 4));
+        if (!text) node.text = ' ';
+        stack.push(node);
+      });
+    }
     if (!stack.length) return { text: '' };
     return {
       stack,
@@ -520,7 +566,18 @@ export abstract class ReportLayoutService extends ReportCoreService {
       signs = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.signatures) ? parsed.signatures : [];
     } catch { signs = []; }
     const selectedSignatureIds = Array.isArray(options?.signature_ids) ? new Set(options.signature_ids.map((x:any)=>String(x))) : null;
-    signs = signs.filter((s: any, index:number) => s && s.enabled !== false && (!selectedSignatureIds || selectedSignatureIds.has(String(s.id ?? index))));
+    const signatureContent = options?.signature_content && typeof options.signature_content === 'object' ? options.signature_content : {};
+    signs = signs
+      .filter((s: any, index:number) => s && s.enabled !== false && (!selectedSignatureIds || selectedSignatureIds.has(String(s.id ?? index))))
+      .map((s: any, index: number) => {
+        const id = String(s.id ?? index);
+        const mode = String(signatureContent?.[id] || signatureContent?.[String(s.id)] || 'IMAGE_TEXT').toUpperCase();
+        return {
+          ...s,
+          imageEnabled: mode === 'TEXT_ONLY' ? false : (s.imageEnabled !== false),
+          textEnabled: mode === 'IMAGE_ONLY' ? false : (s.textEnabled !== false)
+        };
+      });
     if (!signs.length) return [];
     const groups = new Map<number, any[]>();
     signs.forEach((sign: any, index: number) => {

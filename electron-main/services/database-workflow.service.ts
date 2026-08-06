@@ -454,7 +454,8 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
           is_critical=?,
           critical_message=?,
           formula_status=?,
-          final_result_source=?
+          final_result_source=?,
+          recheck_remarks=?
         WHERE id=? AND quick_report_id=?`);
       for (const incoming of selectedRows) {
         const match = existingItems.find((x:any)=>+x.id === +incoming.id) || incoming;
@@ -485,6 +486,7 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
           flags.critical_message || '',
           formulaStatus,
           source,
+          itemForRules.recheck_remarks || incoming.recheck_remarks || match.recheck_remarks || '',
           +incoming.id,
           quickId
         );
@@ -527,8 +529,8 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
         const flags = this.applyResultFlagsToItem(itemForRules, base);
         const reportOrder = incoming.report_order_override !== null && incoming.report_order_override !== undefined && incoming.report_order_override !== '' ? +incoming.report_order_override : (+match.priority || 0);
         const groupOrder = incoming.group_order_override !== null && incoming.group_order_override !== undefined && incoming.group_order_override !== '' ? +incoming.group_order_override : (+match.priority || 0);
-        this.db.prepare(`INSERT INTO quick_report_items(quick_report_id,bill_id,bill_item_id,item_key,test_id,test_name,department_name,side_header,result_value,unit,normal_range,method,priority,report_order_override,group_order_override,highlight_parameter,heading_kind,source_profile_id,source_profile_name,flag_status,is_critical,critical_message,formula_status,final_result_source,specimen_type_id,specimen_name,sample_id,barcode,collection_type,collect_timing,expected_collect_at,collection_date,collection_time,collection_datetime,barcode_generated,barcode_generated_at,created_at)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(quickId,billId,+match.bill_item_id,String(match.item_key),+match.test_id,match.test_name,match.department_name||'',incoming.side_header||match.side_header||'',finalValue,incoming.unit||match.unit||'',itemForRules.normal_range||incoming.normal_range||match.normal_range||'',incoming.method||match.method||'',+match.priority||0,reportOrder,groupOrder,match.highlight_parameter?1:0,'',match.source_profile_id||null,match.source_profile_name||'',flags.flag_status||'',flags.is_critical?1:0,flags.critical_message||'',incoming.formula_status||match.formula_status||'',incoming.final_result_source||match.final_result_source||'MANUAL',+match.specimen_type_id||0,match.specimen_name||'',match.sample_id||'',match.barcode||match.sample_id||'',match.collection_type||match.sample_type||'',match.collect_timing||'NOW',match.expected_collect_at||'',match.collection_date||'',match.collection_time||'',match.collection_datetime||'',match.barcode_generated?1:0,match.barcode_generated_at||'',now);
+        this.db.prepare(`INSERT INTO quick_report_items(quick_report_id,bill_id,bill_item_id,item_key,test_id,test_name,department_name,side_header,result_value,unit,normal_range,method,priority,report_order_override,group_order_override,highlight_parameter,heading_kind,source_profile_id,source_profile_name,flag_status,is_critical,critical_message,formula_status,final_result_source,specimen_type_id,specimen_name,sample_id,barcode,collection_type,collect_timing,expected_collect_at,collection_date,collection_time,collection_datetime,barcode_generated,barcode_generated_at,recheck_remarks,created_at)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(quickId,billId,+match.bill_item_id,String(match.item_key),+match.test_id,match.test_name,match.department_name||'',incoming.side_header||match.side_header||'',finalValue,incoming.unit||match.unit||'',itemForRules.normal_range||incoming.normal_range||match.normal_range||'',incoming.method||match.method||'',+match.priority||0,reportOrder,groupOrder,match.highlight_parameter?1:0,'',match.source_profile_id||null,match.source_profile_name||'',flags.flag_status||'',flags.is_critical?1:0,flags.critical_message||'',incoming.formula_status||match.formula_status||'',incoming.final_result_source||match.final_result_source||'MANUAL',+match.specimen_type_id||0,match.specimen_name||'',match.sample_id||'',match.barcode||match.sample_id||'',match.collection_type||match.sample_type||'',match.collect_timing||'NOW',match.expected_collect_at||'',match.collection_date||'',match.collection_time||'',match.collection_datetime||'',match.barcode_generated?1:0,match.barcode_generated_at||'',incoming.recheck_remarks||match.recheck_remarks||'',now);
       }
       if (!selectedKeys.size) throw new Error('Selected tests were not found in Quick Reporting Pending. Refresh and try again.');
       // Copy only headings that belong to selected profile rows.
@@ -705,6 +707,7 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
     add('printed_at', 'TEXT');
     add('emailed_at', 'TEXT');
     add('smsed_at', 'TEXT');
+    add('whatsapped_at', 'TEXT');
     add('delivery_status', 'TEXT');
     add('show_profile_name_on_report', 'INTEGER NOT NULL DEFAULT 1');
     add('show_sub_header_on_report', 'INTEGER NOT NULL DEFAULT 1');
@@ -713,22 +716,28 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
   markReportDelivery(reportId:number, channel:string, details:string='') {
     const now = this.nowIst();
     const normalized = String(channel || '').toUpperCase();
-    const col = normalized === 'PDF_EXPORT' ? 'pdf_exported_at' : normalized === 'PRINT' ? 'printed_at' : normalized === 'EMAIL' ? 'emailed_at' : normalized === 'SMS' ? 'smsed_at' : '';
-    if (!col) throw new Error('Unknown report delivery channel.');
-    const label = normalized === 'PDF_EXPORT' ? 'PDF_EXPORTED' : normalized === 'PRINT' ? 'PRINTED' : normalized === 'EMAIL' ? 'EMAILED' : 'SMS_SENT';
+    const delivery: Record<string, { col: string; label: string }> = {
+      PDF_EXPORT: { col: 'pdf_exported_at', label: 'PDF_EXPORTED' },
+      PRINT: { col: 'printed_at', label: 'PRINTED' },
+      EMAIL: { col: 'emailed_at', label: 'EMAILED' },
+      WHATSAPP: { col: 'whatsapped_at', label: 'WHATSAPP_SENT' },
+      SMS: { col: 'smsed_at', label: 'SMS_SENT' }
+    };
+    const selected = delivery[normalized];
+    if (!selected) throw new Error('Unknown report delivery channel.');
     if (this.isQuickReportingEnabled()) {
       const qr = this.db.prepare('SELECT id,status FROM quick_reports WHERE id=?').get(reportId) as any;
       if (qr?.id) {
         this.db.prepare('UPDATE quick_reports SET updated_at=? WHERE id=?').run(now, reportId);
-        this.audit(`quick_report.delivery.${normalized.toLowerCase()}`, `${reportId}:${details || label}`);
+        this.audit(`quick_report.delivery.${normalized.toLowerCase()}`, `${reportId}:${details || selected.label}`);
         return this.getReport(reportId);
       }
     }
     const r = this.db.prepare('SELECT id,status FROM reports WHERE id=?').get(reportId) as any;
     if (!r?.id) throw new Error('Report not found');
     if (String(r.status || '').toUpperCase() !== 'APPROVED') throw new Error('Delivery actions are allowed only for approved reports.');
-    this.db.prepare(`UPDATE reports SET ${col}=?, delivery_status=?, updated_at=? WHERE id=?`).run(now, label, now, reportId);
-    this.audit(`report.delivery.${normalized.toLowerCase()}`, `${reportId}:${details || label}`);
+    this.db.prepare(`UPDATE reports SET ${selected.col}=?, delivery_status=?, updated_at=? WHERE id=?`).run(now, selected.label, now, reportId);
+    this.audit(`report.delivery.${normalized.toLowerCase()}`, `${reportId}:${details || selected.label}`);
     return this.getReport(reportId);
   }
 
@@ -905,7 +914,7 @@ CREATE INDEX IF NOT EXISTS idx_specimen_collection_tests_report ON specimen_coll
     if (!ids.length) throw new Error('Select one specimen/collection group to generate barcode.');
     this.assertCollectionUnlockedForReportItems(ids, 'Barcode generation');
     const specimenTypeId = +payload?.specimen_type_id || 0;
-    const specimenName = String(payload?.specimen_name || 'Specimen').trim() || 'Specimen';
+    const specimenName = String(payload?.specimen_name || '').trim();
     const collectionType = String(payload?.collection_type || payload?.sample_type || 'Random').trim() || 'Random';
     const collectionDateTime = String(payload?.collection_datetime || this.nowIst()).replace('T',' ').slice(0,16);
     const collectTiming = String(payload?.collect_timing || 'NOW').toUpperCase() === 'LATER' ? 'LATER' : 'NOW';
@@ -932,7 +941,7 @@ CREATE INDEX IF NOT EXISTS idx_specimen_collection_tests_report ON specimen_coll
           collection_status='COLLECTED',
           specimen_id=?, specimen_type_id=?, specimen_name=?, sample_type=?, collection_type=?, collection_datetime=?, collect_timing=?, expected_collect_at=?, barcode_generated_at=?,
           sample_remarks=TRIM(COALESCE(sample_remarks,'') || CASE WHEN COALESCE(sample_remarks,'')<>'' THEN ' | ' ELSE '' END || ?)
-        WHERE id IN (${placeholders})`).run(specimenId, specimenTypeId || null, specimenName, collectionType, collectionType, collectionDateTime, collectTiming, expectedCollectAt, now, `Barcode generated: ${specimenId} / ${collectionType} / ${collectionDateTime}`, ...ids);
+        WHERE id IN (${placeholders})`).run(specimenId, specimenTypeId || null, specimenName, specimenName, collectionType, collectionDateTime, collectTiming, expectedCollectAt, now, `Barcode generated: ${specimenId} / ${collectionType} / ${collectionDateTime}`, ...ids);
       this.audit('barcode.generate', `Bill ${billId}: ${specimenId}: ${ids.length} item(s): ${collectionType} ${collectionDateTime}`);
       return { specimen_id: specimenId, updated: ids.length };
     });

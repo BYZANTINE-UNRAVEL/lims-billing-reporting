@@ -196,6 +196,7 @@ CREATE INDEX IF NOT EXISTS idx_quick_report_items_report ON quick_report_items(q
     // Persist per-report ordering from Quick Reporting. Master priority remains unchanged.
     this.ensureColumn('quick_report_items', 'report_order_override', 'REAL');
     this.ensureColumn('quick_report_items', 'group_order_override', 'REAL');
+    this.ensureColumn('quick_report_items', 'recheck_remarks', 'TEXT');
     this.quickBarcode?.ensureSchema();
   }
 
@@ -215,46 +216,55 @@ CREATE INDEX IF NOT EXISTS idx_quick_report_items_report ON quick_report_items(q
     const uniqueBillIndex = indexes.find((idx:any) => +idx.unique === 1 && (this.db.prepare(`PRAGMA index_info(${idx.name})`).all() as any[]).some((x:any)=>x.name === 'bill_id'));
     if (uniqueBillIndex) {
       this.db.pragma('foreign_keys = OFF');
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS reports_multi_tmp(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          bill_id INTEGER NOT NULL,
-          status TEXT NOT NULL DEFAULT 'DRAFT',
-          typed_by TEXT,
-          approved_by TEXT,
-          remarks TEXT,
-          created_at TEXT NOT NULL DEFAULT (datetime('now','+330 minutes')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now','+330 minutes')),
-          pdf_exported_at TEXT,
-          printed_at TEXT,
-          emailed_at TEXT,
-          smsed_at TEXT,
-          delivery_status TEXT,
-          show_profile_name_on_report INTEGER NOT NULL DEFAULT 1,
-          show_sub_header_on_report INTEGER NOT NULL DEFAULT 1,
-          report_scope TEXT NOT NULL DEFAULT 'COLLECTION',
-          source_collection_id INTEGER,
-          workflow_key TEXT,
-          queue_vendor_id INTEGER,
-          report_title TEXT,
-          FOREIGN KEY(bill_id) REFERENCES bills(id)
-        );
-        INSERT OR IGNORE INTO reports_multi_tmp(id,bill_id,status,typed_by,approved_by,remarks,created_at,updated_at,pdf_exported_at,printed_at,emailed_at,smsed_at,delivery_status,show_profile_name_on_report,show_sub_header_on_report,report_scope,source_collection_id,workflow_key,queue_vendor_id,report_title)
-        SELECT id,bill_id,status,typed_by,approved_by,remarks,created_at,updated_at,
-          CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='pdf_exported_at') THEN pdf_exported_at ELSE NULL END,
-          CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='printed_at') THEN printed_at ELSE NULL END,
-          CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='emailed_at') THEN emailed_at ELSE NULL END,
-          CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='smsed_at') THEN smsed_at ELSE NULL END,
-          CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='delivery_status') THEN delivery_status ELSE NULL END,
-          CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='show_profile_name_on_report') THEN show_profile_name_on_report ELSE 1 END,
-          CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='show_sub_header_on_report') THEN show_sub_header_on_report ELSE 1 END,
-          CASE WHEN status='COLLECTION_STAGING' THEN 'STAGING' ELSE 'COLLECTION' END,
-          NULL,NULL,NULL,NULL
-        FROM reports;
-        DROP TABLE reports;
-        ALTER TABLE reports_multi_tmp RENAME TO reports;
-      `);
-      this.db.pragma('foreign_keys = ON');
+      try {
+        const migrateReports = this.db.transaction(() => {
+          this.db.exec(`DROP TABLE IF EXISTS reports_multi_tmp`);
+          this.db.exec(`
+            CREATE TABLE reports_multi_tmp(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              bill_id INTEGER NOT NULL,
+              status TEXT NOT NULL DEFAULT 'DRAFT',
+              typed_by TEXT,
+              approved_by TEXT,
+              remarks TEXT,
+              created_at TEXT NOT NULL DEFAULT (datetime('now','+330 minutes')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now','+330 minutes')),
+              pdf_exported_at TEXT,
+              printed_at TEXT,
+              emailed_at TEXT,
+              smsed_at TEXT,
+              whatsapped_at TEXT,
+              delivery_status TEXT,
+              show_profile_name_on_report INTEGER NOT NULL DEFAULT 1,
+              show_sub_header_on_report INTEGER NOT NULL DEFAULT 1,
+              report_scope TEXT NOT NULL DEFAULT 'COLLECTION',
+              source_collection_id INTEGER,
+              workflow_key TEXT,
+              queue_vendor_id INTEGER,
+              report_title TEXT,
+              FOREIGN KEY(bill_id) REFERENCES bills(id)
+            );
+            INSERT OR IGNORE INTO reports_multi_tmp(id,bill_id,status,typed_by,approved_by,remarks,created_at,updated_at,pdf_exported_at,printed_at,emailed_at,smsed_at,whatsapped_at,delivery_status,show_profile_name_on_report,show_sub_header_on_report,report_scope,source_collection_id,workflow_key,queue_vendor_id,report_title)
+            SELECT id,bill_id,status,typed_by,approved_by,remarks,created_at,updated_at,
+              CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='pdf_exported_at') THEN pdf_exported_at ELSE NULL END,
+              CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='printed_at') THEN printed_at ELSE NULL END,
+              CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='emailed_at') THEN emailed_at ELSE NULL END,
+              CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='smsed_at') THEN smsed_at ELSE NULL END,
+              CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='whatsapped_at') THEN whatsapped_at ELSE NULL END,
+              CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='delivery_status') THEN delivery_status ELSE NULL END,
+              CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='show_profile_name_on_report') THEN show_profile_name_on_report ELSE 1 END,
+              CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='show_sub_header_on_report') THEN show_sub_header_on_report ELSE 1 END,
+              CASE WHEN status='COLLECTION_STAGING' THEN 'STAGING' ELSE 'COLLECTION' END,
+              NULL,NULL,NULL,NULL
+            FROM reports;
+            DROP TABLE reports;
+            ALTER TABLE reports_multi_tmp RENAME TO reports;
+          `);
+        });
+        migrateReports();
+      } finally {
+        this.db.pragma('foreign_keys = ON');
+      }
     }
 
     add('report_scope', "TEXT NOT NULL DEFAULT 'COLLECTION'");
@@ -585,6 +595,20 @@ CREATE INDEX IF NOT EXISTS idx_tests_billing_order ON tests(department_id, billi
     }
   }
 
+  /** Force sequence to max(existing)+1 — can lower after deletes (e.g. drop unused patients). */
+  protected resyncNumberSequence(kind: string, table: string, col: string) {
+    this.ensureNumberSequenceSchema();
+    const existingMax = this.maxExistingNumberForKind(kind, table, col);
+    const requiredNext = Math.max(1, existingMax + 1);
+    const row = this.db.prepare('SELECT next_number FROM number_sequences WHERE kind=?').get(kind) as any;
+    if (!row) {
+      this.db.prepare('INSERT INTO number_sequences(kind,next_number) VALUES(?,?)').run(kind, requiredNext);
+      return requiredNext;
+    }
+    this.db.prepare('UPDATE number_sequences SET next_number=?,updated_at=? WHERE kind=?').run(requiredNext, this.nowIst(), kind);
+    return requiredNext;
+  }
+
   protected maxExistingNumberForKind(kind: string, table: string, col: string) {
     const prefix = this.getSetting(`${kind}.prefix`, kind === 'invoice' ? 'B' : kind === 'patient' ? 'P' : 'R');
     const suffix = this.getSetting(`${kind}.suffix`, '');
@@ -671,7 +695,11 @@ CREATE INDEX IF NOT EXISTS idx_tests_billing_order ON tests(department_id, billi
     const defaults: Record<string, string> = {
       'org.name': 'Your Lab Name', 'org.address': 'Lab address', 'org.phone': '', 'org.email': '',
       'report.footer': 'This report is electronically generated.', 'report.background': 'off',
-      'backup.path': path.join(app.getPath('documents'), 'LIMS-Professional-Backups'), 'backup.enabled': 'true', 'backup.intervalMinutes': '60',
+      'backup.path': path.join(app.getPath('documents'), 'LIMS-Professional-Backups'),
+      'backup.enabled': 'true',
+      'backup.intervalMinutes': '60',
+      'backup.onClose': 'true',
+      'backup.onStart': 'false',
       'theme': 'dark',
       'patient.prefix': 'P', 'patient.suffix': '', 'patient.padding': '6',
       'invoice.prefix': 'B', 'invoice.suffix': '', 'invoice.padding': '6',
@@ -1016,14 +1044,14 @@ CREATE TABLE IF NOT EXISTS equipment_test_mappings(
   FOREIGN KEY(test_id) REFERENCES tests(id)
 );
 `);
+    this.ensureColumn('equipment_master', 'equipment_identifier', 'TEXT');
+    this.ensureColumn('equipment_master', 'notes', 'TEXT');
+    this.ensureColumn('equipment_test_mappings', 'notes', 'TEXT');
     this.ensureEquipmentMappingDuplicateCodesAllowed();
     this.db.exec(`
 CREATE INDEX IF NOT EXISTS idx_equipment_test_map_equipment ON equipment_test_mappings(equipment_id, is_active, sort_order);
 CREATE INDEX IF NOT EXISTS idx_equipment_test_map_analyzer ON equipment_test_mappings(equipment_id, analyzer_code);
 `);
-    this.ensureColumn('equipment_master', 'equipment_identifier', 'TEXT');
-    this.ensureColumn('equipment_master', 'notes', 'TEXT');
-    this.ensureColumn('equipment_test_mappings', 'notes', 'TEXT');
     this.ensureAnalyzerRuntimeSchema();
   }
 
@@ -1708,6 +1736,39 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     return this.listTests();
   }
 
+  reorderDepartments(items: any[]) {
+    const tx = this.db.transaction(() => {
+      const stmt = this.db.prepare('UPDATE departments SET priority=? WHERE id=?');
+      (items || []).forEach((x:any, i:number) => {
+        const id = +x.id;
+        if (!Number.isFinite(id) || id <= 0) return;
+        const priority = +x.priority || ((i + 1) * 1000);
+        stmt.run(priority, id);
+      });
+    });
+    tx();
+    this.audit('department.reorder', JSON.stringify(items || []));
+    return this.listDepartments();
+  }
+
+  reorderProfiles(items: any[]) {
+    this.ensureProfileBuilderSchema();
+    const tx = this.db.transaction(() => {
+      const stmt = this.db.prepare('UPDATE profiles SET report_order=?,billing_order=?,priority=? WHERE id=?');
+      (items || []).forEach((x:any, i:number) => {
+        const id = +x.id;
+        if (!Number.isFinite(id) || id <= 0) return;
+        const reportOrder = +x.report_order || ((i + 1) * 1000);
+        const billingOrder = +x.billing_order || reportOrder;
+        const priority = Math.max(1, Math.round(reportOrder / 1000));
+        stmt.run(reportOrder, billingOrder, priority, id);
+      });
+    });
+    tx();
+    this.audit('profile.reorder', JSON.stringify(items || []));
+    return this.listProfiles();
+  }
+
   listProfiles(activeOnly = false) {
     this.ensureProfileBuilderSchema();
     const profiles = this.db.prepare(`SELECT p.*, CASE WHEN COALESCE(p.department_id,0)=0 THEN 'Mixed' ELSE COALESCE(d.name,'Mixed') END department_name FROM profiles p LEFT JOIN departments d ON d.id=p.department_id ${activeOnly?'WHERE p.active=1 AND p.billable=1':''} ORDER BY COALESCE(NULLIF(p.billing_order,0), NULLIF(p.report_order,0), p.priority), p.name`).all() as any[];
@@ -1788,19 +1849,87 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
   deleteProfile(id: number) {
     this.ensureProfileBuilderSchema();
     const profileId = +id;
+    if (!Number.isFinite(profileId) || profileId <= 0) throw new Error('Invalid profile id.');
+
+    const billCount = Number((this.db.prepare("SELECT COUNT(*) c FROM bill_items WHERE item_type='PROFILE' AND item_id=?").get(profileId) as any)?.c || 0);
+    const nestedParentCount = Number((this.db.prepare('SELECT COUNT(*) c FROM profile_items WHERE child_profile_id=?').get(profileId) as any)?.c || 0);
+    const reportItemCount = (() => {
+      try {
+        return Number((this.db.prepare('SELECT COUNT(*) c FROM report_items WHERE source_profile_id=?').get(profileId) as any)?.c || 0);
+      } catch {
+        return 0;
+      }
+    })();
+    const quickItemCount = (() => {
+      try {
+        return Number((this.db.prepare('SELECT COUNT(*) c FROM quick_report_items WHERE source_profile_id=?').get(profileId) as any)?.c || 0);
+      } catch {
+        return 0;
+      }
+    })();
+    const used = billCount > 0 || nestedParentCount > 0 || reportItemCount > 0 || quickItemCount > 0;
+
+    if (used) {
+      this.db.prepare('UPDATE profiles SET active=0, billable=0, active_for_reporting=0 WHERE id=?').run(profileId);
+      this.audit('profile.deactivate', JSON.stringify({ id: profileId, billCount, nestedParentCount, reportItemCount, quickItemCount }));
+      return { action: 'deactivated', id: profileId, list: this.listProfiles() };
+    }
+
     const tx = this.db.transaction(() => {
       this.db.prepare('DELETE FROM profile_items WHERE profile_id=?').run(profileId);
       this.db.prepare('DELETE FROM profile_items WHERE child_profile_id=?').run(profileId);
       this.db.prepare('DELETE FROM profile_tests WHERE profile_id=?').run(profileId);
-      this.db.prepare("DELETE FROM bill_items WHERE item_type='PROFILE' AND item_id=?").run(profileId);
       this.db.prepare('DELETE FROM profiles WHERE id=?').run(profileId);
     });
     tx();
-    this.audit('profile.delete.hard', JSON.stringify({ id: profileId }));
-    return this.listProfiles();
+    this.audit('profile.delete.unused', JSON.stringify({ id: profileId }));
+    return { action: 'deleted', id: profileId, list: this.listProfiles() };
   }
 
   listPatients(q = '') { return this.db.prepare('SELECT * FROM patients WHERE name LIKE ? OR mobile LIKE ? OR patient_no LIKE ? OR title LIKE ? OR guardian_name LIKE ? ORDER BY id DESC LIMIT 200').all(`%${q}%`,`%${q}%`,`%${q}%`,`%${q}%`,`%${q}%`); }
+
+  /** Patients with no bill and no quick report — safe to drop. */
+  unusedPatientsSqlWhere() {
+    return `NOT EXISTS (SELECT 1 FROM bills b WHERE b.patient_id = p.id)
+      AND NOT EXISTS (SELECT 1 FROM quick_reports qr WHERE qr.patient_id = p.id)`;
+  }
+
+  previewUnusedPatients(limit = 25) {
+    const where = this.unusedPatientsSqlWhere();
+    const count = Number(((this.db.prepare(`SELECT COUNT(*) c FROM patients p WHERE ${where}`).get() as any)?.c) || 0);
+    const sampleLimit = Math.max(1, Math.min(100, +limit || 25));
+    const sample = this.db.prepare(`SELECT p.id, p.patient_no, p.name, p.mobile, p.created_at
+      FROM patients p WHERE ${where}
+      ORDER BY p.id DESC LIMIT ?`).all(sampleLimit) as any[];
+    const totalPatients = Number(((this.db.prepare('SELECT COUNT(*) c FROM patients').get() as any)?.c) || 0);
+    return { count, totalPatients, sample };
+  }
+
+  dropUnusedPatients() {
+    const where = this.unusedPatientsSqlWhere();
+    const preview = this.previewUnusedPatients(5);
+    if (!preview.count) return { ok: true, deleted: 0, totalPatients: preview.totalPatients };
+    const tx = this.db.transaction(() => {
+      const info = this.db.prepare(`DELETE FROM patients WHERE id IN (
+        SELECT p.id FROM patients p WHERE ${where}
+      )`).run();
+      const deleted = Number(info?.changes || 0);
+      const nextNumber = this.resyncNumberSequence('patient', 'patients', 'patient_no');
+      const prefix = this.getSetting('patient.prefix', 'P');
+      const suffix = this.getSetting('patient.suffix', '');
+      const padding = Math.max(1, Number(this.getSetting('patient.padding', '6')) || 6);
+      const nextPatientNo = `${prefix}${String(nextNumber).padStart(padding, '0')}${suffix}`;
+      this.audit('patients.drop.unused', JSON.stringify({ deleted, totalBefore: preview.totalPatients, nextPatientNo }));
+      return {
+        ok: true,
+        deleted,
+        totalPatients: Math.max(0, preview.totalPatients - deleted),
+        nextPatientNo
+      };
+    });
+    return tx();
+  }
+
   savePatient(p: any) { const id=+p.id||0; const no=p.patient_no || this.nextConfiguredNo('patient', 'patients', 'patient_no'); const ageValue = p.age_value === '' || p.age_value === undefined || p.age_value === null ? null : +p.age_value; const vals=[no,p.title||'',p.name,p.dob||'',p.age||'',ageValue,p.age_unit||'YEARS',p.gender||'',p.relation_type||'',p.guardian_name||'',p.guardian_mobile||'',p.age_split ? 1 : 0,p.mobile||'',p.email||'',p.address||'',p.history||'']; const now=this.nowIst(); if(id) this.db.prepare('UPDATE patients SET patient_no=?,title=?,name=?,dob=?,age=?,age_value=?,age_unit=?,gender=?,relation_type=?,guardian_name=?,guardian_mobile=?,age_split=?,mobile=?,email=?,address=?,history=?,updated_at=? WHERE id=?').run(...vals,now,id); else return this.db.prepare('INSERT INTO patients(patient_no,title,name,dob,age,age_value,age_unit,gender,relation_type,guardian_name,guardian_mobile,age_split,mobile,email,address,history,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(...vals,now,now).lastInsertRowid; return id; }
   listConsultants() {
     this.ensureCommissionSchema();

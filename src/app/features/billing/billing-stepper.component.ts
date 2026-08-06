@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, HostListener, OnInit, Output, signal } from '@angular/core';
+import { Component, EventEmitter, HostListener, OnInit, Output, ViewChild, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
@@ -11,11 +11,12 @@ import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
 import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { DateTimeSettingsService } from '../../shared/date-time-settings.service';
+import { WhatsAppContactPromptComponent } from '../../shared/whatsapp-contact-prompt.component';
 
 @Component({
   selector: 'app-billing-stepper',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatCardModule, MatAutocompleteModule, MatInputModule, MatFormFieldModule, MatIconModule, MatCheckboxModule, MatTableModule, MatButtonModule, DragDropModule],
+  imports: [CommonModule, FormsModule, MatCardModule, MatAutocompleteModule, MatInputModule, MatFormFieldModule, MatIconModule, MatCheckboxModule, MatTableModule, MatButtonModule, DragDropModule, WhatsAppContactPromptComponent],
   templateUrl: './billing-stepper.component.html',
   styleUrls: [
     './billing-patient-legacy.component.scss',
@@ -30,10 +31,12 @@ import { DateTimeSettingsService } from '../../shared/date-time-settings.service
   ]
 })
 export class BillingStepperComponent implements OnInit {
+  @ViewChild(WhatsAppContactPromptComponent) private whatsAppPrompt?: WhatsAppContactPromptComponent;
   tests: any[] = [];
   profiles: any[] = [];
   consultants: any[] = [];
   @Output() billCreated = new EventEmitter<any>();
+  @Output() billCleared = new EventEmitter<void>();
   @Output() errorOccurred = new EventEmitter<string>();
 
   step = signal(1);
@@ -1191,6 +1194,14 @@ export class BillingStepperComponent implements OnInit {
   cashReturn() { return this.bill.payment_mode === 'Cash' ? +Math.max(0, (+this.bill.cash_received || 0) - this.paidAmount()).toFixed(2) : 0; }
   paymentStatus() { const paid = this.totalPaidPreview(); const total = this.billTotal(); return paid <= 0 ? 'Pending' : paid < total ? 'Partial paid' : 'Paid'; }
   paymentStatusNow() { if (this.isCancelledBill()) return 'Cancelled'; const paid = this.existingReceiptTotal(); const total = this.billTotal(); return paid <= 0 ? 'Pending' : paid < total ? 'Partial paid' : paid > total ? 'Excess paid' : 'Paid'; }
+  billNoPaymentClass() {
+    const status = this.paymentStatusNow().toLowerCase();
+    if (status.includes('cancel')) return 'pay-cancelled';
+    if (status.includes('excess')) return 'pay-excess';
+    if (status.includes('partial')) return 'pay-partial';
+    if (status === 'paid') return 'pay-paid';
+    return 'pay-pending';
+  }
   receiptHeaderStatus() { if (this.isCancelledBill()) return 'Cancelled'; return this.receiptExcess() > 0 ? `Excess ₹${this.receiptExcess()}` : this.receiptDueOnly() > 0 ? `Due ₹${this.receiptDueOnly()}` : 'Paid in full'; }
 
   displayPatientName(p: any) { return [p?.title, p?.name].filter(Boolean).join(' ').trim(); }
@@ -1547,6 +1558,20 @@ export class BillingStepperComponent implements OnInit {
     }
     window.limsApi.openPath(await window.limsApi.billPdf(id, !!includeReceipts));
   }
+
+  async openPatientWhatsApp(source?: any) {
+    const bill = source || this.lastBill() || (this.editingBillId ? this.bill : null);
+    const patient = bill?.patient || this.bill?.patient || {};
+    const result = await this.whatsAppPrompt?.openContact({
+      mobile: patient?.mobile || bill?.mobile || bill?.patient_mobile,
+      patientName: patient?.name || bill?.patient_name,
+      billNo: bill?.bill_no || this.lastBill()?.bill_no
+    });
+    if (!result || result.cancelled) return;
+    if (!result.ok) this.notify(result.error || 'Unable to open WhatsApp.', 'error');
+    else this.notify(`Opened WhatsApp for ${result.mobile}.`);
+  }
+
   async confirmBillPrint(includeReceipts: boolean) {
     const id = this.billPrintChoice().billId;
     this.billPrintChoice.set({ open: false, billId: null, receiptCount: 0 });
@@ -1554,5 +1579,22 @@ export class BillingStepperComponent implements OnInit {
   }
   async receipt(id: number, receiptId?: number) { window.limsApi.openPath(await window.limsApi.receiptPdf(id, receiptId)); }
   notify(message: string, tone: 'success' | 'error' | 'info' = 'success') { this.snack.set(message); this.snackTone.set(tone); window.setTimeout(() => { if (this.snack() === message) this.snack.set(''); }, 3200); }
-  resetBill() { this.registrationTypeOpen = false; this.bill = this.emptyBill(); this.editingBillId = null; this.editingBillNo = ''; this.lastBill.set(null); this.patientBillQuery = ''; this.consultantQuery = ''; this.clearConsultantResults(); this.billingPatientResults.set([]); this.selectedPatientMobileFromSearch = ''; this.mobileEditedManually = false; this.duplicateMobileBypass = ''; this.closeDuplicateMobileModal(); this.applyRegistrationDefaults(); this.step.set(1); }
+  resetBill() {
+    this.registrationTypeOpen = false;
+    this.bill = this.emptyBill();
+    this.editingBillId = null;
+    this.editingBillNo = '';
+    this.lastBill.set(null);
+    this.patientBillQuery = '';
+    this.consultantQuery = '';
+    this.clearConsultantResults();
+    this.billingPatientResults.set([]);
+    this.selectedPatientMobileFromSearch = '';
+    this.mobileEditedManually = false;
+    this.duplicateMobileBypass = '';
+    this.closeDuplicateMobileModal();
+    this.applyRegistrationDefaults();
+    this.step.set(1);
+    this.billCleared.emit();
+  }
 }

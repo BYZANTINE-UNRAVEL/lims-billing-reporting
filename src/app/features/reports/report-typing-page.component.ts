@@ -1,4 +1,5 @@
 import { CommonModule } from '@angular/common';
+import { ConnectedPosition, Overlay, OverlayModule, ScrollStrategy } from '@angular/cdk/overlay';
 import { Component, ElementRef, EventEmitter, OnDestroy, OnInit, Output, ViewChild, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
@@ -9,12 +10,15 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { OptionInputEngine } from './result-input/option-input.engine';
 import { SearchSelectInputEngine } from './result-input/search-select-input.engine';
 import { ResultOption } from './result-input/result-option';
+import { useResultChips as shouldUseResultChips, useResultOverlay as shouldUseResultOverlay } from './result-input/result-picker-mode';
+import { dateRangePresets, matchesDateRange, openNativeDatePicker, DATE_RANGE_FILTER_STYLES } from '../../shared/date-range-filters';
 
 type ReportQueueStatus = 'DRAFT' | 'TYPED' | 'RECHECK' | 'APPROVED' | 'CANCELLED' | 'LOG';
 type WorkspaceMode = 'ENTRY' | 'APPROVE' | 'APPROVED';
 type PdfPreviewState = { title: string; url: SafeResourceUrl } | null;
 type ReopenState = { report: ReportVm; reason: string; error: string } | null;
 type ResetConfirmState = { title: string; message: string; details: string; confirmText: string; cancelText: string } | null;
+type WhatsAppPromptState = { patientName: string; billNo: string; error: string } | null;
 type ApprovedAction = 'VIEW' | 'PDF' | 'PRINT' | 'EMAIL' | 'WHATSAPP' | 'SMS';
 type ApprovedActionState = { action: ApprovedAction; sourceReportId: number; reports: any[]; pending: any[]; showProfileName: boolean; showSubHeader: boolean; withBackground: boolean; signatures: any[]; mergeMode: 'MERGE' | 'SEPARATE'; printGrouping: 'BILL' | 'REPORT'; singleTestPlacement: 'TOP' | 'DEPARTMENT'; error: string } | null;
 type RejectState = { report: ReportVm; mode: 'ENTRY' | 'RECOLLECTION' | 'RECHECK'; reason: string; error: string } | null;
@@ -28,7 +32,7 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
 @Component({
   selector: 'app-report-typing-page',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, MatMenuModule, MatSnackBarModule],
+  imports: [CommonModule, ReactiveFormsModule, MatMenuModule, MatSnackBarModule, OverlayModule],
   template: `
     <section class="reporting-page">
       <ng-container *ngIf="!selectedReport(); else reportWorkspace">
@@ -51,8 +55,18 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
             </div>
             <div class="filter-row">
               <input placeholder="Search bill / patient / mobile..." [formControl]="queueFilterForm.controls.search">
-              <input type="date" [formControl]="queueFilterForm.controls.fromDate" (click)="openDatePicker($event)" (keydown.enter)="openDatePicker($event)">
-              <input type="date" [formControl]="queueFilterForm.controls.toDate" (click)="openDatePicker($event)" (keydown.enter)="openDatePicker($event)">
+              <div class="date-range-filters" aria-label="Report date filters">
+                <label class="date-field"><input type="date" [formControl]="queueFilterForm.controls.fromDate" (click)="openDatePicker($event)" (keydown.enter)="openDatePicker($event)"></label>
+                <span class="range-arrow">→</span>
+                <label class="date-field"><input type="date" [formControl]="queueFilterForm.controls.toDate" (click)="openDatePicker($event)" (keydown.enter)="openDatePicker($event)"></label>
+                <button type="button" [class.active]="isQueueTodayRange" (click)="setQueueDatePreset('today')">Today</button>
+                <button type="button" [class.active]="isQueuePreviousDayRange" (click)="setQueueDatePreset('previousDay')">Previous Day</button>
+                <button type="button" [class.active]="isQueueCurrentMonthRange" (click)="setQueueDatePreset('currentMonth')">Current Month</button>
+                <button type="button" [class.active]="isQueueLastMonthRange" (click)="setQueueDatePreset('lastMonth')">Last Month</button>
+                <button type="button" [class.active]="isQueueThirtyDayRange" (click)="setQueueDatePreset('thirtyDays')">30 Days</button>
+                <button type="button" [class.active]="isQueueCurrentYearRange" (click)="setQueueDatePreset('currentYear')">Current Year</button>
+                <button type="button" [class.active]="isQueueLastYearRange" (click)="setQueueDatePreset('lastYear')">Last Year</button>
+              </div>
             </div>
             <div class="pending-summary-toolbar" *ngIf="reportStatus==='DRAFT' && filteredReports().length">
               <label class="plain-check pending-master-check">
@@ -174,6 +188,7 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
                                 <mat-menu #quickBillFinishedActions="matMenu" class="lims-action-mat-menu quick-output-actions-menu" xPosition="before" yPosition="below" [overlapTrigger]="false">
                                   <button mat-menu-item type="button" (click)="startApprovedAction(primaryApprovedReportId(r), 'PRINT')"><span>⎙</span>Print</button>
                                   <button mat-menu-item type="button" (click)="startApprovedAction(primaryApprovedReportId(r), 'PDF')"><span>⇩</span>Export</button>
+                                  <button mat-menu-item type="button" (click)="openPatientWhatsApp(r)" [disabled]="busy()"><span>☏</span>Open WhatsApp</button>
                                   <button mat-menu-item type="button" class="danger-menu-item" (click)="quickDeleteFinishedGroup(r)"><span>🗑</span>Delete</button>
                                 </mat-menu>
                               </ng-container>
@@ -191,6 +206,7 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
                                   <button mat-menu-item type="button" (click)="openFinishedReportForEdit(primaryApprovedReportId(r))"><span>✎</span>Edit</button>
                                   <button mat-menu-item type="button" (click)="startApprovedAction(primaryApprovedReportId(r), 'PRINT')"><span>⎙</span>Print</button>
                                   <button mat-menu-item type="button" (click)="startApprovedAction(primaryApprovedReportId(r), 'PDF')"><span>⇩</span>Export</button>
+                                  <button mat-menu-item type="button" (click)="openPatientWhatsApp(r)" [disabled]="busy()"><span>☏</span>Open WhatsApp</button>
                                   <button mat-menu-item type="button" class="danger-menu-item" (click)="quickDeleteFinishedGroup(r)"><span>🗑</span>Delete</button>
                                 </mat-menu>
                               </ng-template>
@@ -281,28 +297,82 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
                       </span>
                       <div class="result-input-label rt-result-label"><span class="rt-label-text">{{resultLabel(x)}}</span>
                         <div class="rt-control" [class.disabled]="isResultLocked(x)">
-                          <ng-container *ngIf="isOptionInput(x); else searchOrFreeInput">
-                            <div class="rt-control rt-picker" [class.open]="isOptionPanelOpen(r,x)" [class.open-up]="panelOpensUp(r,x,'option')" [class.disabled]="isResultLocked(x)">
-                              <input class="rt-field rt-dropdown-input" type="text" [formControl]="optionTextControl(r,x)" (focus)="openOptionPanel(r,x,true,$any($event.target)); $any($event.target).select()" (click)="openOptionPanel(r,x,false,$any($event.target))" (keydown)="handleOptionKeydown($event,r,x)" (blur)="scheduleCloseOptionPanel(r,x)" placeholder="Type or select a result" autocomplete="off">
-                              <span class="rt-chevron" aria-hidden="true">⌄</span>
-                              <div class="rt-options-panel" *ngIf="isOptionPanelOpen(r,x)" draggable="false" (mousedown)="keepResultPickerOpen($event)" (click)="$event.stopPropagation()" (dragstart)="cancelResultPickerDrag($event)">
-                                <button type="button" class="rt-option muted" *ngIf="!filteredOptionChoices(r,x).length" draggable="false">No matching suggestions — typed value will be used</button>
-                                <button type="button" class="rt-option" *ngFor="let opt of filteredOptionChoices(r,x); trackBy: trackResultOption" [class.selected]="optionChoiceIsSelected(x,opt)" [class.active]="optionChoiceIsActive(r,x,opt)" [attr.aria-selected]="optionChoiceIsActive(r,x,opt)" draggable="false" (pointerdown)="commitOptionResult($event,r,x,opt)"><span class="rt-option-text">{{optionChoiceLabel(opt)}}</span><span class="rt-check" *ngIf="optionChoiceIsSelected(x,opt)">✓</span></button>
+                          <ng-container *ngIf="useResultChips(x); else pickerOrFreeInput">
+                            <div class="rt-chips-wrap">
+                              <div class="rt-chips" role="listbox" [attr.aria-label]="(x.test_name || 'Result') + ' options'">
+                                <button type="button" class="rt-chip" role="option"
+                                  *ngFor="let opt of chipChoices(x); trackBy: trackResultOption"
+                                  [class.selected]="chipIsSelected(x,opt)"
+                                  [attr.aria-selected]="chipIsSelected(x,opt)"
+                                  [disabled]="isResultLocked(x)"
+                                  (click)="commitChipResult($event,r,x,opt)">{{optionChoiceLabel(opt)}}</button>
+                                <button type="button" class="rt-chip rt-chip-clear" *ngIf="chipHasValue(x)" [disabled]="isResultLocked(x)" title="Clear result" (click)="clearChipResult($event,r,x)">Clear</button>
                               </div>
+                              <input class="rt-field rt-chip-type" type="text"
+                                *ngIf="isOptionInput(x); else chipSearchType"
+                                [formControl]="optionTextControl(r,x)"
+                                placeholder="Or type a value"
+                                autocomplete="off"
+                                title="Type a custom value when no chip matches">
+                              <ng-template #chipSearchType>
+                                <input class="rt-field rt-chip-type" type="text"
+                                  [formControl]="searchResultControl(r,x)"
+                                  placeholder="Or type a value"
+                                  autocomplete="off"
+                                  title="Type a custom value when no chip matches">
+                              </ng-template>
                             </div>
                           </ng-container>
-                          <ng-template #searchOrFreeInput>
-                            <ng-container *ngIf="isSearchSelectInput(x); else freeInput">
-                              <div class="rt-control rt-picker" [class.open]="isSearchPanelOpen(r,x)" [class.open-up]="panelOpensUp(r,x,'search')" [class.disabled]="isResultLocked(x)">
-                                <input class="rt-field" type="text" [formControl]="searchResultControl(r,x)" (focus)="openSearchPanel(r,x,true,$any($event.target)); $any($event.target).select()" (click)="openSearchPanel(r,x,true,$any($event.target))" (blur)="scheduleCloseSearchPanel(r,x)" [placeholder]="inputPlaceholder(x)" autocomplete="off">
-                                <div class="rt-options-panel" *ngIf="isSearchPanelOpen(r,x)" draggable="false" (mousedown)="keepResultPickerOpen($event)" (click)="$event.stopPropagation()" (dragstart)="cancelResultPickerDrag($event)">
-                                  <button type="button" class="rt-option muted" *ngIf="!filteredSearchSelectOptions(r,x).length" draggable="false">No matching suggestions — typed value will be used</button>
-                                  <button type="button" class="rt-option" *ngFor="let opt of filteredSearchSelectOptions(r,x)" draggable="false" [class.selected]="searchChoiceIsSelected(x,opt)" (pointerdown)="commitSearchSelectResult($event,r,x,opt)" (dragstart)="cancelResultPickerDrag($event)"><span class="rt-option-text"><ng-container *ngFor="let part of searchOptionParts(r,x,opt)"><mark *ngIf="part.match; else normalPart">{{part.text}}</mark><ng-template #normalPart>{{part.text}}</ng-template></ng-container></span><span class="rt-check" *ngIf="searchChoiceIsSelected(x,opt)">✓</span></button>
-                                </div>
+                          <ng-template #pickerOrFreeInput>
+                            <ng-container *ngIf="isOptionInput(x); else searchOrFreeInput">
+                              <div class="rt-control rt-picker" [class.open]="isOptionPanelOpen(r,x)" [class.disabled]="isResultLocked(x)">
+                                <input class="rt-field rt-dropdown-input" type="text" cdkOverlayOrigin #optionOrigin="cdkOverlayOrigin" [formControl]="optionTextControl(r,x)" (focus)="openOptionPanel(r,x,true,$any($event.target)); $any($event.target).select()" (click)="openOptionPanel(r,x,false,$any($event.target))" (keydown)="handleOptionKeydown($event,r,x)" (blur)="scheduleCloseOptionPanel(r,x)" placeholder="Type or select a result" autocomplete="off">
+                                <span class="rt-chevron" aria-hidden="true">⌄</span>
+                                <ng-template
+                                  cdkConnectedOverlay
+                                  [cdkConnectedOverlayOrigin]="optionOrigin"
+                                  [cdkConnectedOverlayOpen]="isOptionPanelOpen(r,x)"
+                                  [cdkConnectedOverlayPositions]="resultOverlayPositions"
+                                  [cdkConnectedOverlayScrollStrategy]="resultOverlayScrollStrategy"
+                                  [cdkConnectedOverlayPush]="true"
+                                  [cdkConnectedOverlayViewportMargin]="8"
+                                  [cdkConnectedOverlayMinWidth]="overlayOriginWidth(optionOrigin)"
+                                  [cdkConnectedOverlayHasBackdrop]="false"
+                                  cdkConnectedOverlayPanelClass="rt-options-overlay-pane"
+                                  (overlayOutsideClick)="closeOptionPanel(r,x)">
+                                  <div class="rt-options-panel rt-options-overlay" role="listbox" draggable="false" (mousedown)="keepResultPickerOpen($event)" (click)="$event.stopPropagation()" (dragstart)="cancelResultPickerDrag($event)">
+                                    <button type="button" class="rt-option muted" *ngIf="!filteredOptionChoices(r,x).length" draggable="false">No matching suggestions — typed value will be used</button>
+                                    <button type="button" class="rt-option" *ngFor="let opt of filteredOptionChoices(r,x); trackBy: trackResultOption" [class.selected]="optionChoiceIsSelected(x,opt)" [class.active]="optionChoiceIsActive(r,x,opt)" [attr.aria-selected]="optionChoiceIsActive(r,x,opt)" draggable="false" (pointerdown)="commitOptionResult($event,r,x,opt)"><span class="rt-option-text">{{optionChoiceLabel(opt)}}</span><span class="rt-check" *ngIf="optionChoiceIsSelected(x,opt)">✓</span></button>
+                                  </div>
+                                </ng-template>
                               </div>
                             </ng-container>
-                            <ng-template #freeInput>
-                              <input class="rt-field" [type]="inputType(x)" [attr.inputmode]="inputMode(x)" [formControl]="resultValueControl(r,x)" [placeholder]="inputPlaceholder(x)" autocomplete="off">
+                            <ng-template #searchOrFreeInput>
+                              <ng-container *ngIf="isSearchSelectInput(x); else freeInput">
+                                <div class="rt-control rt-picker" [class.open]="isSearchPanelOpen(r,x)" [class.disabled]="isResultLocked(x)">
+                                  <input class="rt-field" type="text" cdkOverlayOrigin #searchOrigin="cdkOverlayOrigin" [formControl]="searchResultControl(r,x)" (focus)="openSearchPanel(r,x,true,$any($event.target)); $any($event.target).select()" (click)="openSearchPanel(r,x,true,$any($event.target))" (blur)="scheduleCloseSearchPanel(r,x)" [placeholder]="inputPlaceholder(x)" autocomplete="off">
+                                  <ng-template
+                                    cdkConnectedOverlay
+                                    [cdkConnectedOverlayOrigin]="searchOrigin"
+                                    [cdkConnectedOverlayOpen]="isSearchPanelOpen(r,x)"
+                                    [cdkConnectedOverlayPositions]="resultOverlayPositions"
+                                    [cdkConnectedOverlayScrollStrategy]="resultOverlayScrollStrategy"
+                                    [cdkConnectedOverlayPush]="true"
+                                    [cdkConnectedOverlayViewportMargin]="8"
+                                    [cdkConnectedOverlayMinWidth]="overlayOriginWidth(searchOrigin)"
+                                    [cdkConnectedOverlayHasBackdrop]="false"
+                                    cdkConnectedOverlayPanelClass="rt-options-overlay-pane"
+                                    (overlayOutsideClick)="closeSearchPanel(r,x)">
+                                    <div class="rt-options-panel rt-options-overlay" role="listbox" draggable="false" (mousedown)="keepResultPickerOpen($event)" (click)="$event.stopPropagation()" (dragstart)="cancelResultPickerDrag($event)">
+                                      <button type="button" class="rt-option muted" *ngIf="!filteredSearchSelectOptions(r,x).length" draggable="false">No matching suggestions — typed value will be used</button>
+                                      <button type="button" class="rt-option" *ngFor="let opt of filteredSearchSelectOptions(r,x)" draggable="false" [class.selected]="searchChoiceIsSelected(x,opt)" (pointerdown)="commitSearchSelectResult($event,r,x,opt)" (dragstart)="cancelResultPickerDrag($event)"><span class="rt-option-text"><ng-container *ngFor="let part of searchOptionParts(r,x,opt)"><mark *ngIf="part.match; else normalPart">{{part.text}}</mark><ng-template #normalPart>{{part.text}}</ng-template></ng-container></span><span class="rt-check" *ngIf="searchChoiceIsSelected(x,opt)">✓</span></button>
+                                    </div>
+                                  </ng-template>
+                                </div>
+                              </ng-container>
+                              <ng-template #freeInput>
+                                <input class="rt-field" [type]="inputType(x)" [attr.inputmode]="inputMode(x)" [formControl]="resultValueControl(r,x)" [placeholder]="inputPlaceholder(x)" autocomplete="off">
+                              </ng-template>
                             </ng-template>
                           </ng-template>
                         </div>
@@ -594,10 +664,10 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
               <div class="compact-setting-block" *ngIf="approvedSelectedCount(a)>1"><div class="setting-title"><b>Merge or separate</b></div><div class="choice-card-grid compact-choice-grid"><label [class.active]="a.mergeMode==='MERGE'"><input type="radio" value="MERGE" [formControl]="fieldControl(a,'mergeMode')"><span><b>Merge into one document</b></span></label><label [class.active]="a.mergeMode==='SEPARATE'"><input type="radio" value="SEPARATE" [formControl]="fieldControl(a,'mergeMode')"><span><b>Keep reports separate</b></span></label></div></div>
               <div class="compact-setting-block"><div class="setting-title"><b>Document appearance</b><small>Header is always included.</small></div><div class="choice-card-grid compact-choice-grid"><label [class.active]="a.withBackground"><input type="radio" name="documentAppearance" [value]="true" [formControl]="fieldControl(a,'withBackground')"><span><b>With background</b></span></label><label [class.active]="!a.withBackground"><input type="radio" name="documentAppearance" [value]="false" [formControl]="fieldControl(a,'withBackground')"><span><b>Without background</b></span></label></div></div>
               <div class="compact-setting-block"><div class="setting-title"><b>Single tests position</b><small>Applied inside each category.</small></div><div class="choice-card-grid compact-choice-grid"><label [class.active]="a.singleTestPlacement==='TOP'"><input type="radio" name="singleTestPlacement" value="TOP" [formControl]="fieldControl(a,'singleTestPlacement')"><span><b>At the beginning</b></span></label><label [class.active]="a.singleTestPlacement==='DEPARTMENT'"><input type="radio" name="singleTestPlacement" value="DEPARTMENT" [formControl]="fieldControl(a,'singleTestPlacement')"><span><b>At the end</b></span></label></div></div>
-              <div class="compact-setting-block" *ngIf="a.signatures.length"><div class="setting-title"><b>Uploaded signatures</b><small>Selected by default.</small></div><div class="signature-choice-list compact-signature-list"><label *ngFor="let sign of a.signatures"><input type="checkbox" [formControl]="approvedSignatureControl(sign)"><span class="signature-row-copy"><b>{{sign.label}}</b></span><em>{{sign.hasImage ? 'Uploaded' : 'Configured'}}</em></label></div></div>
+              <div class="compact-setting-block" *ngIf="a.signatures.length"><div class="setting-title"><b>Signatures</b><small>All Report Settings signs. Include each sign and choose image + text, image only, or text only.</small></div><div class="signature-rich-list"><article class="signature-rich-card" *ngFor="let sign of a.signatures" [class.active]="sign.selected" [class.off]="!sign.selected"><label class="signature-rich-include"><input type="checkbox" [formControl]="approvedSignatureControl(sign)"><span class="signature-row-copy"><b>{{sign.label}}</b><small>{{sign.hasImage ? 'Image available' : 'No image uploaded'}}</small></span><em>{{sign.selected ? (sign.contentMode==='TEXT_ONLY' ? 'Text only' : sign.contentMode==='IMAGE_ONLY' ? 'Image only' : 'Image + text') : 'Excluded'}}</em></label><div class="choice-card-grid compact-choice-grid signature-content-grid three" *ngIf="sign.selected"><label [class.active]="sign.contentMode==='IMAGE_TEXT'"><input type="radio" [name]="'signContent-' + sign.id" value="IMAGE_TEXT" [formControl]="fieldControl(sign,'contentMode')"><span><b>Image + text</b></span></label><label [class.active]="sign.contentMode==='IMAGE_ONLY'"><input type="radio" [name]="'signContent-' + sign.id" value="IMAGE_ONLY" [formControl]="fieldControl(sign,'contentMode')"><span><b>Image only</b></span></label><label [class.active]="sign.contentMode==='TEXT_ONLY'"><input type="radio" [name]="'signContent-' + sign.id" value="TEXT_ONLY" [formControl]="fieldControl(sign,'contentMode')"><span><b>Text only</b></span></label></div></article></div></div>
               <div class="notice danger" *ngIf="a.error">{{a.error}}</div>
             </section>
-            <aside class="output-column preview-column"><div class="preview-card"><div class="preview-document-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5M10 12h5M10 16h5"></path></svg></div><h4>Preview summary</h4><div class="preview-summary-row"><span>Reports</span><b>{{approvedSelectedCount(a)}} selected</b></div><div class="preview-summary-row"><span>Output</span><b>{{a.mergeMode==='MERGE' ? 'Merged document' : 'Separate reports'}}</b></div><div class="preview-summary-row"><span>Background</span><b>{{a.withBackground ? 'Enabled' : 'Plain'}}</b></div><div class="preview-summary-row"><span>Single tests</span><b>{{a.singleTestPlacement==='TOP' ? 'At beginning' : 'At end'}}</b></div><div class="preview-summary-row" *ngIf="a.signatures.length"><span>Signatures</span><b>{{a.signatures.length}} available</b></div></div></aside>
+            <aside class="output-column preview-column"><div class="preview-card"><div class="preview-document-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5M10 12h5M10 16h5"></path></svg></div><h4>Preview summary</h4><div class="preview-summary-row"><span>Reports</span><b>{{approvedSelectedCount(a)}} selected</b></div><div class="preview-summary-row"><span>Output</span><b>{{a.mergeMode==='MERGE' ? 'Merged document' : 'Separate reports'}}</b></div><div class="preview-summary-row"><span>Background</span><b>{{a.withBackground ? 'Enabled' : 'Plain'}}</b></div><div class="preview-summary-row"><span>Single tests</span><b>{{a.singleTestPlacement==='TOP' ? 'At beginning' : 'At end'}}</b></div><div class="preview-summary-row" *ngIf="a.signatures.length"><span>Signatures</span><b>{{approvedSelectedSignatures(a).length}} included</b></div><div class="preview-summary-row" *ngIf="approvedSelectedSignatures(a).length"><span>Sign content</span><b>{{signatureContentSummary(a)}}</b></div></div></aside>
           </div>
           <footer class="output-modal-footer"><div class="output-footer-summary"><b>{{approvedSelectedCount(a)}} report{{approvedSelectedCount(a)===1 ? '' : 's'}} selected</b><small>{{a.mergeMode==='MERGE' ? 'Will be merged into one document' : 'Will be generated separately'}}</small></div><div class="output-footer-actions"><button class="btn ghost" type="button" (click)="approvedActionState.set(null)">Cancel</button><button class="btn primary output-primary-action" type="button" (click)="confirmApprovedAction()" [disabled]="busy() || approvedSelectedCount(a)===0">{{a.action==='PRINT' ? 'Print selected reports' : 'Export selected reports'}}</button></div></footer>
         </div>
@@ -616,6 +686,73 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
             <button class="btn ghost" type="button" (click)="finishResetConfirm(false)">{{d.cancelText}}</button>
             <button class="btn danger-solid" type="button" (click)="finishResetConfirm(true)">{{d.confirmText}}</button>
           </div>
+        </div>
+      </div>
+
+      <div #whatsAppPromptBackdrop class="modal-backdrop output-modal-backdrop whatsapp-output-backdrop" *ngIf="whatsAppPrompt() as w" (click)="closeWhatsAppPrompt()" (wheel)="$event.stopPropagation()" (touchmove)="$event.stopPropagation()">
+        <div class="history-modal approved-action-modal rich-output-modal whatsapp-output-modal" (click)="$event.stopPropagation()">
+          <header class="output-modal-header">
+            <div class="output-modal-heading">
+              <span class="output-modal-icon whatsapp-output-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12.04 2a9.9 9.9 0 0 0-8.5 14.9L2 22l5.25-1.38A9.9 9.9 0 1 0 12.04 2Zm0 1.8a8.1 8.1 0 0 1 6.9 12.3l-.3.46.2.96-1.1.63-.93.22-.48.29a8.1 8.1 0 1 1-4.29-14.86Zm-2.8 3.4c-.22 0-.58.08-.88.4-.3.32-1.14 1.11-1.14 2.7 0 1.6 1.17 3.14 1.33 3.35.17.22 2.26 3.62 5.57 4.93 2.75 1.09 3.31.87 3.91.82.6-.05 1.94-.79 2.21-1.55.28-.76.28-1.41.2-1.55-.08-.14-.3-.22-.63-.38-.33-.17-1.94-.96-2.24-1.07-.3-.1-.52-.16-.74.16-.22.32-.85 1.07-1.04 1.29-.19.22-.38.25-.71.08-.33-.16-1.38-.51-2.63-1.62-1-.89-1.68-1.98-1.88-2.31-.2-.33-.02-.5.15-.67.15-.15.33-.38.5-.57.16-.19.22-.32.33-.54.11-.22.05-.41-.03-.57-.08-.16-.74-1.78-1.01-2.44-.26-.63-.53-.54-.74-.55Z"/></svg>
+              </span>
+              <div>
+                <h3>Open WhatsApp</h3>
+                <p>No mobile number is saved · enter a number to open the chat</p>
+              </div>
+            </div>
+            <button class="output-modal-close" type="button" (click)="closeWhatsAppPrompt()" aria-label="Close" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+          </header>
+
+          <div class="output-modal-meta">
+            <div><span>Patient</span><b>{{w.patientName || '-'}}</b></div>
+            <div><span>Bill</span><b>{{w.billNo || '-'}}</b></div>
+            <div><span>Action</span><b>Open chat only</b></div>
+          </div>
+
+          <div class="output-modal-body whatsapp-output-body">
+            <section class="output-column settings-column whatsapp-main-column">
+              <div class="output-column-head">
+                <div>
+                  <h4>Mobile number</h4>
+                  <p>Use the patient&apos;s WhatsApp number. Country code is added for 10-digit Indian numbers.</p>
+                </div>
+              </div>
+              <label class="whatsapp-phone-field">
+                <span>Mobile number</span>
+                <div class="whatsapp-phone-input">
+                  <em>+91</em>
+                  <input type="tel" inputmode="tel" autocomplete="tel" maxlength="15" placeholder="98765 43210" [formControl]="whatsAppMobileControl" (keydown.enter)="confirmWhatsAppPrompt()" data-whatsapp-autofocus="1">
+                </div>
+                <small>Example: 9876543210 · do not include spaces or symbols</small>
+              </label>
+              <div class="notice danger" *ngIf="w.error">{{w.error}}</div>
+            </section>
+
+            <aside class="output-column preview-column">
+              <div class="preview-card">
+                <div class="preview-document-icon whatsapp-preview-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M12.04 2a9.9 9.9 0 0 0-8.5 14.9L2 22l5.25-1.38A9.9 9.9 0 1 0 12.04 2Z"/></svg>
+                </div>
+                <h4>WhatsApp handoff</h4>
+                <div class="preview-summary-row"><span>Patient</span><b>{{w.patientName || '-'}}</b></div>
+                <div class="preview-summary-row"><span>Bill</span><b>{{w.billNo || '-'}}</b></div>
+                <div class="preview-summary-row"><span>Opens</span><b>WhatsApp chat</b></div>
+                <div class="preview-summary-row"><span>Message</span><b>None (contact only)</b></div>
+              </div>
+            </aside>
+          </div>
+
+          <footer class="output-modal-footer">
+            <div class="output-footer-summary">
+              <b>Open WhatsApp contact</b>
+              <small>No report PDF is attached. This only opens the chat for the entered number.</small>
+            </div>
+            <div class="output-footer-actions">
+              <button class="btn ghost" type="button" (click)="closeWhatsAppPrompt()">Cancel</button>
+              <button class="btn whatsapp-solid output-primary-action" type="button" (click)="confirmWhatsAppPrompt()" [disabled]="busy()">Open WhatsApp</button>
+            </div>
+          </footer>
         </div>
       </div>
     </section>
@@ -639,15 +776,17 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
     .report-content{min-height:0;overflow:auto;padding:2px 0 22px}
     .master-card{border:1px solid var(--border);border-radius:22px;background:var(--panel);box-shadow:var(--shadow);padding:16px}
     .list-card{margin-top:0}
-    .filter-row{display:grid;grid-template-columns:1fr 210px 210px;gap:10px;margin-bottom:12px}
-    input,select{height:36px;width:100%;border:1px solid var(--border);border-radius:12px;background:var(--input);color:var(--text);padding:0 10px;font-size:13px;outline:none;color-scheme:dark}
+    .filter-row{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
+    .filter-row > input{height:36px;border:1px solid var(--border);border-radius:12px;background-color:var(--input);color:var(--text);padding:0 12px;font-weight:850;outline:none;width:100%;max-width:520px}
+    input,select{height:36px;width:100%;border:1px solid var(--border);border-radius:12px;background-color:var(--input);color:var(--text);padding:0 10px;font-size:13px;outline:none;color-scheme:dark}
     input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
-    input[type="date"]{appearance:none;-webkit-appearance:none;color:#f8fafc!important;background-color:color-mix(in srgb,var(--input) 92%,var(--panel));background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23f8fafc' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;background-size:18px 18px;font-weight:850;letter-spacing:.01em;color-scheme:dark;padding-right:46px!important}
+    input[type="date"]{appearance:none;-webkit-appearance:none;color:#f8fafc!important;background-color:color-mix(in srgb,var(--input) 92%,var(--panel))!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23f8fafc' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E")!important;background-repeat:no-repeat!important;background-position:right 14px center!important;background-size:18px 18px!important;font-weight:850;letter-spacing:.01em;color-scheme:dark;padding-right:46px!important}
     input[type="date"]::-webkit-datetime-edit,input[type="date"]::-webkit-datetime-edit-fields-wrapper,input[type="date"]::-webkit-datetime-edit-text,input[type="date"]::-webkit-datetime-edit-month-field,input[type="date"]::-webkit-datetime-edit-day-field,input[type="date"]::-webkit-datetime-edit-year-field{color:#f8fafc!important}
     input[type="date"]::-webkit-calendar-picker-indicator{opacity:0!important;cursor:pointer;width:42px;height:100%;margin-right:-8px}
-    :host-context(.light) input,:host-context(.light-mode) input{color-scheme:light}
-    :host-context(.light) input[type="date"],:host-context(.light-mode) input[type="date"]{background-color:#fff;color:#0f172a!important;color-scheme:light;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%230f172a' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E")}
-    :host-context(.light) input[type="date"]::-webkit-datetime-edit,:host-context(.light) input[type="date"]::-webkit-datetime-edit-fields-wrapper,:host-context(.light) input[type="date"]::-webkit-datetime-edit-text,:host-context(.light) input[type="date"]::-webkit-datetime-edit-month-field,:host-context(.light) input[type="date"]::-webkit-datetime-edit-day-field,:host-context(.light) input[type="date"]::-webkit-datetime-edit-year-field,:host-context(.light-mode) input[type="date"]::-webkit-datetime-edit,:host-context(.light-mode) input[type="date"]::-webkit-datetime-edit-fields-wrapper,:host-context(.light-mode) input[type="date"]::-webkit-datetime-edit-text,:host-context(.light-mode) input[type="date"]::-webkit-datetime-edit-month-field,:host-context(.light-mode) input[type="date"]::-webkit-datetime-edit-day-field,:host-context(.light-mode) input[type="date"]::-webkit-datetime-edit-year-field{color:#0f172a!important}
+    :host-context(.light) input,:host-context(.light-mode) input,:host-context(body.light) input{color-scheme:light}
+    :host-context(.light) input[type="date"],:host-context(.light-mode) input[type="date"],:host-context(body.light) input[type="date"]{background-color:#fff!important;color:#0f172a!important;color-scheme:light;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%230f172a' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E")!important}
+    :host-context(.light) input[type="date"]::-webkit-datetime-edit,:host-context(.light) input[type="date"]::-webkit-datetime-edit-fields-wrapper,:host-context(.light) input[type="date"]::-webkit-datetime-edit-text,:host-context(.light) input[type="date"]::-webkit-datetime-edit-month-field,:host-context(.light) input[type="date"]::-webkit-datetime-edit-day-field,:host-context(.light) input[type="date"]::-webkit-datetime-edit-year-field,:host-context(.light-mode) input[type="date"]::-webkit-datetime-edit,:host-context(.light-mode) input[type="date"]::-webkit-datetime-edit-fields-wrapper,:host-context(.light-mode) input[type="date"]::-webkit-datetime-edit-text,:host-context(.light-mode) input[type="date"]::-webkit-datetime-edit-month-field,:host-context(.light-mode) input[type="date"]::-webkit-datetime-edit-day-field,:host-context(.light-mode) input[type="date"]::-webkit-datetime-edit-year-field,:host-context(body.light) input[type="date"]::-webkit-datetime-edit,:host-context(body.light) input[type="date"]::-webkit-datetime-edit-fields-wrapper,:host-context(body.light) input[type="date"]::-webkit-datetime-edit-text,:host-context(body.light) input[type="date"]::-webkit-datetime-edit-month-field,:host-context(body.light) input[type="date"]::-webkit-datetime-edit-day-field,:host-context(body.light) input[type="date"]::-webkit-datetime-edit-year-field{color:#0f172a!important}
+    ${DATE_RANGE_FILTER_STYLES}
     .master-table{width:100%;border-collapse:separate;border-spacing:0 8px}
     .master-table th{text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;padding:0 10px}
     .master-table td{background:var(--row);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:10px;font-size:13px;vertical-align:middle}
@@ -679,6 +818,9 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
     .confirm-card{width:min(520px,92vw);border:1px solid color-mix(in srgb,#ef4444 30%,var(--border));background:var(--panel);color:var(--text);border-radius:24px;padding:18px;box-shadow:0 30px 100px rgba(0,0,0,.45);animation:confirmPop .14s ease-out}
     .confirm-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.confirm-icon{width:44px;height:44px;border-radius:16px;display:grid;place-items:center;font-weight:950;font-size:22px}.confirm-icon.danger{background:rgba(239,68,68,.14);color:#ef4444;border:1px solid rgba(239,68,68,.30)}.confirm-x{width:34px;height:34px;border-radius:12px}
     .confirm-card h3{margin:0 0 8px;font-size:20px;letter-spacing:-.02em}.confirm-card p{margin:0;color:var(--muted);font-size:14px;line-height:1.45}.confirm-details{margin-top:14px;border:1px solid var(--border);background:var(--row);border-radius:16px;padding:12px;color:var(--text);font-size:13px;line-height:1.45}.confirm-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}.btn.danger-solid{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;border:0;box-shadow:0 14px 28px rgba(239,68,68,.20)}
+    .whatsapp-prompt-card{border-color:color-mix(in srgb,#25D366 34%,var(--border))!important}.confirm-icon.whatsapp{background:rgba(37,211,102,.14);color:#25D366;border:1px solid rgba(37,211,102,.34)}.confirm-icon.whatsapp svg{width:24px;height:24px;fill:currentColor}.whatsapp-prompt-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:14px}.whatsapp-prompt-meta div{border:1px solid var(--border);border-radius:14px;background:var(--row);padding:10px 12px;min-width:0}.whatsapp-prompt-meta span,.whatsapp-prompt-meta b{display:block}.whatsapp-prompt-meta span{color:var(--muted);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.04em}.whatsapp-prompt-meta b{margin-top:4px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.whatsapp-output-modal .output-modal-header{background:linear-gradient(135deg,color-mix(in srgb,var(--panel) 88%,#25D366),var(--panel))}.whatsapp-output-icon{background:rgba(37,211,102,.16)!important;color:#25D366!important}.whatsapp-output-icon svg{width:22px;height:22px;fill:currentColor}.whatsapp-output-body{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(260px,.75fr);gap:16px;padding:18px 20px;min-height:0;overflow:auto;flex:1}.whatsapp-main-column{min-width:0}.whatsapp-preview-icon{background:rgba(37,211,102,.14)!important;color:#25D366!important}.whatsapp-preview-icon svg{width:28px;height:28px;fill:currentColor}.whatsapp-output-body .whatsapp-phone-field{margin-top:4px}.whatsapp-output-body .whatsapp-phone-input{min-height:48px}.whatsapp-output-body .whatsapp-phone-input input{height:48px;font-size:16px}@media(max-width:900px){.whatsapp-output-body{grid-template-columns:1fr}}
+.whatsapp-phone-field{display:grid;gap:7px;margin-top:14px}.whatsapp-phone-field>span{font-size:11px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}.whatsapp-phone-input{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:0;border:1px solid var(--border);border-radius:14px;background:var(--input);overflow:hidden;transition:border-color .15s ease,box-shadow .15s ease}.whatsapp-phone-input:focus-within{border-color:color-mix(in srgb,#25D366 55%,var(--border));box-shadow:0 0 0 4px rgba(37,211,102,.14)}.whatsapp-phone-input em{font-style:normal;font-weight:950;padding:0 12px;color:#25D366;border-right:1px solid var(--border);background:color-mix(in srgb,#25D366 10%,transparent);height:100%;display:grid;place-items:center;font-size:13px}.whatsapp-phone-input input{border:0;outline:0;background:transparent;color:var(--text);height:44px;padding:0 12px;font-size:15px;font-weight:850;letter-spacing:.02em;width:100%;min-width:0}.whatsapp-phone-field small{color:var(--muted);font-size:11px;font-weight:750;line-height:1.35}.whatsapp-prompt-error{margin-top:10px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.1);color:#ef4444;border-radius:12px;padding:9px 11px;font-size:12px;font-weight:850}.btn.whatsapp-solid{background:linear-gradient(135deg,#25D366,#128C7E);color:#fff;border:0;box-shadow:0 14px 28px rgba(37,211,102,.22)}.btn.whatsapp-solid:disabled{opacity:.55;box-shadow:none}
+    :host-context(.light-mode) .whatsapp-prompt-meta div,:host-context(body.light-mode) .whatsapp-prompt-meta div,:host-context(body:not(.dark-theme)) .whatsapp-prompt-meta div{background:#f8fafc!important;border-color:#e2e8f0!important}
     @keyframes confirmPop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
     :host-context(.light-mode) .confirm-card,:host-context(body.light-mode) .confirm-card,:host-context(body:not(.dark-theme)) .confirm-card{background:#ffffff!important;color:#0f172a!important;border-color:#fecaca!important;box-shadow:0 30px 80px rgba(15,23,42,.22)!important}.light-mode .confirm-details{}
     :host-context(.light-mode) .confirm-details,:host-context(body.light-mode) .confirm-details,:host-context(body:not(.dark-theme)) .confirm-details{background:#f8fafc!important;border-color:#e2e8f0!important;color:#0f172a!important}
@@ -744,12 +886,18 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
     .report-queue-row:not(.report-pending-colors) .queue-progress-ring b{color:var(--accent)!important;font-size:13px!important}
 
 
-    /* Custom result option panel: keep dropdown/search lists above rows and show full short lists. */
-    .report-content.workspace-wrap,.workspace-card,.department-card,.profile-card,.result-row,.result-editor,.result-input-label,.rt-result-label,.rt-control{overflow:visible!important}
-    .result-row{position:relative;z-index:1}
-    .rt-control.open{z-index:2147482500}
-    .rt-options-panel{z-index:2147482600!important;max-height:min(340px,55vh)!important;overflow-y:auto!important;overscroll-behavior:contain;scrollbar-width:thin;min-width:100%;padding:5px!important}
-    .rt-control.open-up .rt-options-panel{top:auto!important;bottom:calc(100% + 6px)!important}
+    /* Result chips (short lists) + CDK overlay panels (long lists). */
+    .rt-chips-wrap{display:flex;flex-direction:column;align-items:stretch;gap:6px;min-width:0}
+    .rt-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
+    .rt-chip-type{width:100%;max-width:260px}
+    .rt-chip{appearance:none;border:1px solid color-mix(in srgb,var(--accent) 28%,var(--border));border-radius:999px;background:var(--input);color:var(--text);font-size:12px;font-weight:850;line-height:1.1;padding:7px 12px;cursor:pointer;transition:background .12s ease,border-color .12s ease,color .12s ease,box-shadow .12s ease}
+    .rt-chip:hover:not(:disabled){border-color:color-mix(in srgb,var(--accent) 55%,var(--border));box-shadow:0 0 0 3px var(--accent-soft)}
+    .rt-chip:focus-visible{outline:0;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+    .rt-chip.selected{background:var(--accent);border-color:var(--accent);color:#fff}
+    .rt-chip:disabled{opacity:.55;cursor:not-allowed}
+    .rt-chip-clear{border-style:dashed;color:var(--muted);font-weight:800}
+    .rt-options-overlay{position:static!important;left:auto!important;right:auto!important;top:auto!important;bottom:auto!important;max-height:min(340px,55vh)!important;overflow-y:auto!important;overscroll-behavior:contain;scrollbar-width:thin;min-width:100%;width:100%;padding:5px!important;z-index:auto!important;contain:none!important}
+    .rt-options-overlay-pane{z-index:1200!important}
     .rt-option{min-height:38px!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:10px;line-height:1.22!important;border:1px solid transparent!important;border-radius:8px!important;padding:7px 12px!important;color:inherit!important}
     .rt-option-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:normal}
     .rt-option mark{background:color-mix(in srgb,var(--accent) 28%,transparent)!important;color:inherit!important;border-radius:4px;padding:0 1px;font-weight:950}
@@ -763,7 +911,7 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
 
 
     /* Final compact result controls: use stable native select/input so selected option text always displays. */
-    .rt-control{position:relative;min-width:0;overflow:visible!important}
+    .rt-control{position:relative;min-width:0}
     .rt-field{height:30px!important;min-height:30px!important;border-radius:10px!important;padding:0 10px!important;font-size:13px!important;font-weight:800!important;background:var(--input)!important;color:var(--text)!important;border:1px solid var(--border)!important;box-shadow:none!important;color-scheme:light dark}
     .rt-field:focus{border-color:var(--accent)!important;box-shadow:0 0 0 3px var(--accent-soft)!important}
     .rt-field::placeholder{color:var(--muted)!important;opacity:.78}
@@ -782,7 +930,7 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
     .quick-menu-status{padding:8px 12px 6px;border-bottom:1px solid var(--border);margin-bottom:4px;display:flex;justify-content:center}
     .quick-barcode-pill{min-width:96px;justify-content:center}
     .quick-barcode-backdrop{position:fixed!important;top:0!important;right:0!important;bottom:0!important;left:calc(-1 * var(--quick-sidebar-offset,72px))!important;width:calc(100vw + var(--quick-sidebar-offset,72px))!important;height:100vh!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:18px!important;box-sizing:border-box!important;z-index:2147483000!important;background:rgba(15,23,42,.58)!important}.quick-barcode-modal{width:min(1120px,calc(100vw - 48px))!important;max-width:calc(100vw - 48px)!important;max-height:calc(100vh - 48px)!important;overflow:auto;padding:14px!important;margin:0!important;box-sizing:border-box!important}
-    .quick-finished-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.quick-action-logo{position:relative;width:38px;height:38px;min-width:38px;border:1px solid color-mix(in srgb,var(--accent) 42%,var(--border));border-radius:13px;display:grid;place-items:center;padding:0;cursor:pointer;color:#fff;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 92%,#fff 8%),color-mix(in srgb,var(--accent) 64%,#111827));box-shadow:0 9px 22px color-mix(in srgb,var(--accent) 24%,transparent),inset 0 1px 0 rgba(255,255,255,.3);transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease}.quick-action-logo svg{width:21px;height:21px;fill:currentColor;filter:drop-shadow(0 2px 3px rgba(0,0,0,.2))}.quick-action-logo:hover:not(:disabled){transform:translateY(-2px) scale(1.025);box-shadow:0 13px 28px color-mix(in srgb,var(--accent) 34%,transparent),inset 0 1px 0 rgba(255,255,255,.38)}.quick-action-logo:focus-visible{outline:0;box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%,transparent),0 13px 28px color-mix(in srgb,var(--accent) 30%,transparent)}.quick-action-logo:disabled{opacity:.52;cursor:not-allowed;filter:saturate(.6)}.quick-action-logo-dot{position:absolute;right:4px;bottom:4px;width:7px;height:7px;border-radius:999px;background:#fff;border:2px solid color-mix(in srgb,var(--accent) 72%,#111827);box-sizing:border-box}.btn.danger-soft{background:rgba(239,68,68,.10);border-color:rgba(239,68,68,.28);color:#ef4444}.action-trigger{min-width:92px;justify-content:space-between;display:inline-flex;align-items:center;gap:10px;background:var(--input);border-color:color-mix(in srgb,var(--accent) 28%,var(--border))}.action-trigger b{font-size:14px;color:var(--muted)}.rich-output-modal{width:min(900px,92vw);height:min(720px,84vh);max-height:84vh;overflow:hidden!important;padding:0!important;display:flex;flex-direction:column;border-radius:26px;box-shadow:0 28px 90px rgba(2,6,23,.45);margin:auto}.output-modal-header{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 20px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,color-mix(in srgb,var(--panel) 90%,var(--accent)),var(--panel))}.output-modal-heading{display:flex;align-items:center;gap:12px}.output-modal-heading h3{margin:0;font-size:19px}.output-modal-heading p{margin:4px 0 0;color:var(--muted);font-size:12px}.output-modal-icon{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-size:20px;box-shadow:var(--glow)}.output-modal-close{flex:0 0 auto}.output-modal-body{flex:1 1 auto;min-height:0;overflow:auto;padding:16px 20px 22px;scrollbar-gutter:stable}.output-modal-footer{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px;border-top:1px solid var(--border);background:color-mix(in srgb,var(--panel) 96%,var(--row));box-shadow:0 -10px 28px rgba(2,6,23,.12)}.output-footer-summary b,.output-footer-summary small{display:block}.output-footer-summary b{font-size:13px}.output-footer-summary small{margin-top:2px;color:var(--muted);font-size:11px}.output-footer-actions{display:flex;align-items:center;gap:9px}.output-primary-action{min-width:190px}.output-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:0 0 12px;position:sticky;top:-16px;z-index:5;padding-top:2px;background:linear-gradient(180deg,var(--panel) 82%,transparent)}.output-summary div{border:1px solid var(--border);background:var(--row);border-radius:15px;padding:11px 12px}.output-summary span{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;font-weight:900;letter-spacing:.04em}.output-summary b{display:block;margin-top:4px;font-size:13px}.modal-option-section{border:1px solid var(--border);background:color-mix(in srgb,var(--panel) 94%,var(--accent));border-radius:18px;padding:14px;margin-top:12px}.modal-option-title{display:flex;justify-content:space-between;gap:10px;margin-bottom:10px}.modal-option-title b{font-size:14px}.modal-option-title small{display:block;color:var(--muted);font-size:11px;margin-top:3px}.ordered-report-list .report-select-row{grid-template-columns:24px 30px 1fr auto}.order-badge{width:28px;height:28px;border-radius:9px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:11px;font-weight:950}.order-buttons{display:flex;gap:4px}.order-buttons button{width:29px;height:29px;border:1px solid var(--border);border-radius:9px;background:var(--input);color:var(--text);cursor:pointer}.choice-card-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.choice-card-grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}.choice-card-grid label,.signature-choice-list label{display:flex;align-items:flex-start;gap:10px;border:1px solid var(--border);border-radius:15px;background:var(--row);padding:12px;cursor:pointer;transition:border-color .15s ease,background .15s ease,transform .15s ease}.choice-card-grid label:hover,.signature-choice-list label:hover{border-color:color-mix(in srgb,var(--accent) 40%,var(--border));transform:translateY(-1px)}.choice-card-grid label.active{border-color:color-mix(in srgb,var(--accent) 62%,var(--border));background:var(--accent-soft)}.choice-card-grid input,.signature-choice-list input{margin-top:2px}.choice-card-grid b,.signature-choice-list b{display:block;font-size:12px}.choice-card-grid small,.signature-choice-list small{display:block;color:var(--muted);font-size:10px;margin-top:3px;line-height:1.4}.signature-choice-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.rich-output-modal{width:min(1320px,94vw);height:min(860px,90vh);max-height:90vh}.output-modal-header{padding:20px 24px}.output-modal-close{width:42px;height:42px;border:1px solid var(--border);border-radius:14px;background:color-mix(in srgb,var(--panel) 92%,transparent);color:var(--text);display:grid;place-items:center;cursor:pointer;transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease;appearance:none}.output-modal-close svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}.output-modal-close:hover{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.42);color:#f87171;transform:scale(1.04)}.output-modal-meta{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--panel) 96%,var(--row))}.output-modal-meta>div{padding:13px 24px;border-right:1px solid var(--border)}.output-modal-meta>div:last-child{border-right:0}.output-modal-meta span{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;font-weight:900;letter-spacing:.06em}.output-modal-meta b{display:block;margin-top:5px;font-size:14px}.output-designer-grid{display:grid;grid-template-columns:minmax(320px,.95fr) minmax(440px,1.2fr) minmax(220px,.58fr);gap:0;padding:0!important;overflow:hidden!important}.output-column{min-width:0;min-height:0;padding:20px;overflow:auto}.output-column+.output-column{border-left:1px solid var(--border)}.output-column-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.output-column-head h4,.preview-card h4{margin:0;font-size:16px}.output-column-head p{margin:4px 0 0;color:var(--muted);font-size:11px}.selected-count-pill{padding:6px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:10px;font-weight:900;white-space:nowrap}.compact-report-list{display:grid;gap:9px}.compact-report-list .report-select-row{grid-template-columns:22px 30px minmax(0,1fr) auto;padding:12px;border-radius:15px}.report-row-copy{min-width:0}.report-row-copy b,.report-row-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.reorder-hint{display:flex;align-items:flex-start;gap:10px;margin-top:14px;padding:12px;border:1px dashed var(--border);border-radius:14px;color:var(--muted)}.reorder-hint b,.reorder-hint small{display:block}.reorder-hint b{color:var(--text);font-size:12px}.reorder-hint small{font-size:10px;margin-top:3px}.compact-setting-block{padding-bottom:11px;margin-bottom:11px;border-bottom:1px solid var(--border)}.setting-title{margin-bottom:7px}.setting-title b,.setting-title small{display:block}.setting-title b{font-size:12px}.setting-title small{color:var(--muted);font-size:10px;margin-top:2px}.compact-choice-grid{gap:8px}.compact-choice-grid label{min-height:44px;padding:9px 12px;align-items:center;border-radius:12px}.compact-choice-grid input{width:17px;height:17px;margin:0;flex:0 0 auto}.compact-choice-grid span{min-width:0}.compact-choice-grid b{font-size:11px;line-height:1.2}.compact-choice-grid small{display:none}.compact-signature-list{grid-template-columns:1fr}.compact-signature-list label{min-height:44px;padding:8px 11px;align-items:center;border-radius:12px;gap:10px}.compact-signature-list input{width:18px;height:18px;margin:0;flex:0 0 auto}.compact-signature-list .signature-row-copy{min-width:0;flex:1}.compact-signature-list .signature-row-copy b{font-size:11px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.compact-signature-list em{margin-left:auto;color:var(--muted);font-size:9px;font-style:normal;font-weight:800;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}.compact-signature-list label:hover{transform:none}.preview-column{background:color-mix(in srgb,var(--panel) 96%,var(--accent));padding:18px}.preview-card{position:sticky;top:0;border:1px solid var(--border);border-radius:18px;background:var(--row);padding:18px}.preview-document-icon{width:72px;height:86px;margin:4px auto 14px;display:grid;place-items:center;color:var(--accent)}.preview-document-icon svg{width:66px;height:82px;fill:none;stroke:currentColor;stroke-width:1.35;stroke-linejoin:round;stroke-linecap:round}.preview-card h4{text-align:center;margin-bottom:14px}.preview-summary-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--border);font-size:11px}.preview-summary-row span{color:var(--muted)}.preview-summary-row b{text-align:right}.output-modal-footer{padding:15px 24px}.output-primary-action{min-width:220px}@media(max-width:1080px){.output-designer-grid{grid-template-columns:minmax(300px,.9fr) minmax(420px,1.1fr)}.preview-column{grid-column:1/-1;border-left:0!important;border-top:1px solid var(--border)}.preview-card{position:static;display:grid;grid-template-columns:auto repeat(5,minmax(0,1fr));align-items:center;gap:10px}.preview-document-icon{width:44px;height:54px;margin:0}.preview-document-icon svg{width:42px;height:52px}.preview-card h4{text-align:left;margin:0}.preview-summary-row{border-top:0;border-left:1px solid var(--border);padding:6px 10px;display:block}.preview-summary-row b{display:block;text-align:left;margin-top:3px}}@media(max-width:760px){.output-modal-backdrop{padding:12px}.rich-output-modal{width:96vw;height:88vh;max-height:88vh;border-radius:20px}.choice-card-grid,.choice-card-grid.three,.signature-choice-list,.output-summary{grid-template-columns:1fr}.output-modal-footer{align-items:stretch;flex-direction:column}.output-footer-actions{width:100%}.output-footer-actions .btn{flex:1}.output-primary-action{min-width:0}.output-summary{position:static}.output-modal-heading p{display:none}}@media(max-width:760px){.rich-output-modal{height:92vh;max-height:92vh}.output-modal-meta{grid-template-columns:1fr 1fr}.output-modal-meta>div{padding:10px 14px}.output-modal-meta>div:nth-child(3){grid-column:1/-1;border-top:1px solid var(--border)}.output-designer-grid{display:block;overflow:auto!important}.output-column{overflow:visible;padding:16px}.output-column+.output-column{border-left:0;border-top:1px solid var(--border)}.preview-card{display:block}.preview-document-icon{width:56px;height:66px;margin:0 auto 10px}.preview-document-icon svg{width:52px;height:64px}.preview-card h4{text-align:center;margin-bottom:10px}.preview-summary-row{display:flex;border-left:0;border-top:1px solid var(--border);padding:9px 0}.preview-summary-row b{text-align:right;margin:0}.output-modal-footer{padding:12px 14px}.output-modal-close{width:38px;height:38px}}
+    .quick-finished-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.quick-action-logo{position:relative;width:38px;height:38px;min-width:38px;border:1px solid color-mix(in srgb,var(--accent) 42%,var(--border));border-radius:13px;display:grid;place-items:center;padding:0;cursor:pointer;color:#fff;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 92%,#fff 8%),color-mix(in srgb,var(--accent) 64%,#111827));box-shadow:0 9px 22px color-mix(in srgb,var(--accent) 24%,transparent),inset 0 1px 0 rgba(255,255,255,.3);transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease}.quick-action-logo svg{width:21px;height:21px;fill:currentColor;filter:drop-shadow(0 2px 3px rgba(0,0,0,.2))}.quick-action-logo:hover:not(:disabled){transform:translateY(-2px) scale(1.025);box-shadow:0 13px 28px color-mix(in srgb,var(--accent) 34%,transparent),inset 0 1px 0 rgba(255,255,255,.38)}.quick-action-logo:focus-visible{outline:0;box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%,transparent),0 13px 28px color-mix(in srgb,var(--accent) 30%,transparent)}.quick-action-logo:disabled{opacity:.52;cursor:not-allowed;filter:saturate(.6)}.quick-action-logo-dot{position:absolute;right:4px;bottom:4px;width:7px;height:7px;border-radius:999px;background:#fff;border:2px solid color-mix(in srgb,var(--accent) 72%,#111827);box-sizing:border-box}.btn.danger-soft{background:rgba(239,68,68,.10);border-color:rgba(239,68,68,.28);color:#ef4444}.action-trigger{min-width:92px;justify-content:space-between;display:inline-flex;align-items:center;gap:10px;background:var(--input);border-color:color-mix(in srgb,var(--accent) 28%,var(--border))}.action-trigger b{font-size:14px;color:var(--muted)}.rich-output-modal{width:min(900px,92vw);height:min(720px,84vh);max-height:84vh;overflow:hidden!important;padding:0!important;display:flex;flex-direction:column;border-radius:26px;box-shadow:0 28px 90px rgba(2,6,23,.45);margin:auto}.output-modal-header{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 20px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,color-mix(in srgb,var(--panel) 90%,var(--accent)),var(--panel))}.output-modal-heading{display:flex;align-items:center;gap:12px}.output-modal-heading h3{margin:0;font-size:19px}.output-modal-heading p{margin:4px 0 0;color:var(--muted);font-size:12px}.output-modal-icon{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:var(--accent-gradient);color:#fff;font-size:20px;box-shadow:var(--glow)}.output-modal-close{flex:0 0 auto}.output-modal-body{flex:1 1 auto;min-height:0;overflow:auto;padding:16px 20px 22px;scrollbar-gutter:stable}.output-modal-footer{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px;border-top:1px solid var(--border);background:color-mix(in srgb,var(--panel) 96%,var(--row));box-shadow:0 -10px 28px rgba(2,6,23,.12)}.output-footer-summary b,.output-footer-summary small{display:block}.output-footer-summary b{font-size:13px}.output-footer-summary small{margin-top:2px;color:var(--muted);font-size:11px}.output-footer-actions{display:flex;align-items:center;gap:9px}.output-primary-action{min-width:190px}.output-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:0 0 12px;position:sticky;top:-16px;z-index:5;padding-top:2px;background:linear-gradient(180deg,var(--panel) 82%,transparent)}.output-summary div{border:1px solid var(--border);background:var(--row);border-radius:15px;padding:11px 12px}.output-summary span{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;font-weight:900;letter-spacing:.04em}.output-summary b{display:block;margin-top:4px;font-size:13px}.modal-option-section{border:1px solid var(--border);background:color-mix(in srgb,var(--panel) 94%,var(--accent));border-radius:18px;padding:14px;margin-top:12px}.modal-option-title{display:flex;justify-content:space-between;gap:10px;margin-bottom:10px}.modal-option-title b{font-size:14px}.modal-option-title small{display:block;color:var(--muted);font-size:11px;margin-top:3px}.ordered-report-list .report-select-row{grid-template-columns:24px 30px 1fr auto}.order-badge{width:28px;height:28px;border-radius:9px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:11px;font-weight:950}.order-buttons{display:flex;gap:4px}.order-buttons button{width:29px;height:29px;border:1px solid var(--border);border-radius:9px;background:var(--input);color:var(--text);cursor:pointer}.choice-card-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.choice-card-grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}.choice-card-grid label,.signature-choice-list label{display:flex;align-items:flex-start;gap:10px;border:1px solid var(--border);border-radius:15px;background:var(--row);padding:12px;cursor:pointer;transition:border-color .15s ease,background .15s ease,transform .15s ease}.choice-card-grid label:hover,.signature-choice-list label:hover{border-color:color-mix(in srgb,var(--accent) 40%,var(--border));transform:translateY(-1px)}.choice-card-grid label.active{border-color:color-mix(in srgb,var(--accent) 62%,var(--border));background:var(--accent-soft)}.choice-card-grid input,.signature-choice-list input{margin-top:2px}.choice-card-grid b,.signature-choice-list b{display:block;font-size:12px}.choice-card-grid small,.signature-choice-list small{display:block;color:var(--muted);font-size:10px;margin-top:3px;line-height:1.4}.signature-choice-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.rich-output-modal{width:min(1320px,94vw);height:min(860px,90vh);max-height:90vh}.output-modal-header{padding:20px 24px}.output-modal-close{width:42px;height:42px;border:1px solid var(--border);border-radius:14px;background:color-mix(in srgb,var(--panel) 92%,transparent);color:var(--text);display:grid;place-items:center;cursor:pointer;transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease;appearance:none}.output-modal-close svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}.output-modal-close:hover{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.42);color:#f87171;transform:scale(1.04)}.output-modal-meta{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--panel) 96%,var(--row))}.output-modal-meta>div{padding:13px 24px;border-right:1px solid var(--border)}.output-modal-meta>div:last-child{border-right:0}.output-modal-meta span{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;font-weight:900;letter-spacing:.06em}.output-modal-meta b{display:block;margin-top:5px;font-size:14px}.output-designer-grid{display:grid;grid-template-columns:minmax(320px,.95fr) minmax(440px,1.2fr) minmax(220px,.58fr);gap:0;padding:0!important;overflow:hidden!important}.output-column{min-width:0;min-height:0;padding:20px;overflow:auto}.output-column+.output-column{border-left:1px solid var(--border)}.output-column-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.output-column-head h4,.preview-card h4{margin:0;font-size:16px}.output-column-head p{margin:4px 0 0;color:var(--muted);font-size:11px}.selected-count-pill{padding:6px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:10px;font-weight:900;white-space:nowrap}.compact-report-list{display:grid;gap:9px}.compact-report-list .report-select-row{grid-template-columns:22px 30px minmax(0,1fr) auto;padding:12px;border-radius:15px}.report-row-copy{min-width:0}.report-row-copy b,.report-row-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.reorder-hint{display:flex;align-items:flex-start;gap:10px;margin-top:14px;padding:12px;border:1px dashed var(--border);border-radius:14px;color:var(--muted)}.reorder-hint b,.reorder-hint small{display:block}.reorder-hint b{color:var(--text);font-size:12px}.reorder-hint small{font-size:10px;margin-top:3px}.compact-setting-block{padding-bottom:11px;margin-bottom:11px;border-bottom:1px solid var(--border)}.setting-title{margin-bottom:7px}.setting-title b,.setting-title small{display:block}.setting-title b{font-size:12px}.setting-title small{color:var(--muted);font-size:10px;margin-top:2px}.compact-choice-grid{gap:8px}.compact-choice-grid label{min-height:44px;padding:9px 12px;align-items:center;border-radius:12px}.compact-choice-grid input{width:17px;height:17px;margin:0;flex:0 0 auto}.compact-choice-grid span{min-width:0}.compact-choice-grid b{font-size:11px;line-height:1.2}.compact-choice-grid small{display:none}.compact-signature-list{grid-template-columns:1fr}.compact-signature-list label{min-height:44px;padding:8px 11px;align-items:center;border-radius:12px;gap:10px}.compact-signature-list input{width:18px;height:18px;margin:0;flex:0 0 auto}.compact-signature-list .signature-row-copy{min-width:0;flex:1}.compact-signature-list .signature-row-copy b{font-size:11px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.compact-signature-list em{margin-left:auto;color:var(--muted);font-size:9px;font-style:normal;font-weight:800;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}.compact-signature-list label:hover{transform:none}.signature-rich-list{display:grid;gap:9px}.signature-rich-card{border:1px solid var(--border);border-radius:14px;background:var(--row);padding:10px;display:grid;gap:8px;transition:border-color .15s ease,background .15s ease,opacity .15s ease}.signature-rich-card.active{border-color:color-mix(in srgb,var(--accent) 55%,var(--border));background:color-mix(in srgb,var(--accent-soft) 58%,var(--row))}.signature-rich-card.off{opacity:.72}.signature-rich-include{display:flex;align-items:center;gap:10px;cursor:pointer}.signature-rich-include input{width:18px;height:18px;margin:0;flex:0 0 auto}.signature-rich-include .signature-row-copy{min-width:0;flex:1}.signature-rich-include .signature-row-copy b,.signature-rich-include .signature-row-copy small{display:block}.signature-rich-include .signature-row-copy b{font-size:11px;line-height:1.25}.signature-rich-include .signature-row-copy small{color:var(--muted);font-size:10px;margin-top:2px}.signature-rich-include em{margin-left:auto;color:var(--muted);font-size:9px;font-style:normal;font-weight:800;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}.signature-content-grid{margin-top:2px}.preview-column{background:color-mix(in srgb,var(--panel) 96%,var(--accent));padding:18px}.preview-card{position:sticky;top:0;border:1px solid var(--border);border-radius:18px;background:var(--row);padding:18px}.preview-document-icon{width:72px;height:86px;margin:4px auto 14px;display:grid;place-items:center;color:var(--accent)}.preview-document-icon svg{width:66px;height:82px;fill:none;stroke:currentColor;stroke-width:1.35;stroke-linejoin:round;stroke-linecap:round}.preview-card h4{text-align:center;margin-bottom:14px}.preview-summary-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--border);font-size:11px}.preview-summary-row span{color:var(--muted)}.preview-summary-row b{text-align:right}.output-modal-footer{padding:15px 24px}.output-primary-action{min-width:220px}@media(max-width:1080px){.output-designer-grid{grid-template-columns:minmax(300px,.9fr) minmax(420px,1.1fr)}.preview-column{grid-column:1/-1;border-left:0!important;border-top:1px solid var(--border)}.preview-card{position:static;display:grid;grid-template-columns:auto repeat(5,minmax(0,1fr));align-items:center;gap:10px}.preview-document-icon{width:44px;height:54px;margin:0}.preview-document-icon svg{width:42px;height:52px}.preview-card h4{text-align:left;margin:0}.preview-summary-row{border-top:0;border-left:1px solid var(--border);padding:6px 10px;display:block}.preview-summary-row b{display:block;text-align:left;margin-top:3px}}@media(max-width:760px){.output-modal-backdrop{padding:12px}.rich-output-modal{width:96vw;height:88vh;max-height:88vh;border-radius:20px}.choice-card-grid,.choice-card-grid.three,.signature-choice-list,.output-summary{grid-template-columns:1fr}.output-modal-footer{align-items:stretch;flex-direction:column}.output-footer-actions{width:100%}.output-footer-actions .btn{flex:1}.output-primary-action{min-width:0}.output-summary{position:static}.output-modal-heading p{display:none}}@media(max-width:760px){.rich-output-modal{height:92vh;max-height:92vh}.output-modal-meta{grid-template-columns:1fr 1fr}.output-modal-meta>div{padding:10px 14px}.output-modal-meta>div:nth-child(3){grid-column:1/-1;border-top:1px solid var(--border)}.output-designer-grid{display:block;overflow:auto!important}.output-column{overflow:visible;padding:16px}.output-column+.output-column{border-left:0;border-top:1px solid var(--border)}.preview-card{display:block}.preview-document-icon{width:56px;height:66px;margin:0 auto 10px}.preview-document-icon svg{width:52px;height:64px}.preview-card h4{text-align:center;margin-bottom:10px}.preview-summary-row{display:flex;border-left:0;border-top:1px solid var(--border);padding:9px 0}.preview-summary-row b{text-align:right;margin:0}.output-modal-footer{padding:12px 14px}.output-modal-close{width:38px;height:38px}}
     .collection-look-modal .section-title{margin-bottom:8px}.quick-flow-status{border:1px solid var(--border);border-radius:12px;background:var(--row);padding:8px 11px;display:flex;gap:8px;align-items:center;margin-bottom:10px}.quick-flow-status b{font-size:13px;white-space:nowrap}.quick-flow-status span{color:var(--muted);font-size:12px}.quick-stepper-strip{display:flex;gap:8px;margin:8px 0 10px}.quick-stepper-strip button{border:1px solid var(--border);border-radius:999px;background:var(--input);color:var(--muted);font-size:12px;font-weight:950;padding:7px 12px;cursor:pointer}.quick-stepper-strip button.active{background:var(--accent-soft);color:var(--accent);border-color:rgba(124,58,237,.35)}.quick-only-group{margin-top:5px;padding:0 8px;height:24px;font-size:10px}.quick-inline-error{margin:8px 0 10px;padding:10px 12px;border-radius:12px;background:rgba(245,158,11,.14);border:1px solid rgba(245,158,11,.45);color:#f59e0b;font-weight:850;white-space:pre-line;line-height:1.45}.profile-collect-card{border:1px solid var(--border);border-radius:16px;background:linear-gradient(145deg,var(--row),var(--panel));padding:12px;box-shadow:0 12px 26px rgba(15,23,42,.08)}.quick-normal-card{margin-top:8px}.quick-profile-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:9px}.profile-title{display:flex;align-items:center;gap:10px}.profile-title b{display:block;font-size:14px}.profile-title small{display:block;color:var(--muted);font-size:11px;margin-top:2px}.profile-icon{width:32px;height:32px;display:grid;place-items:center;border-radius:12px;background:var(--accent-gradient);color:#fff;font-weight:900;box-shadow:var(--glow)}.quick-master-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.plain-check{display:flex!important;align-items:center;gap:8px;font-weight:900;color:var(--text);white-space:nowrap}.plain-check input{width:16px;height:16px}.mini-action{height:28px;border:1px solid var(--border);border-radius:9px;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:950;padding:0 10px;cursor:pointer}.mini-action.ghost{background:var(--input);color:var(--muted)}.mini-action:disabled{opacity:.5;cursor:not-allowed}.profile-table{border:1px solid var(--border);border-radius:14px;overflow:hidden;background:rgba(15,23,42,.03)}.profile-table-head,.profile-test-row{display:grid;grid-template-columns:58px minmax(190px,1.5fr) minmax(175px,1fr) minmax(130px,.8fr) minmax(135px,.8fr) 120px;gap:8px;align-items:center}.profile-table-head{padding:8px 10px;background:var(--row);color:var(--muted);font-size:10px;font-weight:950;text-transform:uppercase}.profile-test-row{padding:8px 10px;border-top:1px solid var(--border);min-height:48px}.quick-group-row{display:grid;grid-template-columns:58px minmax(190px,1.5fr) minmax(175px,1fr) minmax(130px,.8fr) minmax(135px,.8fr) 120px;gap:8px;align-items:center;padding:9px 10px;border-top:1px solid var(--border);background:rgba(124,58,237,.10)}.quick-selection-table .profile-table-head,.quick-selection-table .profile-test-row,.quick-selection-table .quick-group-row{grid-template-columns:58px minmax(260px,1.7fr) minmax(220px,1fr) 130px}.quick-specimen-table .profile-table-head,.quick-specimen-table .profile-test-row,.quick-specimen-table .quick-group-row{grid-template-columns:minmax(180px,.9fr) minmax(220px,1.1fr) minmax(260px,1fr) 120px}.quick-step-group-row{background:rgba(59,130,246,.08)}.quick-group-row.not-selected{opacity:.82}.quick-group-title-cell b{font-size:13px}.quick-group-check .profile-row-index{background:var(--accent);color:#fff}.quick-child-row{padding-left:24px}.quick-child-row .profile-row-index{width:22px;height:22px;font-size:11px;background:var(--input);color:var(--muted)}.profile-test-row.not-selected{opacity:.55}.profile-test-row.generated-row{opacity:.72}.row-test-check{display:flex!important;align-items:center;gap:8px}.row-test-check input{width:16px;height:16px}.profile-row-index{width:26px;height:26px;display:grid;place-items:center;border-radius:9px;background:var(--accent-soft);color:var(--accent);font-weight:950;font-size:12px}.test-name-cell b{display:block;font-size:12px}.test-name-cell small{display:block;color:var(--muted);font-size:10px}.quick-chip-line{display:flex;flex-wrap:wrap;gap:5px}.quick-chip-line span{border:1px solid var(--border);border-radius:999px;background:var(--input);padding:4px 7px;font-size:10px;font-weight:900;color:var(--muted)}.quick-specimen-select{height:32px;width:100%;border:1px solid var(--border);border-radius:10px;background:var(--input);color:var(--text);padding:0 9px;font-size:11px;font-weight:900}.quick-specimen-select:disabled{opacity:.65}.quick-date-cell{font-size:11px;color:var(--muted);font-weight:850}.status-pill.warning{background:rgba(245,158,11,.14)!important;border-color:rgba(245,158,11,.45)!important;color:#f59e0b!important}.quick-defaults-card{padding:10px;margin-top:10px;border:1px solid var(--border);border-radius:14px;background:var(--row)}.quick-defaults-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.quick-defaults-grid label{font-size:11px;color:var(--muted);font-weight:850}.quick-defaults-grid input,.quick-defaults-grid select{height:34px;width:100%;border:1px solid var(--border);border-radius:11px;background:var(--input);color:var(--text);padding:0 9px;margin-top:5px}.quick-event-editor{margin-top:10px;border-top:1px solid var(--border);padding-top:10px}.quick-event-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px}.quick-event-head b{font-size:12px}.quick-event-head small{font-size:11px;color:var(--muted);font-weight:800;text-align:right}.quick-event-row{display:grid;grid-template-columns:minmax(160px,1.1fr) minmax(220px,1.2fr) 135px 120px;gap:8px;align-items:center;padding:8px;border:1px solid var(--border);border-radius:12px;background:var(--panel);margin-top:7px}.quick-event-test b{display:block;font-size:12px}.quick-event-test small{display:block;font-size:10px;color:var(--muted);font-weight:800}.quick-event-row label{font-size:10px;color:var(--muted);font-weight:900}.quick-event-row input{height:32px;width:100%;border:1px solid var(--border);border-radius:10px;background:var(--input);color:var(--text);padding:0 8px;margin-top:4px}.quick-action-row{margin-top:12px}.quick-barcode-modal .icon{width:34px;height:34px;border:1px solid var(--border);border-radius:10px;background:var(--input);color:var(--text);display:grid;place-items:center;font-size:18px;font-weight:900;line-height:1;cursor:pointer}.quick-pick-grid.collection-pick-grid{display:grid;grid-template-columns:1fr;gap:10px;margin:10px 0 4px}.quick-pick-card.collection-pick-card{appearance:none;-webkit-appearance:none;width:100%;border:1px solid var(--border);border-radius:14px;background:linear-gradient(145deg,var(--row),var(--panel));color:var(--text);padding:12px 14px;text-align:left;display:grid;grid-template-columns:minmax(210px,.85fr) minmax(145px,.55fr) minmax(260px,1.15fr);gap:12px;align-items:center;box-shadow:0 10px 22px rgba(15,23,42,.12);cursor:pointer;white-space:normal}.quick-pick-card.collection-pick-card b{font-size:13px;font-weight:950;color:var(--text);white-space:normal}.quick-pick-card.collection-pick-card small{font-size:11px;font-weight:800;color:var(--muted);white-space:normal;overflow:hidden;text-overflow:ellipsis}.quick-pick-card.collection-pick-card.active{border-color:rgba(124,58,237,.65);background:linear-gradient(145deg,rgba(124,58,237,.20),var(--panel));box-shadow:0 0 0 2px rgba(124,58,237,.18),0 14px 28px rgba(15,23,42,.18)}.quick-pick-card.collection-pick-card:hover{border-color:rgba(124,58,237,.45)}@media(max-width:900px){.quick-pick-card.collection-pick-card{grid-template-columns:1fr}}@media(max-width:1050px){.profile-table-head,.profile-test-row,.quick-group-row{grid-template-columns:50px 1fr}.profile-table-head span:nth-child(n+3),.profile-test-row>*:nth-child(n+3),.quick-group-row>*:nth-child(n+3){grid-column:2}.quick-defaults-grid{grid-template-columns:1fr}.quick-event-row{grid-template-columns:1fr}.quick-flow-status{align-items:flex-start;flex-direction:column}}
 
 
@@ -791,6 +939,7 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
 })
 export class ReportTypingPageComponent implements OnInit, OnDestroy {
   private outputModalBackdropElement: HTMLElement | null = null;
+  private whatsAppPromptBackdropElement: HTMLElement | null = null;
   private previousBodyOverflow = '';
 
   @ViewChild('outputModalBackdrop')
@@ -806,11 +955,29 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
 
     if (!element && this.outputModalBackdropElement) {
       this.outputModalBackdropElement = null;
-      document.body.style.overflow = this.previousBodyOverflow;
+      if (!this.whatsAppPromptBackdropElement) document.body.style.overflow = this.previousBodyOverflow;
     }
   }
 
-  constructor(private sanitizer: DomSanitizer, private snackBar: MatSnackBar) {
+  @ViewChild('whatsAppPromptBackdrop')
+  set whatsAppPromptBackdrop(ref: ElementRef<HTMLElement> | undefined) {
+    const element = ref?.nativeElement ?? null;
+    if (element && element !== this.whatsAppPromptBackdropElement) {
+      this.whatsAppPromptBackdropElement = element;
+      this.previousBodyOverflow = document.body.style.overflow || this.previousBodyOverflow;
+      document.body.style.overflow = 'hidden';
+      document.body.appendChild(element);
+      return;
+    }
+
+    if (!element && this.whatsAppPromptBackdropElement) {
+      this.whatsAppPromptBackdropElement = null;
+      if (!this.outputModalBackdropElement) document.body.style.overflow = this.previousBodyOverflow;
+    }
+  }
+
+  constructor(private sanitizer: DomSanitizer, private snackBar: MatSnackBar, private overlay: Overlay) {
+    this.resultOverlayScrollStrategy = this.overlay.scrollStrategies.reposition();
     this.queueFilterForm.controls.search.valueChanges.subscribe(value => { this.reportSearch = value; });
     this.queueFilterForm.controls.fromDate.valueChanges.subscribe(value => { this.fromDate = value; this.onDateFilterChanged(); });
     this.queueFilterForm.controls.toDate.valueChanges.subscribe(value => { this.toDate = value; this.onDateFilterChanged(); });
@@ -833,10 +1000,13 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   rejectState = signal<RejectState>(null);
   recheckRequestState = signal<RecheckRequestState>(null);
   resetConfirm = signal<ResetConfirmState>(null);
+  whatsAppPrompt = signal<WhatsAppPromptState>(null);
+  readonly whatsAppMobileControl = new FormControl('', { nonNullable: true });
   approvedActionState = signal<ApprovedActionState>(null);
   quickBarcodeState = signal<QuickBarcodeModalState>(null);
   approvedQueueMenu = signal<{row:any; style:Record<string,string>}|null>(null);
   private resetConfirmResolver: ((value: boolean) => void) | null = null;
+  private whatsAppPromptResolver: ((value: string | null) => void) | null = null;
   reportStatus: ReportQueueStatus = 'DRAFT';
   reportQueueView: 'BILL' | 'REPORT' = 'BILL';
   recheckEntryMode = false;
@@ -853,6 +1023,11 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   pendingSummarySelected = new Set<string>();
   queueDetails: Record<number, ReportVm> = {};
   resultOptionPanelKey = '';
+  readonly resultOverlayPositions: ConnectedPosition[] = [
+    { originX: 'start', originY: 'bottom', overlayX: 'start', overlayY: 'top', offsetY: 6 },
+    { originX: 'start', originY: 'top', overlayX: 'start', overlayY: 'bottom', offsetY: -6 },
+  ];
+  resultOverlayScrollStrategy!: ScrollStrategy;
   resultOptionDrafts: Record<string, string> = {};
   resultOptionActiveIndex: Record<string, number> = {};
   resultSearchDrafts: Record<string, string> = {};
@@ -862,7 +1037,6 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   private readonly controlCallbacks = new WeakMap<FormControl<any>, (value:any)=>void>();
   private readonly searchControls = new WeakMap<object, FormControl<string>>();
   private readonly searchSelectEngine = new SearchSelectInputEngine();
-  resultPanelDirections: Record<string, 'up' | 'down'> = {};
   private resultPanelCloseTimers: Record<string, any> = {};
   outsourceVendors: any[] = [];
   private errorListener = (event: ErrorEvent) => this.showError(event?.message || 'Unexpected reporting error.');
@@ -905,6 +1079,7 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     document.body.style.overflow = this.previousBodyOverflow;
     this.outputModalBackdropElement = null;
+    this.whatsAppPromptBackdropElement = null;
     window.removeEventListener('error', this.errorListener);
     window.removeEventListener('unhandledrejection', this.rejectionListener);
     if (this.dateReloadTimer) window.clearTimeout(this.dateReloadTimer);
@@ -1619,14 +1794,26 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   }
 
 
-  openDatePicker(event: Event) {
-    const input = event.currentTarget as HTMLInputElement | null;
-    if (!input || input.disabled) return;
-    try {
-      const picker = (input as HTMLInputElement & { showPicker?: () => void }).showPicker;
-      if (typeof picker === 'function') picker.call(input);
-    } catch { input.focus(); }
+  openDatePicker(event: Event) { openNativeDatePicker(event); }
+
+  setQueueDatePreset(key: keyof ReturnType<typeof dateRangePresets>) {
+    const range = this.queueDatePresets()[key];
+    this.fromDate = range.from;
+    this.toDate = range.to;
+    this.queueFilterForm.patchValue({ fromDate: this.fromDate, toDate: this.toDate }, { emitEvent: false });
+    this.onDateFilterChanged();
   }
+  private queueDatePresets() { return dateRangePresets(DateTimeSettingsService.nowInputValue()); }
+  private queueMatches(key: keyof ReturnType<typeof dateRangePresets>) {
+    return matchesDateRange(this.fromDate, this.toDate, this.queueDatePresets()[key]);
+  }
+  get isQueueTodayRange(){ return this.queueMatches('today'); }
+  get isQueuePreviousDayRange(){ return this.queueMatches('previousDay'); }
+  get isQueueCurrentMonthRange(){ return this.queueMatches('currentMonth'); }
+  get isQueueLastMonthRange(){ return this.queueMatches('lastMonth'); }
+  get isQueueThirtyDayRange(){ return this.queueMatches('thirtyDays'); }
+  get isQueueCurrentYearRange(){ return this.queueMatches('currentYear'); }
+  get isQueueLastYearRange(){ return this.queueMatches('lastYear'); }
 
   onDateFilterChanged() {
     this.saveDateRangeForStatus(this.reportStatus);
@@ -2106,21 +2293,104 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     const approved = sameBill.filter((r:any)=>(+r.approved_count || 0) > 0 || this.normalizeStatus(r.status)==='APPROVED').map((r:any)=>({ ...r, selected: defaultPrintGrouping === 'BILL' || +r.id === +source.id, status:'APPROVED', report_no: r.report_no || `RPT${String(r.id).padStart(4,'0')}`, item_count: (+r.approved_count || 0) || this.reportCompletedCount(r) || r.item_count || 0 }));
     if (!approved.some((r:any)=>+r.id === +source.id) && (this.normalizeStatus(source.status)==='APPROVED' || this.reportableItems(source).some((x:any)=>this.isApprovedResultItem(x)))) approved.unshift({ ...source, selected:true, status:'APPROVED', report_no:`RPT${String(source.id).padStart(4,'0')}`, item_count:this.reportableItems(source).filter((x:any)=>this.isApprovedResultItem(x)).length || this.reportableItems(source).length });
     const pending = this.reportableItems(source).filter((x:any)=>this.isPendingResultItem(x)).map((x:any)=>({label:`${x.source_profile_name ? x.source_profile_name + ': ' : ''}${x.test_name}`}));
+    const printDefaults = await this.loadPrintDefaults();
     let signatures:any[] = [];
     try {
       const settings:any = await window.limsApi.getSettings();
       const parsed = JSON.parse(String(settings?.['report.simple.signatureRowsJson'] || '[]'));
       const rows = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.signatures) ? parsed.signatures : [];
-      signatures = rows.filter((x:any)=>x && x.enabled !== false).map((x:any,index:number)=>({
-        id:String(x.id ?? index), sourceIndex:index, selected:true,
-        label:String(x.label || x.name || (Array.isArray(x.lines) ? x.lines.map((line:any)=>String(line?.text || '').trim()).filter(Boolean)[0] : '') || `Signature ${index + 1}`),
-        hasImage:!!String(x.imagePath || x.signatureImagePath || '').trim()
-      }));
+      signatures = rows.filter((x:any)=>x && x.enabled !== false).map((x:any,index:number)=>{
+        const idValue = String(x.id ?? index);
+        const saved = printDefaults.signatures?.[idValue];
+        return {
+          id: idValue,
+          sourceIndex: index,
+          selected: saved?.selected !== false,
+          contentMode: this.normalizeSignContentMode(saved?.contentMode),
+          label: String(x.label || x.name || (Array.isArray(x.lines) ? x.lines.map((line:any)=>String(line?.text || '').trim()).filter(Boolean)[0] : '') || `Signature ${index + 1}`),
+          hasImage: !!String(x.imagePath || x.signatureImagePath || '').trim()
+        };
+      });
     } catch { signatures = []; }
-    this.approvedActionState.set({ action, sourceReportId:id, reports:approved, pending, showProfileName:true, showSubHeader:true, withBackground:true, signatures, mergeMode:defaultPrintGrouping === 'BILL' ? 'MERGE' : 'SEPARATE', printGrouping:defaultPrintGrouping, singleTestPlacement:'DEPARTMENT', error:'' });
+    this.approvedActionState.set({
+      action,
+      sourceReportId: id,
+      reports: approved,
+      pending,
+      showProfileName: true,
+      showSubHeader: true,
+      withBackground: printDefaults.withBackground,
+      signatures,
+      mergeMode: printDefaults.mergeMode || (defaultPrintGrouping === 'BILL' ? 'MERGE' : 'SEPARATE'),
+      printGrouping: defaultPrintGrouping,
+      singleTestPlacement: printDefaults.singleTestPlacement,
+      error: ''
+    });
+  }
+  private normalizeSignContentMode(value: any): 'IMAGE_TEXT' | 'IMAGE_ONLY' | 'TEXT_ONLY' {
+    const mode = String(value || 'IMAGE_TEXT').toUpperCase();
+    if (mode === 'TEXT_ONLY') return 'TEXT_ONLY';
+    if (mode === 'IMAGE_ONLY') return 'IMAGE_ONLY';
+    return 'IMAGE_TEXT';
+  }
+  private async loadPrintDefaults() {
+    const fallback = { withBackground: true, mergeMode: 'MERGE' as const, singleTestPlacement: 'DEPARTMENT' as const, signatures: {} as Record<string, { selected: boolean; contentMode: 'IMAGE_TEXT' | 'IMAGE_ONLY' | 'TEXT_ONLY' }> };
+    try {
+      const settings: any = await window.limsApi.getSettings();
+      const parsed = JSON.parse(String(settings?.['report.printDefaults.json'] || '{}'));
+      const signatures: Record<string, { selected: boolean; contentMode: 'IMAGE_TEXT' | 'IMAGE_ONLY' | 'TEXT_ONLY' }> = {};
+      const source = parsed?.signatures && typeof parsed.signatures === 'object' ? parsed.signatures : {};
+      Object.keys(source).forEach((key) => {
+        const row = source[key] || {};
+        signatures[String(key)] = {
+          selected: row.selected !== false,
+          contentMode: this.normalizeSignContentMode(row.contentMode)
+        };
+      });
+      return {
+        withBackground: parsed?.withBackground !== false,
+        mergeMode: (String(parsed?.mergeMode || 'MERGE').toUpperCase() === 'SEPARATE' ? 'SEPARATE' : 'MERGE') as 'MERGE' | 'SEPARATE',
+        singleTestPlacement: (String(parsed?.singleTestPlacement || 'DEPARTMENT').toUpperCase() === 'TOP' ? 'TOP' : 'DEPARTMENT') as 'TOP' | 'DEPARTMENT',
+        signatures
+      };
+    } catch {
+      return fallback;
+    }
   }
   approvedSelectedCount(state:any): number { return (state?.reports || []).filter((r:any)=>r.selected && r.status === 'APPROVED').length; }
+  approvedSelectedSignatures(state:any): any[] { return (state?.signatures || []).filter((x:any)=>x?.selected); }
+  signatureContentSummary(state:any): string {
+    const selected = this.approvedSelectedSignatures(state);
+    if (!selected.length) return 'None';
+    const imageText = selected.filter((x:any)=>this.normalizeSignContentMode(x.contentMode) === 'IMAGE_TEXT').length;
+    const imageOnly = selected.filter((x:any)=>this.normalizeSignContentMode(x.contentMode) === 'IMAGE_ONLY').length;
+    const textOnly = selected.filter((x:any)=>this.normalizeSignContentMode(x.contentMode) === 'TEXT_ONLY').length;
+    const parts: string[] = [];
+    if (imageText) parts.push(`${imageText} image+text`);
+    if (imageOnly) parts.push(`${imageOnly} image`);
+    if (textOnly) parts.push(`${textOnly} text`);
+    return parts.join(' · ') || 'Image + text';
+  }
   approvedSignatureControl(sign:any): FormControl { return this.fieldControl(sign,'selected') as FormControl; }
+  private buildApprovedOutputOptions(state:any, selected:any[]) {
+    const selectedSigns = (state.signatures || []).filter((x:any)=>x.selected);
+    const signature_content: Record<string, 'IMAGE_TEXT' | 'IMAGE_ONLY' | 'TEXT_ONLY'> = {};
+    selectedSigns.forEach((sign:any) => {
+      signature_content[String(sign.id)] = this.normalizeSignContentMode(sign.contentMode);
+    });
+    return {
+      show_profile_name: state.showProfileName,
+      show_sub_header: state.showSubHeader,
+      show_header: true,
+      withBackground: state.withBackground,
+      signature_ids: selectedSigns.map((x:any)=>String(x.id)),
+      signature_content,
+      show_signatures: selectedSigns.length > 0,
+      merge_mode: state.mergeMode,
+      single_test_placement: state.singleTestPlacement,
+      report_ids: selected.map((r:any)=>+r.id)
+    };
+  }
   moveApprovedReport(state:any, index:number, direction:number) {
     const next = index + direction;
     if (!state || next < 0 || next >= state.reports.length) return;
@@ -2139,11 +2409,92 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     if (!result) return;
     await this.loadReports(); this.changed.emit(); this.showSuccess(`${ids.length} finished report${ids.length===1?'':'s'} deleted. Tests are back in Pending.`);
   }
+
+  private patientMobileDigits(raw: any): string {
+    return String(raw || '').replace(/[^0-9]/g, '');
+  }
+
+  private focusWhatsAppMobileInput() {
+    let tries = 0;
+    const focus = () => {
+      tries += 1;
+      const el = document.querySelector('input[data-whatsapp-autofocus="1"]') as HTMLInputElement | null;
+      if (el) {
+        el.focus({ preventScroll: true });
+        el.select?.();
+        return;
+      }
+      if (tries < 8) window.setTimeout(focus, 50);
+    };
+    window.setTimeout(focus, 80);
+  }
+
+  private openWhatsAppPrompt(row: any): Promise<string | null> {
+    this.whatsAppMobileControl.setValue('');
+    this.whatsAppPrompt.set({
+      patientName: String(row?.patient_name || '').trim(),
+      billNo: String(row?.bill_no || '').trim(),
+      error: ''
+    });
+    this.focusWhatsAppMobileInput();
+    return new Promise(resolve => {
+      this.whatsAppPromptResolver = resolve;
+    });
+  }
+
+  closeWhatsAppPrompt() {
+    this.whatsAppPrompt.set(null);
+    const resolve = this.whatsAppPromptResolver;
+    this.whatsAppPromptResolver = null;
+    resolve?.(null);
+  }
+
+  confirmWhatsAppPrompt() {
+    const state = this.whatsAppPrompt();
+    if (!state) return;
+    const mobile = this.patientMobileDigits(this.whatsAppMobileControl.value);
+    if (mobile.length < 8) {
+      this.whatsAppPrompt.set({ ...state, error: 'Enter a valid mobile number (at least 8 digits).' });
+      this.focusWhatsAppMobileInput();
+      return;
+    }
+    this.whatsAppPrompt.set(null);
+    const resolve = this.whatsAppPromptResolver;
+    this.whatsAppPromptResolver = null;
+    resolve?.(mobile);
+  }
+
+  private async launchWhatsAppContact(mobile: string) {
+    const api: any = window.limsApi as any;
+    if (!api.openWhatsAppContact) {
+      this.showError('Open WhatsApp is not available in this build. Restart the app after rebuild.');
+      return;
+    }
+    const result = await this.runAction(async () => api.openWhatsAppContact(mobile), 'Unable to open WhatsApp.');
+    if (result) this.showSuccess(`Opened WhatsApp for ${result.mobile || mobile}.`);
+  }
+
+  async openPatientWhatsApp(row: any) {
+    let mobile = this.patientMobileDigits(row?.patient_mobile || row?.mobile);
+    if (!mobile) {
+      const reportId = +this.primaryApprovedReportId(row) || 0;
+      if (reportId) {
+        const report = await this.runAction(async () => window.limsApi.getReport(reportId), 'Unable to load patient mobile.');
+        mobile = this.patientMobileDigits((report as any)?.patient_mobile || (report as any)?.mobile);
+      }
+    }
+    if (!mobile) {
+      mobile = (await this.openWhatsAppPrompt(row)) || '';
+      if (!mobile) return;
+    }
+    await this.launchWhatsAppContact(mobile);
+  }
+
   async confirmApprovedAction() {
     const state = this.approvedActionState(); if (!state) return;
     const selected = (state.reports || []).filter((r:any)=>r.selected && r.status === 'APPROVED');
     if (!selected.length) { this.approvedActionState.set({...state, error:'Select at least one approved report.'}); return; }
-    const opts = { show_profile_name:state.showProfileName, show_sub_header:state.showSubHeader, show_header:true, withBackground:state.withBackground, signature_ids:(state.signatures || []).filter((x:any)=>x.selected).map((x:any)=>String(x.id)), show_signatures:(state.signatures || []).some((x:any)=>x.selected), merge_mode:state.mergeMode, single_test_placement:state.singleTestPlacement, report_ids:selected.map((r:any)=>+r.id) };
+    const opts = this.buildApprovedOutputOptions(state, selected);
     if (state.action === 'VIEW') { this.approvedActionState.set(null); await this.safeOpenPath(() => (window.limsApi as any).approvedReportPdfExport(+selected[0].id, opts)); return; }
     if (state.action === 'PDF') {
       this.approvedActionState.set(null);
@@ -2162,14 +2513,9 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
         await this.runAction(async()=>{
           for (const report of selected) {
             await (window.limsApi as any).approvedReportPrint(+report.id, {
-              show_profile_name: state.showProfileName,
-              show_sub_header: state.showSubHeader,
-              show_header: true,
-              withBackground: state.withBackground,
-              signature_ids: (state.signatures || []).filter((x:any)=>x.selected).map((x:any)=>String(x.id)),
-              show_signatures: (state.signatures || []).some((x:any)=>x.selected),
-              merge_mode: 'SEPARATE',
-              single_test_placement: state.singleTestPlacement
+              ...opts,
+              report_ids: [+report.id],
+              merge_mode: 'SEPARATE'
             });
           }
           return true;
@@ -2334,6 +2680,41 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
 
   isOptionInput(item:any): boolean { return this.optionEngine.accepts(item); }
   isSearchSelectInput(item:any): boolean { return this.searchSelectEngine.accepts(item); }
+  useResultChips(item:any): boolean { return shouldUseResultChips(item); }
+  useResultOverlay(item:any): boolean { return shouldUseResultOverlay(item); }
+  chipChoices(item:any): ResultOption[] {
+    if (this.isOptionInput(item)) return this.optionChoices(item);
+    if (this.isSearchSelectInput(item)) return this.searchSelectEngine.options(item);
+    return [];
+  }
+  chipIsSelected(item:any, option:ResultOption): boolean {
+    if (this.isOptionInput(item)) return this.optionChoiceIsSelected(item, option);
+    if (this.isSearchSelectInput(item)) return this.searchChoiceIsSelected(item, option);
+    return false;
+  }
+  chipHasValue(item:any): boolean {
+    return String(item?.result_value || item?._selected_result_label || '').trim().length > 0;
+  }
+  commitChipResult(event:Event, report:ReportVm, item:any, option:ResultOption) {
+    if (this.isResultLocked(item)) return;
+    if (this.isOptionInput(item)) this.commitOptionResult(event, report, item, option);
+    else if (this.isSearchSelectInput(item)) this.commitSearchSelectResult(event, report, item, option);
+  }
+  clearChipResult(event:Event, report:ReportVm, item:any) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (this.isResultLocked(item)) return;
+    const key = this.resultFieldKey(report, item);
+    this.resultOptionDrafts[key] = '';
+    this.resultSearchDrafts[key] = '';
+    this.optionTextControls.get(item)?.setValue('', { emitEvent: false });
+    this.searchControls.get(item)?.setValue('', { emitEvent: false });
+    this.applyCommittedEngineResult(report, item, '', false);
+  }
+  overlayOriginWidth(origin: { elementRef?: ElementRef<HTMLElement> } | null): number {
+    const el = origin?.elementRef?.nativeElement;
+    return el?.offsetWidth || 220;
+  }
   private reactiveControl(owner:any,key:string,onChange?:(value:any)=>void): FormControl<any> {
     if (!owner || (typeof owner !== 'object' && typeof owner !== 'function')) return new FormControl('');
     let group=this.reactiveGroups.get(owner);
@@ -2407,13 +2788,6 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   }
   resultFieldKey(report:any,item:any): string { return `${report?.id || 'r'}:${item?.id || item?.report_item_id || item?.test_id || item?.test_name || 'x'}`; }
   resultPanelKey(report:any,item:any,type:'option'|'search'): string { return type + ':' + this.resultFieldKey(report,item); }
-  panelOpensUp(report:any,item:any,type:'option'|'search'): boolean { return this.resultPanelDirections[this.resultPanelKey(report,item,type)] === 'up'; }
-  setResultPanelDirection(key:string, trigger?: HTMLElement) {
-    if (!trigger || typeof trigger.getBoundingClientRect !== 'function') { this.resultPanelDirections[key] = 'down'; return; }
-    const rect = trigger.getBoundingClientRect();
-    const spaceBelow = (window?.innerHeight || 800) - rect.bottom;
-    this.resultPanelDirections[key] = (spaceBelow < 170 && rect.top > spaceBelow) ? 'up' : 'down';
-  }
   keepResultPickerOpen(event:Event){ event.preventDefault(); event.stopPropagation(); }
   cancelResultPickerDrag(event:Event){ event.preventDefault(); event.stopPropagation(); }
   stopResultOptionClick(event:Event){ event.preventDefault(); event.stopPropagation(); (event as any).stopImmediatePropagation?.(); }
@@ -2448,11 +2822,10 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     return this.setControlDisabled(control,this.isResultLocked(item)) as FormControl<string>;
   }
   isOptionPanelOpen(report:any,item:any): boolean { return this.resultOptionPanelKey===this.resultPanelKey(report,item,'option'); }
-  openOptionPanel(report:any,item:any,resetToSelected=false,trigger?:HTMLElement) {
+  openOptionPanel(report:any,item:any,resetToSelected=false,_trigger?:HTMLElement) {
     if (this.isResultLocked(item)) return;
     const panelKey=this.resultPanelKey(report,item,'option');
     if (this.resultPanelCloseTimers[panelKey]) clearTimeout(this.resultPanelCloseTimers[panelKey]);
-    if (trigger || !this.resultPanelDirections[panelKey]) this.setResultPanelDirection(panelKey,trigger);
     this.resultOptionPanelKey=panelKey;
     const dataKey=this.resultFieldKey(report,item);
     if (resetToSelected || this.resultOptionDrafts[dataKey]===undefined) {
@@ -2470,6 +2843,7 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     const typed=String(value ?? '');
     this.resultOptionDrafts[this.resultFieldKey(report,item)]=typed;
     this.applyCommittedEngineResult(report,item,typed,false);
+    if (this.useResultChips(item)) return;
     this.openOptionPanel(report,item,false);
     const panelKey=this.resultPanelKey(report,item,'option');
     this.resultOptionActiveIndex[panelKey]=this.filteredOptionChoices(report,item).length ? 0 : -1;
@@ -2517,6 +2891,11 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   }
   private scrollActiveOptionIntoView(input:HTMLElement,index:number) {
     setTimeout(()=>{
+      const overlayOptions=document.querySelectorAll<HTMLElement>('.cdk-overlay-container .rt-options-overlay .rt-option:not(.muted)');
+      if (overlayOptions.length) {
+        overlayOptions[index]?.scrollIntoView({block:'nearest'});
+        return;
+      }
       const picker=input.closest('.rt-picker');
       const options=picker?.querySelectorAll<HTMLElement>('.rt-options-panel .rt-option:not(.muted)');
       options?.[index]?.scrollIntoView({block:'nearest'});
@@ -2533,11 +2912,10 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
 
   searchDraftValue(report:any,item:any): string { const key=this.resultFieldKey(report,item); return Object.prototype.hasOwnProperty.call(this.resultSearchDrafts,key) ? this.resultSearchDrafts[key] || '' : this.searchSelectEngine.display(item); }
   isSearchPanelOpen(report:any,item:any): boolean { return this.resultOptionPanelKey === this.resultPanelKey(report,item,'search'); }
-  openSearchPanel(report:any,item:any,resetToSelected=false,trigger?:HTMLElement){
+  openSearchPanel(report:any,item:any,resetToSelected=false,_trigger?:HTMLElement){
     if (this.isResultLocked(item)) return;
     const panelKey=this.resultPanelKey(report,item,'search');
     if(this.resultPanelCloseTimers[panelKey]) clearTimeout(this.resultPanelCloseTimers[panelKey]);
-    if(trigger || !this.resultPanelDirections[panelKey]) this.setResultPanelDirection(panelKey,trigger);
     this.resultOptionPanelKey=panelKey;
     const dataKey=this.resultFieldKey(report,item);
     if(resetToSelected || this.resultSearchDrafts[dataKey] === undefined) {
@@ -2548,7 +2926,7 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   }
   closeSearchPanel(report:any,item:any){ const key=this.resultPanelKey(report,item,'search'); if(this.resultOptionPanelKey===key) this.resultOptionPanelKey=''; }
   scheduleCloseSearchPanel(report:any,item:any){ const key=this.resultPanelKey(report,item,'search'); if(this.resultPanelCloseTimers[key]) clearTimeout(this.resultPanelCloseTimers[key]); this.resultPanelCloseTimers[key]=setTimeout(()=>this.closeSearchPanel(report,item),160); }
-  onSearchSelectTyping(report:ReportVm,item:any,value:any){ const typed=String(value ?? ''); this.resultSearchDrafts[this.resultFieldKey(report,item)]=typed; this.applyCommittedEngineResult(report,item,typed,false); this.openSearchPanel(report,item,false); }
+  onSearchSelectTyping(report:ReportVm,item:any,value:any){ const typed=String(value ?? ''); this.resultSearchDrafts[this.resultFieldKey(report,item)]=typed; this.applyCommittedEngineResult(report,item,typed,false); if (this.useResultChips(item)) return; this.openSearchPanel(report,item,false); }
   filteredSearchSelectOptions(report:any,item:any): ResultOption[] { return this.isSearchSelectInput(item) ? this.searchSelectEngine.filter(item,this.searchDraftValue(report,item)) : []; }
   searchChoiceIsSelected(item:any,option:ResultOption): boolean { return this.searchSelectEngine.isSelected(item,option); }
   searchOptionParts(report:any,item:any,option:ResultOption){ return this.searchSelectEngine.parts(item,option,this.searchDraftValue(report,item)); }
@@ -3200,7 +3578,7 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   workspaceTitle(): string { return this.recheckEntryMode ? 'Enter recheck result' : this.workspaceMode()==='APPROVED' ? 'Approved report' : this.workspaceMode()==='APPROVE' ? 'Verify / Approve' : 'Enter results'; }
   workspaceStatusTitle(): string { return this.recheckEntryMode ? 'Pending recheck' : this.workspaceMode()==='APPROVED' ? 'Approved report' : this.workspaceMode()==='APPROVE' ? 'Verify / Approve' : 'Result entry'; }
   workspaceStatusText(report:ReportVm): string { if (this.quickReporting && this.workspaceMode()==='ENTRY') return `${report.selectedCount} selected · save as one finished report`; if (this.quickReporting && this.workspaceMode()==='APPROVED') return 'Finished · print/export with or without background, edit, or delete.'; if(this.recheckEntryMode) return `${report.selectedCount} recheck item(s) selected · enter recheck values and submit back for approval`; if(this.workspaceMode()==='ENTRY') return `${report.selectedCount} selected · save draft or submit for approval`; if(this.workspaceMode()==='APPROVE') return `${report.completionPercent}% completed · view PDF, edit, or verify & approve`; return 'Approved · view, PDF export, print, email, SMS, or use correction flow for changes.'; }
-  deliverySummary(r:any): string { const parts:string[]=[]; if(r?.pdf_exported_at) parts.push('PDF exported'); if(r?.printed_at) parts.push('Printed'); if(r?.emailed_at) parts.push('Email sent/opened'); if(r?.smsed_at) parts.push('SMS sent/opened'); return parts.length ? 'Delivery status: ' + parts.join(' · ') : 'Delivery status: not exported, printed, emailed, or SMS shared yet.'; }
+  deliverySummary(r:any): string { const parts:string[]=[]; if(r?.pdf_exported_at) parts.push('PDF exported'); if(r?.printed_at) parts.push('Printed'); if(r?.emailed_at) parts.push('Email sent/opened'); if(r?.whatsapped_at) parts.push('WhatsApp sent/opened'); if(r?.smsed_at) parts.push('SMS sent/opened'); return parts.length ? 'Delivery status: ' + parts.join(' · ') : 'Delivery status: not exported, printed, emailed, WhatsApp, or SMS shared yet.'; }
   sectionSelectedCount(section: ReportSection): number { return (section.items || []).filter((x:any)=>x.selected_for_entry !== false).length; }
   sectionAllSelected(section: ReportSection): boolean { return !!(section.items || []).length && (section.items || []).every((x:any)=>x.selected_for_entry !== false); }
   sectionPartiallySelected(section: ReportSection): boolean { const items=section.items || []; const selected=this.sectionSelectedCount(section); return selected > 0 && selected < items.length; }

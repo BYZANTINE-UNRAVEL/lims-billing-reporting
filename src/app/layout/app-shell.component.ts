@@ -46,7 +46,7 @@ export interface NavItem { id: string; label: string; icon: string; }
                 <div class="billing-title-mark" aria-hidden="true">
                   <svg viewBox="0 0 24 24" class="tool-ico"><path d="M8 3h8l3 3v15H5V3h3z"></path><path d="M16 3v4h4"></path><path d="M8 12h8"></path><path d="M8 16h5"></path><path d="M18 13v6"></path><path d="M15 16h6"></path></svg>
                 </div>
-                <div class="billing-title-copy"><h2>Billing</h2><small>Create new bill</small></div>
+                <div class="billing-title-copy"><h2>Billing</h2><small [ngClass]="activeBillPaymentClass">{{ activeBillNo || 'Create new bill' }}</small></div>
               </ng-container>
               <ng-template #normalPlainTitle><h2>{{ title }}</h2></ng-template>
             </ng-template>
@@ -71,10 +71,11 @@ export interface NavItem { id: string; label: string; icon: string; }
                 (focus)="openBillSearch()"
                 (blur)="scheduleBillSearchClose()"
                 (keydown.escape)="closeBillSearch()"
+                [ngClass]="activeBillPaymentClass"
                 placeholder="Search bill no, patient or mobile">
               <div class="top-search-results" *ngIf="billSearchResults.length">
                 <button type="button" *ngFor="let b of billSearchResults" (pointerdown)="$event.preventDefault(); $event.stopPropagation(); billSearchSelect.emit(b)" (mousedown)="$event.preventDefault(); $event.stopPropagation()">
-                  <b>{{ b.bill_no }}</b>
+                  <b [ngClass]="billPaymentClass(b)">{{ b.bill_no }}</b>
                   <span>{{ b.patient_name }} · ₹{{ b.total }} · {{ b.mobile || 'No mobile' }}</span>
                 </button>
               </div>
@@ -148,6 +149,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   @Input() billSearchQuery = '';
   @Input() billSearchResults: any[] = [];
   @Input() activeBillNo = '';
+  @Input() activeBillPaymentClass = '';
   @Input() previousBillNo = '';
   @Input() nextBillNo = '';
   @Input() billingFooterPrimaryText = 'Save & Continue';
@@ -169,6 +171,20 @@ export class AppShellComponent implements OnInit, OnDestroy {
   @Output() billingFooterPrimary = new EventEmitter<void>();
   @Output() billingFooterSecondary = new EventEmitter<void>();
 
+  billPaymentClass(b: any): string {
+    const raw = String(b?.payment_status || '').toUpperCase();
+    if (raw === 'CANCELLED' || String(b?.status || '').toUpperCase() === 'CANCELLED') return 'pay-cancelled';
+    if (raw === 'PAID') return 'pay-paid';
+    if (raw === 'PARTIAL') return 'pay-partial';
+    if (raw === 'OVERPAID') return 'pay-excess';
+    if (raw === 'PENDING') return 'pay-pending';
+    const paid = +b?.paid || 0;
+    const total = +b?.total || 0;
+    if (paid <= 0) return 'pay-pending';
+    if (paid > total) return 'pay-excess';
+    if (paid >= total) return 'pay-paid';
+    return 'pay-partial';
+  }
   openBillSearch() {
     if (this.searchBlurTimer) clearTimeout(this.searchBlurTimer);
     this.billSearchFocus.emit();

@@ -7,6 +7,7 @@ export interface LimsApi {
   chooseReportBackgroundImage?(): Promise<{path: string} | null>;
   listDepartments(): Promise<any[]>;
   saveDepartment(item: any): Promise<any[]>;
+  reorderDepartments?(items: any[]): Promise<any[]>;
   listUnits(): Promise<any[]>;
   saveUnit(item: any): Promise<any[]>;
   listTests(activeOnly?: boolean): Promise<any[]>;
@@ -18,6 +19,7 @@ export interface LimsApi {
   listMethods(): Promise<any[]>;
   listProfiles(activeOnly?: boolean): Promise<any[]>;
   saveProfile(item: any): Promise<any[]>;
+  reorderProfiles?(items: any[]): Promise<any[]>;
   deleteProfile?(id: number): Promise<any[]>;
   listEquipment?(activeOnly?: boolean): Promise<any[]>;
   saveEquipment?(item: any): Promise<any[]>;
@@ -80,6 +82,8 @@ export interface LimsApi {
   listPatients(q?: string): Promise<any[]>;
   savePatient(item: any): Promise<number>;
   patientHistory(id: number): Promise<any>;
+  previewUnusedPatients?(): Promise<{ count: number; totalPatients: number; sample: any[] }>;
+  dropUnusedPatients?(): Promise<{ ok: boolean; deleted: number; totalPatients: number }>;
   createBill(payload: any): Promise<any>;
   updateBill(payload: any): Promise<any>;
   listBills(filters?: any): Promise<any[]>;
@@ -111,6 +115,7 @@ export interface LimsApi {
   approvedReportPrint?(id: number, options?: any): Promise<string>;
   approvedReportEmail?(id: number, options?: any): Promise<any>;
   approvedReportWhatsapp?(id: number, options?: any): Promise<any>;
+  openWhatsAppContact?(mobile: string): Promise<{ ok: boolean; mobile: string }>;
   approvedReportSms?(id: number, options?: any): Promise<any>;
   reportItemHistory?(patientId: number, testId: number, currentReportId?: number): Promise<any[]>;
   billPdf(billId: number, includeReceipts?: boolean): Promise<string>;
@@ -118,7 +123,7 @@ export interface LimsApi {
   statement(filters?: any): Promise<any>;
   statementExcel(filters?: any): Promise<string>;
   statementPdf(filters?: any): Promise<string>;
-  createBackup(): Promise<any>;
+  createBackup(reason?: string): Promise<any>;
   listBackups(): Promise<any[]>;
   validateBackup(filePath: string): Promise<any>;
   restoreBackup(filePath: string): Promise<any>;
@@ -126,12 +131,15 @@ export interface LimsApi {
   getDataDir(): Promise<string>;
   getReportsDir(): Promise<string>;
   chooseDirectory?(title?: string): Promise<{path: string} | null>;
-  setDataDir?(dir: string): Promise<{dataDir: string; restartRequired: boolean}>;
+  setDataDir?(dir: string): Promise<{dataDir: string; restartRequired: boolean; copied?: boolean; usedExisting?: boolean; message?: string}>;
   openPath(path: string): Promise<string>;
   analyzerApiStatus?(): Promise<any>;
   restartAnalyzerApi?(): Promise<any>;
   setDirty?(dirty: boolean): Promise<boolean>;
   onCloseRequest?(callback: () => void): () => void;
+  onAlreadyRunning?(callback: (payload?: { title?: string; message?: string; details?: string }) => void): () => void;
+  onShutdownProgress?(callback: (progress: any) => void): () => void;
+  prepareShutdown?(): Promise<any>;
   closeDecision?(allowClose: boolean): Promise<void>;
 }
 

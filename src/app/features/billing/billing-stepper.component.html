@@ -91,7 +91,7 @@
                 <p class="eyebrow">Step 2</p>
                 <h3>Patient Registration</h3>
               </div>
-              <span class="status-pill patient-id-pill">{{ editingBillNo ? 'Editing ' + editingBillNo : (bill.patient.patient_no || 'New patient ID will be generated') }}</span>
+              <span class="status-pill patient-id-pill" [ngClass]="editingBillNo ? billNoPaymentClass() : null">{{ editingBillNo ? 'Editing ' + editingBillNo : (bill.patient.patient_no || 'New patient ID will be generated') }}</span>
             </div>
 
             <div class="patient-lookup-row">
@@ -592,7 +592,13 @@
               <div class="bill-success pro-print-actions" *ngIf="lastBill()">
                 <div><b>Saved {{ lastBill().bill_no }}</b><span>Status: {{ savedBillStatus(lastBill()) }}. Bill print and receipts are separate.</span></div>
                 <button class="btn secondary safe-action" type="button" (click)="billPdf(lastBill().id)">Bill PDF</button>
+                <button class="btn secondary safe-action whatsapp-action" type="button" (click)="openPatientWhatsApp(lastBill())">Open WhatsApp</button>
                 <button class="btn secondary safe-action" type="button" *ngFor="let r of lastBill().receipts || []" (click)="receipt(lastBill().id, r.id)">{{ r.receipt_no }}</button>
+              </div>
+              <div class="bill-success pro-print-actions" *ngIf="editingBillId && !lastBill()">
+                <div><b>Bill {{ bill.bill_no || ('#' + editingBillId) }}</b><span>Open WhatsApp for this patient.</span></div>
+                <button class="btn secondary safe-action" type="button" (click)="billPdf(editingBillId)">Bill PDF</button>
+                <button class="btn secondary safe-action whatsapp-action" type="button" (click)="openPatientWhatsApp()">Open WhatsApp</button>
               </div>
             </div>
           </div>
@@ -723,4 +729,6 @@
         </div>
       </section>
     </div>
+
+    <app-whatsapp-contact-prompt></app-whatsapp-contact-prompt>
   

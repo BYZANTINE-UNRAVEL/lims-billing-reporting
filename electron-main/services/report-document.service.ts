@@ -8,6 +8,16 @@ import { BrowserWindow, shell } from 'electron';
 import { ReportContentService } from './report-content.service';
 
 export class ReportDocumentService extends ReportContentService {  async createReportPdf(reportOrBillId:number, withBackground?: boolean, options:any = {}) {
+    const previousLayoutProfile = this.layoutProfile;
+    this.layoutProfile = withBackground === false ? 'noBg' : 'withBg';
+    try {
+      return await this.createReportPdfInner(reportOrBillId, withBackground, options);
+    } finally {
+      this.layoutProfile = previousLayoutProfile;
+    }
+  }
+
+  private async createReportPdfInner(reportOrBillId:number, withBackground?: boolean, options:any = {}) {
     const ids = this.normalizeReportIdList(reportOrBillId, options);
     const pdfOutputMode = String(options?.pdfOutputMode || options?.outputMode || '').toLowerCase();
     const shouldExportPdf = pdfOutputMode === 'export' || options?.export === true || options?.saveToExportFolder === true;
@@ -213,6 +223,9 @@ export class ReportDocumentService extends ReportContentService {  async createR
       if (this.interpretationAllowed('test') && Number(item.interpretation_enabled || 0) === 1 && this.hasPrintableHtml(item.interpretation_text)) {
         tableBody.push(spanRow({ stack:this.buildInterpretationPdfNodes(item.interpretation_text, testNameText), colSpan:tableColumns.length }));
       }
+      if (this.remarksAllowed() && this.hasPrintableHtml(item.recheck_remarks)) {
+        tableBody.push(spanRow({ stack:this.buildRemarksPdfNodes(item.recheck_remarks), colSpan:tableColumns.length }));
+      }
     }
     flushAllProfileInterpretations();
 
@@ -294,6 +307,7 @@ export class ReportDocumentService extends ReportContentService {  async createR
         arrowLow:{...this.reportStyle('flagStyle',{bold:true,fontSize:11,color:'#111111',fontFamily:'NotoSansSymbols'}), color:this.reportColor('report.simple.lowColor','#00c')},
         arrowNormal:this.reportStyle('flagStyle',{bold:true,fontSize:11,color:'#111111',fontFamily:'NotoSansSymbols'}),
         interpretation:this.reportStyle('interpretationStyle',{fontSize:9,color:'#111111'}),
+        remarks:this.reportStyle('remarksStyle',{fontSize:9,color:'#111111'}),
         resultHigh:{...this.reportStyle('tableDataStyle',{fontSize:12,color:'#111111'}), bold:true, fontSize:this.reportNumber('report.simple.resultAbnormalFontSize',13,6,30),color:this.reportColor('report.simple.highColor','#c00')},
         resultLow:{...this.reportStyle('tableDataStyle',{fontSize:12,color:'#111111'}), bold:true, fontSize:this.reportNumber('report.simple.resultAbnormalFontSize',13,6,30),color:this.reportColor('report.simple.lowColor','#00c')},
         resultNormal:{...this.reportStyle('tableDataStyle',{fontSize:12,color:'#111111'}), fontSize:this.reportNumber('report.simple.resultFontSize',12,6,30)}
@@ -383,7 +397,7 @@ export class ReportDocumentService extends ReportContentService {  async createR
     if (mode === 'single') {
       base.items = [
         { test_id: 1, department_name: 'BIOCHEMISTRY', test_name: 'Glucose - Fasting', result_value: '96', unit: 'mg/dL', normal_range: '70 - 110', method: 'GOD-POD', specimen_name: 'Blood', interpretation_enabled: 1, interpretation_text: '<p><b>Clinical note:</b> Fasting glucose is within expected limits.</p>' },
-        { test_id: 2, department_name: 'BIOCHEMISTRY', test_name: 'Creatinine', result_value: '1.10', unit: 'mg/dL', normal_range: '0.7 - 1.3', method: 'Jaffe', specimen_name: 'Serum' }
+        { test_id: 2, department_name: 'BIOCHEMISTRY', test_name: 'Creatinine', result_value: '1.10', unit: 'mg/dL', normal_range: '0.7 - 1.3', method: 'Jaffe', specimen_name: 'Serum', recheck_remarks: 'Sample slightly hemolyzed; repeat if clinically indicated.' }
       ];
       return base;
     }

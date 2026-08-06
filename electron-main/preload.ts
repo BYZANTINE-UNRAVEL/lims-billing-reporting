@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('limsApi', {
   chooseReportBackgroundImage: () => ipcRenderer.invoke('report:choose-image'),
   listDepartments: () => ipcRenderer.invoke('masters:departments'),
   saveDepartment: (x: any) => ipcRenderer.invoke('masters:department:save', x),
+  reorderDepartments: (items: any[]) => ipcRenderer.invoke('masters:departments:reorder', items),
   listUnits: () => ipcRenderer.invoke('masters:units'),
   saveUnit: (x: any) => ipcRenderer.invoke('masters:unit:save', x),
   listTests: (activeOnly?: boolean) => ipcRenderer.invoke('masters:tests', activeOnly),
@@ -20,6 +21,7 @@ contextBridge.exposeInMainWorld('limsApi', {
   listMethods: () => ipcRenderer.invoke('masters:methods'),
   listProfiles: (activeOnly?: boolean) => ipcRenderer.invoke('masters:profiles', activeOnly),
   saveProfile: (x: any) => ipcRenderer.invoke('masters:profile:save', x),
+  reorderProfiles: (items: any[]) => ipcRenderer.invoke('masters:profiles:reorder', items),
   deleteProfile: (id: number) => ipcRenderer.invoke('masters:profile:delete', id),
   listEquipment: (activeOnly?: boolean) => ipcRenderer.invoke('masters:equipment:list', activeOnly),
   saveEquipment: (x: any) => ipcRenderer.invoke('masters:equipment:save', x),
@@ -83,6 +85,8 @@ contextBridge.exposeInMainWorld('limsApi', {
   listPatients: (q?: string) => ipcRenderer.invoke('patients:list', q),
   savePatient: (x: any) => ipcRenderer.invoke('patients:save', x),
   patientHistory: (id: number) => ipcRenderer.invoke('patients:history', id),
+  previewUnusedPatients: () => ipcRenderer.invoke('patients:unused-preview'),
+  dropUnusedPatients: () => ipcRenderer.invoke('patients:drop-unused'),
   createBill: (payload: any) => ipcRenderer.invoke('billing:create', payload),
   updateBill: (payload: any) => ipcRenderer.invoke('billing:update', payload),
   listBills: (filters?: any) => ipcRenderer.invoke('billing:list', filters),
@@ -118,6 +122,7 @@ contextBridge.exposeInMainWorld('limsApi', {
   approvedReportPrint: (id: number, options?: any) => ipcRenderer.invoke('reports:approved-print', id, options),
   approvedReportEmail: (id: number, options?: any) => ipcRenderer.invoke('reports:approved-email', id, options),
   approvedReportWhatsapp: (id: number, options?: any) => ipcRenderer.invoke('reports:approved-whatsapp', id, options),
+  openWhatsAppContact: (mobile: string) => ipcRenderer.invoke('whatsapp:open-contact', mobile),
   approvedReportSms: (id: number, options?: any) => ipcRenderer.invoke('reports:approved-sms', id, options),
   reportItemHistory: (patientId: number, testId: number, currentReportId?: number) => ipcRenderer.invoke('reports:item-history', patientId, testId, currentReportId),
   billPdf: (billId: number, includeReceipts?: boolean) => ipcRenderer.invoke('billing:pdf', billId, includeReceipts),
@@ -125,7 +130,7 @@ contextBridge.exposeInMainWorld('limsApi', {
   statement: (filters?: any) => ipcRenderer.invoke('statement', filters),
   statementExcel: (filters?: any) => ipcRenderer.invoke('statement:excel', filters),
   statementPdf: (filters?: any) => ipcRenderer.invoke('statement:pdf', filters),
-  createBackup: () => ipcRenderer.invoke('backup:create'),
+  createBackup: (reason?: string) => ipcRenderer.invoke('backup:create', reason),
   listBackups: () => ipcRenderer.invoke('backup:list'),
   validateBackup: (filePath: string) => ipcRenderer.invoke('backup:validate', filePath),
   restoreBackup: (filePath: string) => ipcRenderer.invoke('backup:restore', filePath),
@@ -148,5 +153,16 @@ contextBridge.exposeInMainWorld('limsApi', {
     ipcRenderer.on('app:close-request', listener);
     return () => ipcRenderer.removeListener('app:close-request', listener);
   },
+  onAlreadyRunning: (callback: (payload?: { title?: string; message?: string; details?: string }) => void) => {
+    const listener = (_event: any, payload?: { title?: string; message?: string; details?: string }) => callback(payload);
+    ipcRenderer.on('app:already-running', listener);
+    return () => ipcRenderer.removeListener('app:already-running', listener);
+  },
+  onShutdownProgress: (callback: (progress: any) => void) => {
+    const listener = (_event: any, progress: any) => callback(progress);
+    ipcRenderer.on('app:shutdown-progress', listener);
+    return () => ipcRenderer.removeListener('app:shutdown-progress', listener);
+  },
+  prepareShutdown: () => ipcRenderer.invoke('app:prepare-shutdown'),
   closeDecision: (allowClose: boolean) => ipcRenderer.invoke('app:close-decision', allowClose)
 });

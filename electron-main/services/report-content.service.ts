@@ -15,8 +15,6 @@ export abstract class ReportContentService extends ReportLayoutService {  protec
 
   protected finalReportItemsForApprovedOutput(reports:any[], options:any = {}): any[] {
     const showProfileName = options?.show_profile_name !== false;
-    const showSubHeader = options?.show_sub_header !== false;
-    const singlePlacement = String(options?.single_test_placement || 'DEPARTMENT').toUpperCase();
     const approvedOnly = options?.approved_only !== false;
     const itemMap = new Map<string, any>();
     for (const rpt of reports) {
@@ -41,60 +39,34 @@ export abstract class ReportContentService extends ReportLayoutService {  protec
       if (ar !== br) return ar - br;
       return (+a.id || 0) - (+b.id || 0);
     });
-    const groups = new Map<string, any>();
-    const singles:any[] = [];
+
+    // Merge only. Do NOT apply single_test_placement here — dumping all singles to
+    // the top (or bottom) poisons department first-occurrence order used later by
+    // normalizeReportItemsForPdf. That function owns TOP/end within each department.
+    const rows:any[] = [];
+    const seenProfiles = new Set<string>();
     for (const t of tests) {
       const profileName = String(t.source_profile_name || '').trim();
       const profileId = +(t.source_profile_id || 0) || 0;
       if (profileName) {
         const key = `${profileId}|${profileName}`;
-        if (!groups.has(key)) groups.set(key, { key, kind:'PROFILE', profile_id:profileId, name:profileName, order:+(t.group_order_override ?? t.priority ?? 0), profile_interpretation_enabled:t.profile_interpretation_enabled, profile_interpretation_text:t.profile_interpretation_text, items:[] });
-        const grp = groups.get(key);
-        if (!grp.profile_interpretation_text && t.profile_interpretation_text) grp.profile_interpretation_text = t.profile_interpretation_text;
-        if (t.profile_interpretation_enabled !== undefined) grp.profile_interpretation_enabled = t.profile_interpretation_enabled;
-        grp.items.push(t);
-      } else {
-        singles.push(t);
+        if (showProfileName && !seenProfiles.has(key)) {
+          seenProfiles.add(key);
+          rows.push({
+            test_id: null,
+            test_name: profileName,
+            heading_kind: 'PROFILE',
+            source_profile_id: profileId,
+            source_profile_name: profileName,
+            department_name: t.department_name,
+            profile_interpretation_enabled: t.profile_interpretation_enabled,
+            profile_interpretation_text: t.profile_interpretation_text,
+            group_order_override: t.group_order_override,
+            priority: t.priority
+          });
+        }
       }
-    }
-    const profileSections = Array.from(groups.values()).map((g:any)=>{
-      g.items.sort((a:any,b:any)=>{
-        const ar = +(a.report_order_override ?? a.priority ?? 0);
-        const br = +(b.report_order_override ?? b.priority ?? 0);
-        if (ar !== br) return ar - br;
-        return (+a.id || 0) - (+b.id || 0);
-      });
-      g.order = Math.min(...g.items.map((x:any)=>+(x.group_order_override ?? x.priority ?? 0)));
-      return g;
-    });
-    singles.sort((a:any,b:any)=>{
-      const ag = +(a.group_order_override ?? a.priority ?? 0);
-      const bg = +(b.group_order_override ?? b.priority ?? 0);
-      if (ag !== bg) return ag - bg;
-      const ad = String(a.department_name || '');
-      const bd = String(b.department_name || '');
-      if (ad !== bd) return ad.localeCompare(bd);
-      return (+a.id || 0) - (+b.id || 0);
-    });
-    const rows:any[] = [];
-    const pushSingle = (t:any) => rows.push({...t, heading_kind:'', test_name:t.test_name || t.name || 'Test'});
-    if (singlePlacement === 'TOP') for (const t of singles) pushSingle(t);
-    const sections = profileSections.sort((a:any,b:any)=>a.order-b.order);
-    for (const g of sections) {
-      if (showProfileName) rows.push({ test_id:null, test_name:g.name, heading_kind:'PROFILE', source_profile_id:g.profile_id, source_profile_name:g.name, profile_interpretation_enabled:g.profile_interpretation_enabled, profile_interpretation_text:g.profile_interpretation_text });
-      for (const item of g.items) pushSingle(item);
-    }
-    if (singlePlacement !== 'TOP') {
-      const byDept = new Map<string, any[]>();
-      for (const t of singles) {
-        const dept = String(t.department_name || '').trim();
-        if (!byDept.has(dept)) byDept.set(dept, []);
-        byDept.get(dept)!.push(t);
-      }
-      for (const [dept, deptItems] of byDept) {
-        if (showSubHeader && dept) rows.push({ test_id:null, test_name:dept, heading_kind:'INNER' });
-        for (const t of deptItems) pushSingle(t);
-      }
+      rows.push({ ...t, heading_kind: '', test_name: t.test_name || t.name || 'Test' });
     }
     return rows;
   }

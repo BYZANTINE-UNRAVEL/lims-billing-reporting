@@ -340,6 +340,7 @@ export class ReportCoreService {
         'report.simple.specimenVisible': 'true',
         'report.simple.specimenPlacement': 'under-test',
         'report.simple.specimenPrefix': '',
+        'report.simple.collectionVisible': 'false',
         'report.simple.showMethodInReference': 'true',
         'report.simple.referenceVisible': 'true',
         'report.simple.methodVisible': 'true',
@@ -483,6 +484,7 @@ export class ReportCoreService {
         'report.simple.signatureLine3Height': '1.05',
         'report.simple.signatureLine4Height': '1.05',
         'report.simple.signatureEmptyLineMode': 'reserve',
+        'report.printDefaults.json': JSON.stringify({ withBackground: true, mergeMode: 'MERGE', singleTestPlacement: 'DEPARTMENT', signatures: {} }),
         'report.simple.otherSignEnabled': 'false',
         'report.simple.otherSignLabel': 'Authorized Signature',
         'report.simple.otherSignText': '',
@@ -628,8 +630,44 @@ export class ReportCoreService {
   }
 
 
+  protected layoutProfile: 'withBg' | 'noBg' = 'withBg';
+
+  private isLayoutDualKey(suffix: string): boolean {
+    const root = String(suffix || '').split('.')[0];
+    const dualRoots = new Set([
+      'pageSize', 'orientation',
+      'marginTopMm', 'marginRightMm', 'marginBottomMm', 'marginLeftMm',
+      'mainBodyMarginTopMm', 'mainBodyMarginBottomMm',
+      'tableMarginTopMm', 'tableMarginBottomMm', 'tableMarginLeftMm', 'tableMarginRightMm',
+      'tableSafetyMm', 'tablePaddingLeftMm', 'tablePaddingRightMm', 'tablePaddingTopMm', 'tablePaddingBottomMm',
+      'headerFixedHeightMm', 'footerFixedHeightMm', 'headerLineGapMm', 'footerLineGapMm',
+      'headerMarginTopMm', 'headerMarginBottomMm', 'footerMarginTopMm', 'footerMarginBottomMm', 'footerMarginLeftMm', 'footerMarginRightMm',
+      'headerLogoEnabled', 'headerLogoPath', 'headerLogoWidthMm', 'headerLogoHeightMm', 'headerLogoPlacement', 'headerLogoOffsetXMm', 'headerLogoOffsetYMm',
+      'institutionName', 'institutionSubText', 'institutionTextPlacement',
+      'institutionNameOffsetXMm', 'institutionNameOffsetYMm', 'institutionSubTextOffsetXMm', 'institutionSubTextOffsetYMm',
+      'headerTextAlignment', 'institutionNameStyle', 'institutionSubTextStyle',
+      'addressText', 'addressPlacement', 'addressAlignment', 'addressStyle', 'addressLineGapMm',
+      'addressOffsetXMm', 'addressOffsetYMm', 'addressMarginTopMm', 'addressMarginBottomMm',
+      'footerText', 'footerTextAlignment', 'footerStyle', 'footerTextOffsetXMm', 'footerTextOffsetYMm', 'footerTextMarginTopMm', 'footerTextMarginBottomMm',
+      'disclaimerPlacement', 'disclaimerText', 'disclaimerAlignment', 'disclaimerStyle', 'disclaimerBgColor', 'disclaimerWidthPct',
+      'disclaimerOffsetXMm', 'disclaimerOffsetYMm', 'disclaimerMarginTopMm', 'disclaimerMarginBottomMm', 'disclaimerMarginLeftMm', 'disclaimerMarginRightMm',
+      'disclaimerLineHeight', 'disclaimerCharacterSpacing',
+      'footerDisclaimerWidthPct', 'footerPageNumberWidthPct', 'footerColumnGapMm', 'footerPageNumberAlignment'
+    ]);
+    return dualRoots.has(root);
+  }
+
   protected reportSetting(key: string, fallback = ''): string {
-    try { return this.db.getSetting(key, fallback); } catch { return fallback; }
+    try {
+      if (this.layoutProfile === 'noBg' && key.startsWith('report.simple.') && !key.startsWith('report.simple.noBg.')) {
+        const suffix = key.slice('report.simple.'.length);
+        if (this.isLayoutDualKey(suffix)) {
+          const noBg = this.db.getSetting(`report.simple.noBg.${suffix}`, '');
+          if (noBg !== '' && noBg != null) return String(noBg);
+        }
+      }
+      return this.db.getSetting(key, fallback);
+    } catch { return fallback; }
   }
 
   protected reportBool(key: string, fallback = false): boolean {
@@ -1074,6 +1112,35 @@ export class ReportCoreService {
     if (!this.reportBool('report.simple.interpretationEnabled', false)) return false;
     const mode = String(this.reportSetting('report.simple.interpretationSource', 'both') || 'both').toLowerCase();
     return mode === 'both' || mode === source;
+  }
+
+  protected buildRemarksPdfNodes(text:any): any[] {
+    if (!this.hasPrintableHtml(text)) return [];
+    const baseStyle = this.reportStyle('remarksStyle', { fontSize:9, color:'#111111', alignment:'left' });
+    const label = String(this.reportSetting('report.simple.remarksLabel', 'Remarks') || '').trim();
+    const showLabel = this.reportBool('report.simple.remarksShowLabel', true) && label;
+    const stack:any[] = [];
+    if (showLabel) stack.push({ text: label, ...baseStyle, bold:true, margin:[0,0,0,2] });
+    stack.push({ text: this.htmlToPlainText(text), ...baseStyle });
+    const bg = this.reportColor('report.simple.remarksBgColor', '#ffffff');
+    const showBorder = this.reportBool('report.simple.remarksShowBorder', false);
+    const top = this.mmToPt(this.reportNumber('report.simple.remarksMarginTopMm', 1.5, 0, 30));
+    const bottom = this.mmToPt(this.reportNumber('report.simple.remarksMarginBottomMm', 2, 0, 30));
+    // Keep parity with buildInterpretationPdfNodes: bg/showBorder are reserved
+    // for a future bordered-box treatment and are wired into settings now.
+    void bg; void showBorder;
+    const blockMargin = (node:any, first:boolean, last:boolean) => {
+      const existing = Array.isArray(node?.margin) ? node.margin : [0, 0, 0, 0];
+      return [existing[0] || 0, (first ? top : existing[1] || 0), existing[2] || 0, (last ? bottom : existing[3] || 0)];
+    };
+    return stack.map((node:any, index:number) => ({
+      ...node,
+      margin: blockMargin(node, index === 0, index === stack.length - 1)
+    }));
+  }
+
+  protected remarksAllowed(): boolean {
+    return this.reportBool('report.simple.remarksEnabled', true);
   }
 
   protected reportPageSize(): any {

@@ -1,8 +1,10 @@
 import { CommonModule, DatePipe } from '@angular/common';
-import { Component, EventEmitter, OnInit, Output, signal } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, OnInit, Output, ViewChild, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { dateRangePresets, matchesDateRange, openNativeDatePicker, DATE_RANGE_FILTER_STYLES } from '../../shared/date-range-filters';
+import { DateTimeSettingsService } from '../../shared/date-time-settings.service';
+import { WhatsAppContactPromptComponent } from '../../shared/whatsapp-contact-prompt.component';
 
 type StatementAction = 'print' | 'download';
 type StatementKind = 'detailed' | 'consolidated';
@@ -10,7 +12,7 @@ type StatementKind = 'detailed' | 'consolidated';
 @Component({
   selector: 'app-statements-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, DatePipe, MatMenuModule, MatTooltipModule],
+  imports: [CommonModule, FormsModule, DatePipe, MatTooltipModule, WhatsAppContactPromptComponent],
   template: `
     <section class="statement-page">
       <div class="kpi-grid">
@@ -33,15 +35,19 @@ type StatementKind = 'detailed' | 'consolidated';
       </div>
 
       <section class="filter-card">
+        <div class="date-range-filters" aria-label="Statement date filters">
+          <label class="date-field"><input type="date" [(ngModel)]="filters.from" (click)="openDatePicker($event)" (keydown.enter)="openDatePicker($event)" (change)="validateDates()"></label>
+          <span class="range-arrow">→</span>
+          <label class="date-field"><input type="date" [(ngModel)]="filters.to" (click)="openDatePicker($event)" (keydown.enter)="openDatePicker($event)" (change)="validateDates()"></label>
+          <button type="button" [class.active]="isTodayRange()" (click)="setDatePreset('today')">Today</button>
+          <button type="button" [class.active]="isPreviousDayRange()" (click)="setDatePreset('previousDay')">Previous Day</button>
+          <button type="button" [class.active]="isCurrentMonthRange()" (click)="setDatePreset('currentMonth')">Current Month</button>
+          <button type="button" [class.active]="isLastMonthRange()" (click)="setDatePreset('lastMonth')">Last Month</button>
+          <button type="button" [class.active]="isThirtyDayRange()" (click)="setDatePreset('thirtyDays')">30 Days</button>
+          <button type="button" [class.active]="isCurrentYearRange()" (click)="setDatePreset('currentYear')">Current Year</button>
+          <button type="button" [class.active]="isLastYearRange()" (click)="setDatePreset('lastYear')">Last Year</button>
+        </div>
         <div class="filter-row">
-          <label class="field small-date">
-            <span>From Date</span>
-            <input type="date" [(ngModel)]="filters.from" (change)="validateDates()" />
-          </label>
-          <label class="field small-date">
-            <span>To Date</span>
-            <input type="date" [(ngModel)]="filters.to" (change)="validateDates()" />
-          </label>
           <label class="field search-field">
             <span>Search</span>
             <div class="input-icon">
@@ -94,7 +100,7 @@ type StatementKind = 'detailed' | 'consolidated';
               <svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"></path><path d="M8 8l8 8"></path><path d="M16 8l-8 8"></path></svg>
               Excel
             </button>
-            <select class="page-select" [(ngModel)]="pageSize" (ngModelChange)="page.set(1)">
+            <select class="page-select" [(ngModel)]="pageSize" (ngModelChange)="page.set(1); selectedBillId.set(null)">
               <option [ngValue]="10">10 / page</option>
               <option [ngValue]="25">25 / page</option>
               <option [ngValue]="50">50 / page</option>
@@ -129,78 +135,95 @@ type StatementKind = 'detailed' | 'consolidated';
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let b of pagedBills()" [class.cancelled-row]="b.status==='CANCELLED'">
-                <td>
-                  <button class="bill-link cell-ellipsis" type="button" (click)="editBill.emit(b.id)" [matTooltip]="b.bill_no" matTooltipPosition="above">{{b.bill_no}}</button>
-                </td>
-                <td>
-                  <div class="cell-stack" [matTooltip]="(b.bill_date | date:'dd MMM yyyy, shortTime') || ''" matTooltipPosition="above">
-                    <b class="cell-ellipsis">{{b.bill_date | date:'dd MMM yyyy'}}</b>
-                    <small class="cell-ellipsis">{{b.bill_date | date:'shortTime'}}</small>
-                  </div>
-                </td>
-                <td>
-                  <div class="patient-summary-cell"
-                       [matTooltip]="patientSummaryTooltip(b)"
-                       matTooltipPosition="above"
-                       matTooltipClass="rich-cell-tooltip">
-                    <div class="patient-primary cell-ellipsis">{{b.patient_name || '-'}}</div>
-                    <div class="patient-meta cell-ellipsis">{{patientAgeGender(b)}}</div>
-                    <div class="patient-mobile cell-ellipsis">{{b.mobile || b.patient_no || '-'}}</div>
-                    <div class="patient-consultant cell-ellipsis">{{b.consultant_name || 'No consultant'}}</div>
-                  </div>
-                </td>
-                <td><span class="cell-ellipsis" [matTooltip]="'₹' + money(b.total)">₹{{money(b.total)}}</span></td>
-                <td class="paid-text"><span class="cell-ellipsis" [matTooltip]="'₹' + money(b.paid)">₹{{money(b.paid)}}</span></td>
-                <td [class.due-text]="(+b.due||0)>0" [class.excess-text]="excess(b)>0">
-                  <span class="cell-ellipsis" [matTooltip]="excess(b)>0 ? '+₹' + money(excess(b)) : '₹' + money(b.due)">
-                    <ng-container *ngIf="excess(b)>0; else dueTpl">+₹{{money(excess(b))}}</ng-container>
-                    <ng-template #dueTpl>₹{{money(b.due)}}</ng-template>
-                  </span>
-                </td>
-                <td><span class="status-chip cell-ellipsis" [ngClass]="paymentStatusClass(b)" [matTooltip]="statusText(b)" matTooltipPosition="above">{{statusText(b)}}</span></td>
-                <td><span class="status-chip cell-ellipsis" [class.cancelled]="b.status==='CANCELLED'" [matTooltip]="b.status==='CANCELLED' ? 'Cancelled' : 'Active'" matTooltipPosition="above">{{b.status==='CANCELLED' ? 'Cancelled' : 'Active'}}</span></td>
-                <td class="actions-cell">
-                  <button class="actions-trigger" type="button" [matMenuTriggerFor]="billActionsMenu" [matMenuTriggerData]="{ bill: b }" aria-label="Open bill actions" matTooltip="Click to view actions" matTooltipPosition="above">
-                    <span class="actions-trigger-icon">•••</span>
-                    <span>Actions</span>
-                  </button>
-                </td>
-              </tr>
+              <ng-container *ngFor="let b of pagedBills()">
+                <tr class="bill-data-row"
+                    [class.cancelled-row]="b.status==='CANCELLED'"
+                    [class.row-selected]="isBillSelected(b)"
+                    (click)="selectBillRow(b, $event)">
+                  <td>
+                    <button #billNoEl class="bill-link cell-ellipsis" type="button"
+                      [ngClass]="paymentStatusClass(b)"
+                      (click)="onBillLinkClick(b, $event)"
+                      (mouseenter)="onEllipsisEnter(billNoEl)"
+                      [matTooltip]="b.bill_no || ''"
+                      [matTooltipDisabled]="!isEllipsisTruncated(billNoEl)"
+                      matTooltipPosition="above">{{b.bill_no}}</button>
+                  </td>
+                  <td>
+                    <div class="cell-stack">
+                      <b class="cell-ellipsis">{{b.bill_date | date:'dd MMM yyyy'}}</b>
+                      <small class="cell-ellipsis">{{b.bill_date | date:'shortTime'}}</small>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="patient-summary-cell">
+                      <div #patientNameEl class="patient-primary cell-ellipsis"
+                           (mouseenter)="onEllipsisEnter(patientNameEl)"
+                           [matTooltip]="b.patient_name || ''"
+                           [matTooltipDisabled]="!isEllipsisTruncated(patientNameEl)"
+                           matTooltipPosition="above">{{b.patient_name || '-'}}</div>
+                      <div class="patient-meta cell-ellipsis">{{patientAgeGender(b)}}<ng-container *ngIf="b.patient_no"> · {{b.patient_no}}</ng-container></div>
+                      <div #patientIdEl class="patient-mobile cell-ellipsis"
+                           (mouseenter)="onEllipsisEnter(patientIdEl)"
+                           [matTooltip]="b.mobile || 'No mobile'"
+                           [matTooltipDisabled]="!isEllipsisTruncated(patientIdEl)"
+                           matTooltipPosition="above">{{b.mobile || 'No mobile'}}</div>
+                      <div #consultantEl class="patient-consultant cell-ellipsis"
+                           (mouseenter)="onEllipsisEnter(consultantEl)"
+                           [matTooltip]="b.consultant_name || 'No consultant'"
+                           [matTooltipDisabled]="!isEllipsisTruncated(consultantEl)"
+                           matTooltipPosition="above">{{b.consultant_name || 'No consultant'}}</div>
+                    </div>
+                  </td>
+                  <td><span class="cell-ellipsis">₹{{money(b.total)}}</span></td>
+                  <td class="paid-text"><span class="cell-ellipsis">₹{{money(b.paid)}}</span></td>
+                  <td [class.due-text]="(+b.due||0)>0" [class.excess-text]="excess(b)>0">
+                    <span class="cell-ellipsis">
+                      <ng-container *ngIf="excess(b)>0; else dueTpl">+₹{{money(excess(b))}}</ng-container>
+                      <ng-template #dueTpl>₹{{money(b.due)}}</ng-template>
+                    </span>
+                  </td>
+                  <td><span class="status-chip cell-ellipsis" [ngClass]="paymentStatusClass(b)">{{statusText(b)}}</span></td>
+                  <td><span class="status-chip cell-ellipsis" [class.cancelled]="b.status==='CANCELLED'">{{b.status==='CANCELLED' ? 'Cancelled' : 'Active'}}</span></td>
+                  <td class="actions-cell">
+                    <span class="row-select-pill" [class.on]="isBillSelected(b)">{{ isBillSelected(b) ? 'Selected' : 'Select' }}</span>
+                  </td>
+                </tr>
+                <tr class="row-actions-strip" *ngIf="isBillSelected(b)" (click)="$event.stopPropagation()">
+                  <td colspan="9">
+                    <div class="inline-actions-bar">
+                      <div class="inline-actions-chips">
+                        <button type="button" class="action-chip" (click)="printBill(b)">
+                          <span>▧</span><b>Bill PDF</b>
+                        </button>
+                        <button type="button" class="action-chip whatsapp" (click)="openPatientWhatsApp(b)">
+                          <span>☏</span><b>Open WhatsApp</b>
+                        </button>
+                        <button type="button" class="action-chip" [disabled]="b.status==='CANCELLED'" (click)="editBill.emit(b.id)">
+                          <span>✎</span><b>Edit</b>
+                        </button>
+                        <button type="button" class="action-chip warn" [disabled]="b.status==='CANCELLED'" (click)="openCancel(b)">
+                          <span>⊖</span><b>Cancel / refund</b>
+                        </button>
+                        <button type="button" class="action-chip danger" [disabled]="b.paid > 0 || b.status==='CANCELLED'" (click)="openDelete(b)">
+                          <span>⌫</span><b>Delete</b>
+                        </button>
+                        <span class="status-chip action-status-chip" [ngClass]="paymentStatusClass(b)">{{statusText(b)}}</span>
+                        <span class="status-chip action-status-chip" [class.cancelled]="b.status==='CANCELLED'">{{b.status==='CANCELLED' ? 'Cancelled' : 'Active'}}</span>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </ng-container>
               <tr *ngIf="!pagedBills().length"><td class="empty-row" colspan="9">No bills found. Adjust filters or date range.</td></tr>
             </tbody>
           </table>
         </div>
 
-          <mat-menu #billActionsMenu="matMenu" class="bill-actions-menu rich-actions-menu" xPosition="before">
-            <ng-template matMenuContent let-bill="bill">
-              <div class="action-menu-head" (click)="$event.stopPropagation()">
-                <span class="action-avatar">{{patientInitials(bill)}}</span>
-                <div>
-                  <b class="cell-ellipsis">{{bill.patient_name || 'Patient'}}</b>
-                  <small class="cell-ellipsis">{{bill.bill_no}} · {{patientAgeGender(bill)}}</small>
-                </div>
-              </div>
-              <div class="action-menu-grid">
-                <button mat-menu-item type="button" class="rich-menu-item" (click)="printBill(bill)">
-                  <span class="menu-action-icon pdf-icon">▧</span><span><b>Bill PDF</b><small>Preview or print</small></span>
-                </button>
-                <button mat-menu-item type="button" class="rich-menu-item" [disabled]="bill.status==='CANCELLED'" (click)="editBill.emit(bill.id)">
-                  <span class="menu-action-icon edit-icon">✎</span><span><b>Edit bill</b><small>Update bill details</small></span>
-                </button>
-                <button mat-menu-item type="button" class="rich-menu-item" [disabled]="bill.status==='CANCELLED'" (click)="openCancel(bill)">
-                  <span class="menu-action-icon warning-icon">⊖</span><span><b>Cancel / refund</b><small>Record cancellation</small></span>
-                </button>
-                <button mat-menu-item type="button" class="rich-menu-item danger-menu-item" [disabled]="bill.paid > 0 || bill.status==='CANCELLED'" (click)="openDelete(bill)">
-                  <span class="menu-action-icon danger-icon">⌫</span><span><b>Delete bill</b><small>Only unpaid bills</small></span>
-                </button>
-              </div>
-            </ng-template>
-          </mat-menu>
         <footer class="pagination-bar">
-          <button class="page-btn" type="button" [disabled]="page() <= 1" (click)="page.set(page()-1)">‹</button>
+          <button class="page-btn" type="button" [disabled]="page() <= 1" (click)="page.set(page()-1); selectedBillId.set(null)">‹</button>
           <span>Page <b>{{page()}}</b> / {{totalPages()}}</span>
-          <button class="page-btn" type="button" [disabled]="page() >= totalPages()" (click)="page.set(page()+1)">›</button>
+          <button class="page-btn" type="button" [disabled]="page() >= totalPages()" (click)="page.set(page()+1); selectedBillId.set(null)">›</button>
         </footer>
       </section>
     </section>
@@ -326,6 +349,8 @@ type StatementKind = 'detailed' | 'consolidated';
         <div class="modal-actions"><button class="btn secondary" type="button" (click)="deleteModal.set(null)">Keep bill</button><button class="btn danger" type="button" (click)="confirmDelete()">Delete bill</button></div>
       </div>
     </div>
+
+    <app-whatsapp-contact-prompt></app-whatsapp-contact-prompt>
   `,
   styles: [`
     :host { display:block; --bg:#08101f; --panel:#101827; --panel-2:#0b1424; --input:#0b1322; --border:#263349; --text:#f8fafc; --muted:#9aa8bc; --soft:#172238; --brand:#3b82f6; --shadow:0 22px 50px rgba(0,0,0,.22); font-size:14px; }
@@ -340,9 +365,14 @@ type StatementKind = 'detailed' | 'consolidated';
     .kpi-icon.bill { background:rgba(59,130,246,.16); color:#6aa4ff; } .kpi-icon.paid { background:rgba(34,197,94,.16); color:#56d98d; } .kpi-icon.due { background:rgba(245,158,11,.16); color:#f8b84e; } .kpi-icon.cancel { background:rgba(244,63,94,.14); color:#ff8ca3; }
     .filter-card, .register-card { border:1px solid var(--border); border-radius:24px; background:var(--panel); box-shadow:var(--shadow); }
     .filter-card { padding:18px; overflow:hidden; }
-    .filter-row { display:grid; grid-template-columns: 160px 160px minmax(240px,1fr) 140px 54px 150px; gap:12px; align-items:end; }
+    .filter-card .date-range-filters { margin-bottom:14px; }
+    .filter-row { display:flex; flex-wrap:wrap; gap:12px; align-items:end; }
+    .filter-row .search-field { flex:1 1 240px; min-width:240px; }
+    .filter-row .filter-button-wrap { flex:0 0 140px; }
+    .filter-row .icon-btn { flex:0 0 54px; }
+    .filter-row .search-btn { flex:0 0 150px; }
     .field span, .modal-grid span, .stacked span { display:block; color:var(--muted); font-size:12.5px; font-weight:900; margin:0 0 7px; }
-    input, select, textarea { width:100%; box-sizing:border-box; border:1px solid var(--border); border-radius:14px; background:var(--input); color:var(--text); outline:none; font-weight:800; font-size:14px; }
+    input, select, textarea { width:100%; box-sizing:border-box; border:1px solid var(--border); border-radius:14px; background-color:var(--input); color:var(--text); outline:none; font-weight:800; font-size:14px; }
     input, select { height:46px; padding:0 13px; } textarea { min-height:84px; padding:12px; resize:vertical; }
     input:focus, select:focus, textarea:focus { border-color:#68a1ff; box-shadow:0 0 0 3px rgba(59,130,246,.15); }
     .input-icon { position:relative; } .input-icon svg { position:absolute; left:13px; top:50%; transform:translateY(-50%); width:19px; height:19px; color:var(--muted); stroke:currentColor; fill:none; stroke-width:2.2; } .input-icon input { padding-left:42px; }
@@ -361,15 +391,48 @@ type StatementKind = 'detailed' | 'consolidated';
     .bill-table .col-bill-no { width:110px; } .bill-table .col-date { width:120px; } .bill-table .col-patient-summary { width:340px; } .bill-table .col-money { width:100px; } .bill-table .col-due { width:115px; } .bill-table .col-payment { width:125px; } .bill-table .col-status { width:105px; } .bill-table .col-actions { width:112px; }
     .bill-table th { padding:14px 18px; border-bottom:1px solid var(--border); color:var(--muted); font-size:12px; letter-spacing:.055em; text-transform:uppercase; text-align:left; }
     .bill-table td { min-width:0; padding:16px 14px; border-bottom:1px solid var(--border); font-weight:850; vertical-align:middle; overflow:hidden; }
+    .bill-table tbody tr.bill-data-row { cursor:pointer; transition:background .16s ease, box-shadow .16s ease; }
+    .bill-table tbody tr.bill-data-row:hover:not(.row-selected) td { background:color-mix(in srgb, var(--soft) 72%, transparent); }
+    .bill-table tbody tr.bill-data-row.row-selected td { background:color-mix(in srgb, var(--brand) 18%, var(--panel)); }
+    .bill-table tbody tr.bill-data-row.row-selected { box-shadow:inset 3px 0 0 #3b82f6; }
+    :host-context(.light) .bill-table tbody tr.bill-data-row.row-selected td,
+    :host-context(body.light) .bill-table tbody tr.bill-data-row.row-selected td { background:color-mix(in srgb, #3b82f6 10%, #ffffff); }
+    :host-context(.light) .bill-table tbody tr.bill-data-row:hover:not(.row-selected) td,
+    :host-context(body.light) .bill-table tbody tr.bill-data-row:hover:not(.row-selected) td { background:#f1f5f9; }
     .bill-table td small { display:block; margin-top:5px; color:var(--muted); font-size:12.5px; font-weight:750; }
-    .bill-link { border:0; background:transparent; color:#6aa4ff; padding:0; font-weight:1000; cursor:pointer; } .muted { color:var(--muted); } .paid-text { color:#57d898; } .due-text { color:#ffb44d; } .excess-text { color:#c084fc; }
+    .bill-link { border:0; background:transparent; color:#6aa4ff; padding:0; font-weight:1000; cursor:pointer; }
+    .bill-link.paid { color:#57d898; }
+    .bill-link.partial { color:#fbbf64; }
+    .bill-link.pending { color:#94a3b8; }
+    .bill-link.excess { color:#c084fc; }
+    .bill-link.cancelled { color:#ff8ca3; text-decoration:line-through; }
+    :host-context(.light) .bill-link.paid, :host-context(body.light) .bill-link.paid { color:#16a34a; }
+    :host-context(.light) .bill-link.partial, :host-context(body.light) .bill-link.partial { color:#d97706; }
+    :host-context(.light) .bill-link.pending, :host-context(body.light) .bill-link.pending { color:#64748b; }
+    :host-context(.light) .bill-link.excess, :host-context(body.light) .bill-link.excess { color:#9333ea; }
+    :host-context(.light) .bill-link.cancelled, :host-context(body.light) .bill-link.cancelled { color:#e11d48; }
+    .muted { color:var(--muted); } .paid-text { color:#57d898; } .due-text { color:#ffb44d; } .excess-text { color:#c084fc; }
     .status-chip { display:inline-flex; align-items:center; border:1px solid rgba(96,165,250,.25); border-radius:999px; padding:7px 13px; background:rgba(96,165,250,.13); color:#93c5fd; font-weight:950; font-size:12.5px; white-space:nowrap; }
     .status-chip.paid { color:#65d99b; background:rgba(34,197,94,.15); border-color:rgba(34,197,94,.28); } .status-chip.partial { color:#fbbf64; background:rgba(245,158,11,.15); border-color:rgba(245,158,11,.28); } .status-chip.pending { color:#cbd5e1; background:rgba(148,163,184,.14); border-color:rgba(148,163,184,.25); } .status-chip.excess { color:#d8b4fe; background:rgba(168,85,247,.15); border-color:rgba(168,85,247,.28); } .status-chip.cancelled { color:#ff9caf; background:rgba(244,63,94,.14); border-color:rgba(244,63,94,.28); }
     .cell-stack { min-width:0; max-width:100%; } .cell-ellipsis { display:block; min-width:0; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .patient-summary-cell { min-width:0; display:grid; gap:4px; padding:2px 0; line-height:1.2; } .patient-primary { color:var(--text); font-size:14px; font-weight:1000; } .patient-meta { color:#79a9ff; font-size:12px; font-weight:900; } .patient-mobile { color:var(--muted); font-size:12px; font-weight:800; } .patient-consultant { color:var(--muted); font-size:10.5px; font-weight:750; letter-spacing:.005em; }
+    .patient-summary-cell { min-width:0; display:grid; gap:4px; padding:2px 0; line-height:1.2; }
+    .patient-primary { color:var(--text); font-size:14px; font-weight:1000; } .patient-meta { color:#79a9ff; font-size:12px; font-weight:900; } .patient-mobile { color:var(--muted); font-size:12px; font-weight:800; } .patient-consultant { color:var(--muted); font-size:10.5px; font-weight:750; letter-spacing:.005em; }
     .bill-link.cell-ellipsis { width:100%; text-align:left; }
-    .actions-cell { text-align:center; overflow:visible !important; } .actions-trigger { min-width:92px; height:38px; display:inline-flex; align-items:center; justify-content:center; gap:8px; border:1px solid color-mix(in srgb,var(--brand) 35%,var(--border)); border-radius:12px; background:linear-gradient(135deg,color-mix(in srgb,var(--brand) 12%,var(--panel-2)),var(--panel-2)); color:#70a6ff; font:inherit; font-size:12px; font-weight:950; cursor:pointer; box-shadow:0 8px 18px rgba(37,99,235,.10); transition:.18s ease; } .actions-trigger:hover { transform:translateY(-1px); border-color:#70a6ff; background:rgba(59,130,246,.12); box-shadow:0 10px 24px rgba(37,99,235,.18); } .actions-trigger-icon { letter-spacing:2px; font-size:13px; line-height:1; }
-    .action-menu-head { width:300px; display:flex; align-items:center; gap:11px; padding:14px 14px 12px; border-bottom:1px solid var(--border); background:linear-gradient(135deg,rgba(59,130,246,.12),rgba(124,58,237,.08)); } .action-avatar { flex:0 0 40px; width:40px; height:40px; display:grid; place-items:center; border-radius:13px; background:linear-gradient(135deg,#3b82f6,#7c3aed); color:white; font-size:12px; font-weight:1000; box-shadow:0 8px 18px rgba(59,130,246,.24); } .action-menu-head div { min-width:0; flex:1; } .action-menu-head b { color:var(--text); font-size:13px; } .action-menu-head small { display:block; margin-top:4px; color:var(--muted); font-size:11px; font-weight:750; } .action-menu-grid { padding:7px; } .rich-menu-item { min-height:54px !important; border-radius:11px !important; margin:2px 0; } .rich-menu-item:hover { background:rgba(59,130,246,.10) !important; } .rich-menu-item > span:last-child { display:flex; align-items:center; min-width:0; } .rich-menu-item > span:last-child > span:last-child { min-width:0; } .rich-menu-item b,.rich-menu-item small { display:block; } .rich-menu-item b { color:var(--text); font-size:12.5px; font-weight:900; } .rich-menu-item small { margin-top:2px; color:var(--muted); font-size:10.5px; font-weight:700; } .menu-action-icon { display:inline-grid; flex:0 0 34px; width:34px; height:34px; margin-right:10px; place-items:center; border-radius:11px; background:rgba(59,130,246,.12); color:#70a6ff; font-size:17px; font-weight:900; } .menu-action-icon.edit-icon { color:#a78bfa; background:rgba(139,92,246,.12); } .menu-action-icon.warning-icon { color:#f59e0b; background:rgba(245,158,11,.12); } .menu-action-icon.danger-icon { color:#ef4444; background:rgba(239,68,68,.12); } .danger-menu-item:hover { background:rgba(239,68,68,.08) !important; }
+    .actions-cell { text-align:center; vertical-align:middle; }
+    .row-select-pill { display:inline-flex; align-items:center; justify-content:center; min-width:78px; height:30px; padding:0 12px; border-radius:999px; border:1px solid var(--border); background:var(--panel-2); color:var(--muted); font-size:11.5px; font-weight:900; }
+    .row-select-pill.on { border-color:rgba(59,130,246,.45); background:rgba(59,130,246,.16); color:#79a9ff; }
+    :host-context(.light) .row-select-pill.on, :host-context(body.light) .row-select-pill.on { background:#eff6ff; color:#2563eb; border-color:#bfdbfe; }
+    .row-actions-strip td { padding:0 !important; border-bottom:1px solid var(--border); background:color-mix(in srgb, var(--brand) 14%, var(--panel)); box-shadow:inset 3px 0 0 #3b82f6; }
+    :host-context(.light) .row-actions-strip td, :host-context(body.light) .row-actions-strip td { background:#eff6ff; }
+    .inline-actions-bar { display:flex; align-items:center; justify-content:flex-start; gap:8px; flex-wrap:wrap; padding:10px 14px 12px 16px; }
+    .inline-actions-chips { display:flex; align-items:center; justify-content:flex-start; gap:8px; flex-wrap:wrap; }
+    .action-chip { height:34px; display:inline-flex; align-items:center; gap:7px; padding:0 12px; border-radius:11px; border:1px solid var(--border); background:var(--panel); color:var(--text); font:inherit; font-size:12px; font-weight:900; cursor:pointer; box-shadow:0 6px 14px rgba(2,6,23,.10); }
+    :host-context(.light) .action-chip, :host-context(body.light) .action-chip { background:#fff; box-shadow:0 4px 12px rgba(15,23,42,.08); }
+    .action-chip span { width:18px; text-align:center; color:#70a6ff; } .action-chip.warn span { color:#f59e0b; } .action-chip.danger span { color:#ef4444; } .action-chip.whatsapp span { color:#25D366; }
+    .action-chip:hover:not(:disabled) { border-color:#70a6ff; transform:translateY(-1px); }
+    .action-chip.warn:hover:not(:disabled) { border-color:#f59e0b; } .action-chip.danger:hover:not(:disabled) { border-color:#ef4444; } .action-chip.whatsapp:hover:not(:disabled) { border-color:#25D366; }
+    .action-chip:disabled { opacity:.42; cursor:not-allowed; transform:none; }
+    .action-status-chip { margin-left:4px; height:34px; box-sizing:border-box; }
     .empty-row { text-align:center; color:var(--muted); padding:30px!important; }
     .pagination-bar { display:flex; align-items:center; justify-content:center; gap:14px; padding:16px; } .page-btn { width:42px; height:42px; border-radius:14px; border:1px solid var(--border); background:var(--panel-2); color:var(--text); font-size:23px; cursor:pointer; } .page-btn:disabled { opacity:.35; cursor:not-allowed; }
     .modal-backdrop { position:fixed; inset:0; z-index:3000; display:grid; place-items:center; background:rgba(2,6,23,.72); backdrop-filter:blur(8px); padding:20px; }
@@ -392,15 +455,17 @@ type StatementKind = 'detailed' | 'consolidated';
      .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; } .btn.secondary { background:var(--panel-2); color:var(--text); } .btn.danger { background:#ef4444; color:white; border-color:transparent; }
     .summary-line { display:flex; justify-content:space-between; border-top:1px solid var(--border); border-bottom:1px solid var(--border); padding:12px 0; margin:14px 0; } .stacked { display:block; margin-top:12px; }
     .choice-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:18px; } .choice-card { text-align:left; border:1px solid var(--border); border-radius:18px; background:var(--panel-2); color:var(--text); padding:16px; cursor:pointer; } .choice-card:hover { border-color:#6aa4ff; } .choice-card b { display:block; margin-bottom:7px; font-size:16px; } .choice-card span { color:var(--muted); font-size:13px; font-weight:750; line-height:1.4; }
-    @media(max-width:1200px){ .kpi-grid{grid-template-columns:repeat(2,1fr)} .filter-row{grid-template-columns:1fr 1fr 1fr} .filter-button-wrap,.icon-btn,.search-btn{width:100%;} }
-    @media(max-width:760px){ .kpi-grid,.filter-row,.modal-grid,.choice-grid{grid-template-columns:1fr} .register-header{align-items:flex-start; flex-direction:column} .register-tools{justify-content:flex-start} }
+    @media(max-width:1200px){ .kpi-grid{grid-template-columns:repeat(2,1fr)} }
+    @media(max-width:760px){ .kpi-grid,.modal-grid,.choice-grid{grid-template-columns:1fr} .filter-row .search-field,.filter-row .filter-button-wrap,.filter-row .icon-btn,.filter-row .search-btn{flex:1 1 100%} .register-header{align-items:flex-start; flex-direction:column} .register-tools{justify-content:flex-start} }
+    ${DATE_RANGE_FILTER_STYLES}
   `]
 })
 export class StatementsPageComponent implements OnInit {
   @Output() editBill = new EventEmitter<number>();
   @Output() newBill = new EventEmitter<void>();
+  @ViewChild(WhatsAppContactPromptComponent) private whatsAppPrompt?: WhatsAppContactPromptComponent;
 
-  today = new Date().toISOString().slice(0, 10);
+  today = DateTimeSettingsService.nowInputValue().slice(0, 10);
   filters: any = { from: this.today, to: this.today, q: '', consultant_ids: [], status_list: [], payment_statuses: [], payment_modes: [] };
   draftFilters: any = { consultant_ids: [], status_list: [], payment_statuses: [], payment_modes: [] };
   draftSearch: any = { consultants: '', billStatus: '', paymentStatus: '', paymentMode: '' };
@@ -419,12 +484,15 @@ export class StatementsPageComponent implements OnInit {
   statement = signal<any>(null);
   page = signal(1);
   pageSize = 10;
+  selectedBillId = signal<number | null>(null);
   filterModal = signal(false);
   cancelModal = signal<any>(null);
   deleteModal = signal<any>(null);
   statementTypeModal = signal<any>(null);
   filterError = signal('');
   cancelForm: any = { reason: '', refund_amount: 0, refund_mode: 'Cash' };
+
+  constructor(private cdr: ChangeDetectorRef) {}
 
   async ngOnInit() {
     this.consultants = await window.limsApi.listConsultants();
@@ -451,9 +519,39 @@ export class StatementsPageComponent implements OnInit {
   excess(b: any) { return Math.max(0, (+b.paid || 0) - (+b.total || 0)); }
   statusText(b: any) { if (b.status === 'CANCELLED') return 'Cancelled'; if (this.excess(b) > 0) return 'Overpaid'; if ((+b.paid || 0) <= 0) return 'Pending'; if ((+b.paid || 0) >= (+b.total || 0)) return 'Paid'; return 'Partial'; }
   paymentStatusClass(b: any) { const s = this.statusText(b).toLowerCase(); return { paid: s === 'paid', partial: s === 'partial', pending: s === 'pending', excess: s === 'overpaid', cancelled: s === 'cancelled' }; }
-  patientAgeGender(b: any) { const age = String(b?.age || b?.patient_age || '').trim(); const gender = String(b?.gender || b?.patient_gender || '').trim(); return [age || '-', gender || '-'].join(' / '); }
-  patientSummaryTooltip(b: any) { return [b?.patient_name || '-', this.patientAgeGender(b), b?.mobile || b?.patient_no || '-', b?.consultant_name || 'No consultant'].join('\n'); }
-  patientInitials(b: any) { const name = String(b?.patient_name || 'P').trim(); return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part: string) => part.charAt(0).toUpperCase()).join('') || 'P'; }
+  patientAgeGender(b: any) {
+    const ageRaw = String(b?.age || '').trim();
+    const ageValue = b?.age_value === '' || b?.age_value === undefined || b?.age_value === null ? '' : String(b.age_value).trim();
+    const ageUnit = String(b?.age_unit || '').trim();
+    const age = ageRaw || [ageValue, ageUnit].filter(Boolean).join(' ').trim();
+    const gender = String(b?.gender || b?.patient_gender || '').trim();
+    if (!age && !gender) return '-';
+    return [age || '-', gender || '-'].join(' / ');
+  }
+
+  onEllipsisEnter(el: HTMLElement | null) {
+    if (!el) return;
+    // Re-evaluate truncation before Material tooltip decides to show.
+    this.cdr.detectChanges();
+  }
+  isEllipsisTruncated(el: HTMLElement | null) {
+    return !!el && el.scrollWidth > el.clientWidth + 1;
+  }
+  isBillSelected(b: any) {
+    return Number(this.selectedBillId()) === Number(b?.id);
+  }
+  selectBillRow(b: any, event?: MouseEvent) {
+    const target = event?.target as HTMLElement | null;
+    if (target?.closest('.bill-link, .action-chip, button')) return;
+    const id = b?.id ? Number(b.id) : null;
+    // Single click switches selection to this row (always select clicked row).
+    this.selectedBillId.set(id);
+  }
+  onBillLinkClick(b: any, event: MouseEvent) {
+    event.stopPropagation();
+    this.selectedBillId.set(b?.id ? Number(b.id) : null);
+    this.editBill.emit(b.id);
+  }
 
   list(value: any): string[] { return Array.isArray(value) ? value.map(v => String(v)) : (value && value !== 'ALL' ? [String(value)] : []); }
   activeFilterCount() { return this.list(this.filters.consultant_ids).length + this.list(this.filters.status_list).length + this.list(this.filters.payment_statuses).length + this.list(this.filters.payment_modes).length; }
@@ -514,7 +612,23 @@ export class StatementsPageComponent implements OnInit {
 
   selectedDays() { if (!this.filters.from || !this.filters.to) return 0; const a = new Date(this.filters.from + 'T00:00:00'); const b = new Date(this.filters.to + 'T00:00:00'); return Math.round((+b - +a) / 86400000) + 1; }
   validateDates() { this.filterError.set(''); if (!this.filters.from || !this.filters.to) { this.filterError.set('From and To date are required.'); return false; } if (new Date(this.filters.from) > new Date(this.filters.to)) { this.filterError.set('From date cannot be after To date.'); return false; } return true; }
-  async loadStatement() { if (!this.validateDates()) return; this.page.set(1); const serverFilters = { from: this.filters.from, to: this.filters.to, q: this.filters.q, status_list: this.filters.status_list, consultant_ids: this.filters.consultant_ids, payment_statuses: this.filters.payment_statuses, payment_modes: this.filters.payment_modes }; this.statement.set(await window.limsApi.statement(serverFilters)); }
+  openDatePicker(event: Event) { openNativeDatePicker(event); }
+  setDatePreset(key: keyof ReturnType<typeof dateRangePresets>) {
+    const range = this.datePresets()[key];
+    this.filters.from = range.from;
+    this.filters.to = range.to;
+    this.validateDates();
+  }
+  private datePresets() { return dateRangePresets(DateTimeSettingsService.nowInputValue()); }
+  private matchesPreset(key: keyof ReturnType<typeof dateRangePresets>) { return matchesDateRange(this.filters.from, this.filters.to, this.datePresets()[key]); }
+  isTodayRange() { return this.matchesPreset('today'); }
+  isPreviousDayRange() { return this.matchesPreset('previousDay'); }
+  isCurrentMonthRange() { return this.matchesPreset('currentMonth'); }
+  isLastMonthRange() { return this.matchesPreset('lastMonth'); }
+  isThirtyDayRange() { return this.matchesPreset('thirtyDays'); }
+  isCurrentYearRange() { return this.matchesPreset('currentYear'); }
+  isLastYearRange() { return this.matchesPreset('lastYear'); }
+  async loadStatement() { if (!this.validateDates()) return; this.page.set(1); this.selectedBillId.set(null); const serverFilters = { from: this.filters.from, to: this.filters.to, q: this.filters.q, status_list: this.filters.status_list, consultant_ids: this.filters.consultant_ids, payment_statuses: this.filters.payment_statuses, payment_modes: this.filters.payment_modes }; this.statement.set(await window.limsApi.statement(serverFilters)); }
   clearFilters() { this.filters = { from: this.today, to: this.today, q: '', consultant_ids: [], status_list: [], payment_statuses: [], payment_modes: [] }; this.loadStatement(); }
   async statementExcel() { if (!this.validateDates()) return; window.limsApi.openPath(await window.limsApi.statementExcel(this.filters)); }
   async statementPdf(action: StatementAction) { if (!this.validateDates()) return; if (this.selectedDays() > 1) { this.statementTypeModal.set({ action }); return; } await this.runStatementPdf(action, 'detailed'); }
@@ -522,6 +636,15 @@ export class StatementsPageComponent implements OnInit {
   async runStatementPdf(action: StatementAction, type: StatementKind) { const file = await window.limsApi.statementPdf({ ...this.filters, type, action }); await window.limsApi.openPath(file); }
   async printBill(b: any) { window.limsApi.openPath(await window.limsApi.billPdf(b.id, false)); }
   openCancel(b: any) { this.cancelForm = { reason: '', refund_amount: +b.paid || 0, refund_mode: 'Cash' }; this.cancelModal.set({ bill: b }); }
+  async openPatientWhatsApp(b: any) {
+    const result = await this.whatsAppPrompt?.openContact({
+      mobile: b?.mobile || b?.patient_mobile,
+      patientName: b?.patient_name || b?.name,
+      billNo: b?.bill_no
+    });
+    if (!result || result.cancelled) return;
+    if (!result.ok) { alert(result.error || 'Unable to open WhatsApp.'); return; }
+  }
   async confirmCancel() { const bill = this.cancelModal()?.bill; if (!bill) return; try { await window.limsApi.cancelBill?.(bill.id, this.cancelForm); this.cancelModal.set(null); await this.loadStatement(); } catch (e: any) { alert(e?.message || 'Unable to cancel bill.'); } }
   openDelete(b: any) { if ((+b.paid || 0) > 0) { this.openCancel(b); return; } this.deleteModal.set({ bill: b }); }
   async confirmDelete() { const bill = this.deleteModal()?.bill; if (!bill) return; try { await window.limsApi.deleteBill?.(bill.id); this.deleteModal.set(null); await this.loadStatement(); } catch (e: any) { alert(e?.message || 'Unable to delete bill.'); } }

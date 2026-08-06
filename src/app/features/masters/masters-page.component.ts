@@ -84,8 +84,8 @@ import { MatTabsModule } from '@angular/material/tabs';
               <tr><th>Order</th><th>Department Name</th><th>Page Break After</th><th>Status</th><th>Actions</th></tr>
             </thead>
             <tbody>
-              <tr *ngFor="let d of departments()">
-                <td><span class="order-chip">{{d.priority}}</span></td>
+              <tr *ngFor="let d of departments()" draggable="true" (dragstart)="onDepartmentDragStart(d)" (dragover)="onDepartmentDragOver($event)" (drop)="onDepartmentDrop(d)">
+                <td class="drag-cell"><span class="drag-handle" title="Drag to reorder">⋮⋮</span><span class="order-chip">{{d.priority}}</span></td>
                 <td><strong class="entity-name">{{d.name}}</strong></td>
                 <td><span class="status-badge" [class.inactive]="!d.page_break_after"><i></i>{{d.page_break_after?'Yes':'No'}}</span></td>
                 <td><span class="status-badge" [class.inactive]="!d.active"><i></i>{{d.active?'Active':'Inactive'}}</span></td>
@@ -93,7 +93,7 @@ import { MatTabsModule } from '@angular/material/tabs';
               </tr>
             </tbody>
           </table>
-          <div class="table-footer"><span>Total Departments: <b>{{ departments().length }}</b></span></div>
+          <div class="table-footer"><span>Total Departments: <b>{{ departments().length }}</b></span><span>Drag rows to update display order using safe gaps.</span></div>
         </div>
       </section>
 
@@ -644,9 +644,10 @@ Pregnancy: 11.0 - 14.0"></textarea><button class="reference-format-btn" type="bu
 
           <div class="table-card profile-list-card">
             <table class="masters-table">
-              <thead><tr><th>Billing</th><th>Report</th><th>Profile</th><th>Items</th><th>Ordering</th><th>Status</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Order</th><th>Billing</th><th>Report</th><th>Profile</th><th>Items</th><th>Ordering</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>
-                <tr *ngFor="let p of filteredProfiles(); trackBy: trackByProfileId">
+                <tr *ngFor="let p of filteredProfiles(); trackBy: trackByProfileId" draggable="true" (dragstart)="onProfileDragStart(p)" (dragover)="onProfileDragOver($event)" (drop)="onProfileDrop(p)">
+                  <td class="drag-cell"><span class="drag-handle" title="Drag to reorder">⋮⋮</span></td>
                   <td><span class="order-chip">{{p.billing_order || p.priority}}</span></td>
                   <td><span class="order-chip">{{p.report_order || p.priority}}</span></td>
                   <td><strong class="entity-name">{{p.display_name || p.name}}</strong><br><small>{{p.code || 'No code'}} · {{p.name || 'No profile name'}} · {{profileDepartmentName(p)}} · {{profileSummary(p)}}</small></td>
@@ -657,7 +658,7 @@ Pregnancy: 11.0 - 14.0"></textarea><button class="reference-format-btn" type="bu
                 </tr>
               </tbody>
             </table>
-            <div class="table-footer"><span>Total Profiles: <b>{{ filteredProfiles().length }}</b></span><span>Create or edit to manage profile layout.</span></div>
+            <div class="table-footer"><span>Total Profiles: <b>{{ filteredProfiles().length }}</b></span><span>Drag rows to update order using safe gaps.</span></div>
           </div>
         </ng-container>
 
@@ -1037,6 +1038,8 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
   profileTestSearch = '';
   profileNestedSearch = '';
   draggedTest: any = null;
+  draggedDepartment: any = null;
+  draggedProfile: any = null;
   originalTestSnapshot: any = null;
   masterDialog: any = null;
   private masterDialogResolver: ((value:any)=>void) | null = null;
@@ -1873,6 +1876,52 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
     this.draggedTest = null;
     await this.reload();
   }
+  onDepartmentDragStart(d:any){ this.draggedDepartment = d; }
+  onDepartmentDragOver(event: DragEvent){ event.preventDefault(); }
+  async onDepartmentDrop(target:any){
+    if(!this.draggedDepartment || !target || +this.draggedDepartment.id === +target.id) return;
+    const rows = [...this.departments()];
+    const moving = this.draggedDepartment;
+    const without = rows.filter((d:any)=>+d.id !== +moving.id);
+    const targetIndex = without.findIndex((d:any)=>+d.id === +target.id);
+    without.splice(Math.max(0, targetIndex), 0, moving);
+    const updates = without.map((d:any, i:number)=>({ id:+d.id, priority:(i+1)*1000 })).filter((u:any)=>Number.isFinite(u.id) && u.id > 0);
+    try {
+      if(window.limsApi.reorderDepartments) await window.limsApi.reorderDepartments(updates);
+      else for(const u of updates){ const original = this.departments().find((d:any)=>+d.id===+u.id); if(original) await window.limsApi.saveDepartment({ ...original, ...u }); }
+      await this.reload();
+      this.changed.emit();
+    } catch (err:any) {
+      await this.showMasterAlert('Reorder failed', String(err?.message || err || 'Could not update department order.').replace(/^Error:\s*/i, ''));
+    } finally {
+      this.draggedDepartment = null;
+    }
+  }
+  onProfileDragStart(p:any){ this.draggedProfile = p; }
+  onProfileDragOver(event: DragEvent){ event.preventDefault(); }
+  async onProfileDrop(target:any){
+    if(!this.draggedProfile || !target || +this.draggedProfile.id === +target.id) return;
+    const rows = this.filteredProfiles();
+    const moving = this.draggedProfile;
+    const without = rows.filter((p:any)=>+p.id !== +moving.id);
+    const targetIndex = without.findIndex((p:any)=>+p.id === +target.id);
+    without.splice(Math.max(0, targetIndex), 0, moving);
+    const updates = without.map((p:any, i:number)=>({ id:+p.id, report_order:(i+1)*1000, billing_order:(i+1)*1000 })).filter((u:any)=>Number.isFinite(u.id) && u.id > 0);
+    try {
+      // Prefer bulk reorder API only — saveProfile fallback can wipe profile_items on conflict/empty payloads.
+      if(!window.limsApi.reorderProfiles) {
+        await this.showMasterAlert('Restart required', 'Profile reorder needs an app restart to load the new API. Please restart LIMS and try again.');
+        return;
+      }
+      await window.limsApi.reorderProfiles(updates);
+      await this.reload();
+      this.changed.emit();
+    } catch (err:any) {
+      await this.showMasterAlert('Reorder failed', String(err?.message || err || 'Could not update profile order.').replace(/^Error:\s*/i, ''));
+    } finally {
+      this.draggedProfile = null;
+    }
+  }
   async deactivateTest(t:any){
     const ok = await this.showMasterConfirm(
       'Deactivate test?',
@@ -1920,16 +1969,31 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
 
   async deleteProfile(p:any){
     const ok = await this.showMasterConfirm(
-      'Delete profile?',
-      [`Delete profile "${p.name || p.code || 'Profile'}"?`, 'This will permanently delete the profile and remove it from nested profile layouts and billing items.', 'Tests inside the profile will not be deleted.'],
-      'Delete',
+      'Remove profile?',
+      [
+        `Remove profile "${p.name || p.code || 'Profile'}"?`,
+        'If this profile was already used in billing, nested profiles, or reports, it will only be deactivated (archived) and history will be kept.',
+        'Unused profiles can be deleted from master only. Tests inside the profile are never deleted.'
+      ],
+      'Continue',
       true
     );
     if(!ok) return;
-    if(window.limsApi.deleteProfile) await window.limsApi.deleteProfile(p.id);
-    else throw new Error('Delete profile API is not available.');
-    await this.reload();
-    this.changed.emit();
+    try {
+      if(!window.limsApi.deleteProfile) throw new Error('Delete profile API is not available.');
+      const result:any = await window.limsApi.deleteProfile(p.id);
+      const action = String(result?.action || '').toLowerCase();
+      if (action === 'deactivated') {
+        await this.showMasterAlert('Profile deactivated', 'This profile was already used, so it was deactivated instead of deleted. Historical bills and reports were not changed.');
+      }
+      // Prefer returned list when available; otherwise reload.
+      if (Array.isArray(result?.list)) this.profiles.set(result.list);
+      else if (Array.isArray(result)) this.profiles.set(result);
+      else await this.reload();
+      this.changed.emit();
+    } catch (err:any) {
+      await this.showMasterAlert('Profile remove failed', String(err?.message || err || 'Could not remove profile.').replace(/^Error:\s*/i, ''));
+    }
   }
 
   trackByProfileId(_index:number, item:any){ return item?.id; }

@@ -29,9 +29,18 @@ export class AnalyzerApiService {
   }
 
   stop() {
-    if (this.server) {
-      try { this.server.close(); } catch {}
-      this.server = null;
+    const server = this.server;
+    this.server = null;
+    this.config = this.config ? { ...this.config } : null;
+    if (!server) return this.status();
+    try {
+      // Drop active sockets so the TCP port is released immediately on app exit.
+      if (typeof (server as any).closeAllConnections === 'function') {
+        (server as any).closeAllConnections();
+      }
+      server.close();
+    } catch (err: any) {
+      console.error('[analyzer-api-server] stop failed', err?.message || err);
     }
     return this.status();
   }

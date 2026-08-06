@@ -73,7 +73,7 @@ export class WorkflowTimelineComponent {
     const cancelled = this.isCancelled();
     const rep = this.reportStatus();
     const col = this.collectionStatus();
-    const deliveryDone = this.hasAny('pdf_exported_at','printed_at','emailed_at','smsed_at');
+    const deliveryDone = this.hasAny('pdf_exported_at','printed_at','emailed_at','whatsapped_at','smsed_at');
     const approved = rep === 'APPROVED' || this.text(this.record?.status) === 'APPROVED';
     const waiting = rep === 'TYPED' || rep === 'ENTERED' || rep === 'WAITING_APPROVAL';
     const draft = rep === 'DRAFT' || rep === '';

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import log from 'electron-log';
 import { DatabaseService } from './services/database.service';
 import { ReportService } from './services/report.service';
@@ -18,6 +19,143 @@ let rendererHasUnsavedWork = false;
 let pendingClose = false;
 let closePromptInProgress = false;
 let closeFallbackTimer: NodeJS.Timeout | null = null;
+let appShutdownDone = false;
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function realDirectoryIfAvailable(dir: string): string {
+  const resolved = path.resolve(dir);
+  if (!fs.existsSync(resolved)) return '';
+  try {
+    if (!fs.statSync(resolved).isDirectory()) return '';
+    return fs.realpathSync.native(resolved);
+  } catch {
+    return '';
+  }
+}
+
+function isPathInsideOrSame(candidate: string, root: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function allowedOpenRoots(): string[] {
+  const setting = (key: string) => {
+    try { return String(db?.getSetting?.(key, '') || '').trim(); } catch { return ''; }
+  };
+  return Array.from(new Set([
+    db?.dataDir,
+    db?.reportsDir,
+    setting('report.export.path'),
+    setting('backup.path'),
+    path.join(os.tmpdir(), 'lims-report-pdf-temp'),
+    path.join(app.getPath('temp'), 'lims-generated-pdf-temp')
+  ].map(x => String(x || '').trim()).filter(Boolean).map(realDirectoryIfAvailable).filter(Boolean)));
+}
+
+async function openAllowedAppPath(fileOrDir: unknown) {
+  const raw = String(fileOrDir || '').trim();
+  if (!raw) throw new Error('No file or folder path was provided.');
+  const resolved = path.resolve(raw);
+  if (!fs.existsSync(resolved)) throw new Error('File or folder was not found.');
+  const target = fs.realpathSync.native(resolved);
+  if (!allowedOpenRoots().some(root => isPathInsideOrSame(target, root))) {
+    throw new Error('Opening this path is not allowed. Use an app-generated report, export, backup, or data path.');
+  }
+  return shell.openPath(target);
+}
+
+function emitShutdownProgress(payload: Record<string, any>) {
+  safeSendToRenderer('app:shutdown-progress', payload);
+}
+
+async function prepareShutdownWithProgress() {
+  const steps = [
+    { id: 'timer', label: 'Auto backup timer' },
+    { id: 'analyzer', label: 'Analyzer API' },
+    { id: 'database', label: 'Database connection' }
+  ];
+
+  const emit = (activeId: string, status: 'running' | 'done' | 'error', message: string, progress: number) => {
+    emitShutdownProgress({
+      stage: activeId,
+      stageLabel: steps.find(s => s.id === activeId)?.label || activeId,
+      title: 'Shutting down LIMS',
+      message,
+      progress,
+      statusText: status === 'running' ? 'Working' : status === 'done' ? 'Done' : 'Error',
+      status,
+      steps: steps.map(s => {
+        const order = steps.findIndex(x => x.id === s.id);
+        const active = steps.findIndex(x => x.id === activeId);
+        let state: 'pending' | 'running' | 'done' | 'error' = 'pending';
+        if (s.id === activeId) state = status === 'error' ? 'error' : status === 'done' ? 'done' : 'running';
+        else if (order < active || (status === 'done' && order <= active)) state = 'done';
+        return { ...s, state };
+      })
+    });
+  };
+
+  try {
+    emit('timer', 'running', 'Clearing the scheduled backup timer…', 20);
+    await sleep(180);
+    try { backups?.stop(); } catch (err) { try { log.warn('[shutdown] backup stop failed', err); } catch {} }
+    emit('timer', 'done', 'Backup timer stopped.', 40);
+    await sleep(120);
+
+    emit('analyzer', 'running', 'Stopping Analyzer TCP / API listener…', 55);
+    await sleep(180);
+    try { analyzerApi?.stop(); } catch (err) { try { log.warn('[shutdown] analyzer API stop failed', err); } catch {} }
+    emit('analyzer', 'done', 'Analyzer API stopped.', 75);
+    await sleep(120);
+
+    emit('database', 'running', 'Checkpointing and closing SQLite…', 88);
+    await sleep(180);
+    try { db?.closeDatabaseConnection(); } catch (err) { try { log.warn('[shutdown] database close failed', err); } catch {} }
+    appShutdownDone = true;
+    emit('database', 'done', 'Database closed cleanly.', 100);
+    await sleep(160);
+    emitShutdownProgress({
+      stage: 'ready',
+      stageLabel: 'Ready',
+      title: 'Shutting down LIMS',
+      message: 'All services stopped. Closing the application window…',
+      progress: 100,
+      statusText: 'Closing',
+      status: 'done',
+      steps: steps.map(s => ({ ...s, state: 'done' as const }))
+    });
+    return { ok: true };
+  } catch (err: any) {
+    emitShutdownProgress({
+      stage: 'error',
+      stageLabel: 'Failed',
+      title: 'Shutdown interrupted',
+      message: String(err?.message || err || 'Unable to finish shutdown.'),
+      progress: 100,
+      statusText: 'Error',
+      status: 'error',
+      steps: steps.map(s => ({ ...s, state: 'error' as const }))
+    });
+    return { ok: false, error: String(err?.message || err || 'Shutdown failed') };
+  }
+}
+
+function shutdownAppServices(reason = 'app-exit') {
+  if (appShutdownDone) return;
+  appShutdownDone = true;
+  try {
+    log.info(`[shutdown] Stopping services (${reason})`);
+  } catch {}
+  try { backups?.stop(); } catch (err) { try { log.warn('[shutdown] backup stop failed', err); } catch {} }
+  try { analyzerApi?.stop(); } catch (err) { try { log.warn('[shutdown] analyzer API stop failed', err); } catch {} }
+  try { db?.closeDatabaseConnection(); } catch (err) { try { log.warn('[shutdown] database close failed', err); } catch {} }
+  try {
+    log.info('[shutdown] Services stopped');
+  } catch {}
+}
 
 function safeSendToRenderer(channel: string, ...args: any[]) {
   const win = mainWindow;
@@ -33,10 +171,62 @@ function safeSendToRenderer(channel: string, ...args: any[]) {
   }
 }
 
+/** Windows/Electron can leave the webview without keyboard/mouse focus after native dialogs. */
+function restoreMainWindowFocus() {
+  const focusNow = () => {
+    const win = mainWindow;
+    if (!win || win.isDestroyed()) return;
+    try {
+      if (win.isMinimized()) win.restore();
+      if (!win.isVisible()) win.show();
+      win.focus();
+      if (!win.webContents.isDestroyed()) win.webContents.focus();
+    } catch (err) {
+      try { log.warn('[focus] Failed to restore main window focus', err); } catch {}
+    }
+  };
+  focusNow();
+  // A second tick helps after Windows file/folder pickers release ownership.
+  setTimeout(focusNow, 40);
+}
+
 process.on('uncaughtException', err => log.error('UNCAUGHT', err));
 process.on('unhandledRejection', err => log.error('UNHANDLED', err));
 
 if (process.platform === 'win32') app.setAppUserModelId('com.lims.professional.billing.reporting');
+
+// One running instance only (skip for Playwright/E2E).
+const allowMultipleInstances = process.env.LIMS_E2E === '1';
+const gotSingleInstanceLock = allowMultipleInstances ? true : app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else if (!allowMultipleInstances) {
+  app.on('second-instance', () => {
+    const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : BrowserWindow.getAllWindows()[0];
+    if (win && !win.isDestroyed()) {
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    }
+    // Prefer the in-app rich alert; fall back to native dialog only if renderer is unavailable.
+    const sent = safeSendToRenderer('app:already-running', {
+      title: 'Already Running',
+      message: 'LIMS is already open.',
+      details: 'You tried to start the app again from a shortcut. This existing window was brought to the front.'
+    });
+    if (!sent) {
+      dialog.showMessageBox(win || undefined, {
+        type: 'info',
+        title: 'Already Running',
+        message: 'LIMS is already open.',
+        detail: 'You tried to start the app again from a shortcut. This existing window was brought to the front.',
+        buttons: ['OK'],
+        defaultId: 0,
+        noLink: true
+      }).catch(() => {});
+    }
+  });
+}
 
 function createWindow() {
   const appIcon = path.join(__dirname, '../build/icon.ico');
@@ -79,10 +269,11 @@ function createWindow() {
     // The renderer owns the graphical confirmation. If it is temporarily busy,
     // unlock another close attempt instead of leaving Electron in a blocked state.
     if (closeFallbackTimer) clearTimeout(closeFallbackTimer);
+    // Allow time for exit confirmation + optional on-close backup before unlocking another attempt.
     closeFallbackTimer = setTimeout(() => {
       closePromptInProgress = false;
       closeFallbackTimer = null;
-    }, 8000);
+    }, 180000);
   });
 
   mainWindow.on('closed', () => {
@@ -147,6 +338,7 @@ function registerIpc() {
     });
   };
   safeIpcHandle('app:set-dirty', (_e, dirty = false) => { rendererHasUnsavedWork = !!dirty; return true; });
+  safeIpcHandle('app:prepare-shutdown', async () => prepareShutdownWithProgress());
   safeIpcHandle('app:close-decision', (_e, allowClose = false) => {
     if (closeFallbackTimer) { clearTimeout(closeFallbackTimer); closeFallbackTimer = null; }
     closePromptInProgress = false;
@@ -165,29 +357,65 @@ function registerIpc() {
   safeIpcHandle('settings:set-one', (_e, key, value) => { db.setSetting(String(key), String(value ?? '')); return db.getSettings(); });
   safeIpcHandle('report:choose-image', async () => {
     const win = mainWindow || undefined;
-    const result = await dialog.showOpenDialog(win as any, {
-      title: 'Choose report image',
-      properties: ['openFile'],
-      filters: [{ name: 'Images', extensions: ['png','jpg','jpeg','webp'] }]
-    });
-    if (result.canceled || !result.filePaths?.length) return null;
-    return { path: result.filePaths[0] };
+    try {
+      const result = await dialog.showOpenDialog(win as any, {
+        title: 'Choose report image',
+        properties: ['openFile'],
+        filters: [{ name: 'Images', extensions: ['png','jpg','jpeg','webp'] }]
+      });
+      if (result.canceled || !result.filePaths?.length) return null;
+      return { path: result.filePaths[0] };
+    } finally {
+      restoreMainWindowFocus();
+    }
   });
   safeIpcHandle('paths:choose-dir', async (_e, title = 'Choose folder') => {
     const win = mainWindow || undefined;
-    const result = await dialog.showOpenDialog(win as any, { title: String(title || 'Choose folder'), properties: ['openDirectory', 'createDirectory'] });
-    if (result.canceled || !result.filePaths?.length) return null;
-    return { path: result.filePaths[0] };
+    try {
+      const result = await dialog.showOpenDialog(win as any, { title: String(title || 'Choose folder'), properties: ['openDirectory', 'createDirectory'] });
+      if (result.canceled || !result.filePaths?.length) return null;
+      return { path: result.filePaths[0] };
+    } finally {
+      restoreMainWindowFocus();
+    }
   });
   safeIpcHandle('paths:set-data-dir', async (_e, dir) => {
     const selected = String(dir || '').trim();
     if (!selected) throw new Error('Database folder is required.');
     fs.mkdirSync(selected, { recursive: true });
+    const targetDb = path.join(selected, 'lims.sqlite3');
+    const currentDb = db.dbPath;
+    const samePath = path.resolve(selected) === path.resolve(db.dataDir);
+    let copied = false;
+    let usedExisting = false;
+    if (!samePath) {
+      if (fs.existsSync(targetDb)) {
+        usedExisting = true;
+      } else if (fs.existsSync(currentDb)) {
+        fs.copyFileSync(currentDb, targetDb);
+        for (const suffix of ['-wal', '-shm']) {
+          const src = currentDb + suffix;
+          if (fs.existsSync(src)) fs.copyFileSync(src, targetDb + suffix);
+        }
+        copied = true;
+      }
+    }
     DatabaseService.writePathConfig({ dataDir: selected });
-    return { dataDir: selected, restartRequired: true };
+    return {
+      dataDir: selected,
+      restartRequired: true,
+      copied,
+      usedExisting,
+      message: usedExisting
+        ? 'Selected folder already has a database. Restart to use that database.'
+        : (copied
+          ? 'Current database was copied to the new folder. Restart to use it.'
+          : 'Database folder changed. Restart the app to use the new location.')
+    };
   });
   safeIpcHandle('masters:departments', () => db.listDepartments());
   safeIpcHandle('masters:department:save', (_e, x) => db.saveDepartment(x));
+  safeIpcHandle('masters:departments:reorder', (_e, items) => db.reorderDepartments(items));
   safeIpcHandle('masters:units', () => db.listUnits());
   safeIpcHandle('masters:unit:save', (_e, x) => db.saveUnit(x));
   safeIpcHandle('masters:tests', (_e, activeOnly=false) => db.listTests(activeOnly));
@@ -199,6 +427,7 @@ function registerIpc() {
   safeIpcHandle('masters:methods', () => db.listTestMethods());
   safeIpcHandle('masters:profiles', (_e, activeOnly=false) => db.listProfiles(activeOnly));
   safeIpcHandle('masters:profile:save', (_e, x) => db.saveProfile(x));
+  safeIpcHandle('masters:profiles:reorder', (_e, items) => db.reorderProfiles(items));
   safeIpcHandle('masters:equipment:list', (_e, activeOnly=false) => db.listEquipmentMasters(activeOnly));
   safeIpcHandle('masters:equipment:save', (_e, x) => db.saveEquipmentMaster(x));
   safeIpcHandle('masters:equipment:delete', (_e, id) => db.deleteEquipmentMaster(Number(id)));
@@ -288,6 +517,8 @@ function registerIpc() {
   safeIpcHandle('patients:list', (_e, q='') => db.listPatients(q));
   safeIpcHandle('patients:save', (_e, x) => db.savePatient(x));
   safeIpcHandle('patients:history', (_e, id) => db.patientHistory(Number(id)));
+  safeIpcHandle('patients:unused-preview', () => db.previewUnusedPatients());
+  safeIpcHandle('patients:drop-unused', () => db.dropUnusedPatients());
   safeIpcHandle('billing:create', (_e, payload) => db.createBill(payload));
   safeIpcHandle('billing:update', (_e, payload) => db.updateBill(payload));
   safeIpcHandle('billing:list', (_e, filters={}) => db.listBills(filters));
@@ -388,8 +619,16 @@ Regards`);
     const mobile = String(report.patient_mobile || report.mobile || '').replace(/[^0-9+]/g, '');
     const body = encodeURIComponent(`Your approved lab report for bill ${report.bill_no || ''} is ready. Please collect/open the report PDF from the lab.`);
     await shell.openExternal(`https://wa.me/${mobile.replace(/^\+/, '')}?text=${body}`);
-    db.markReportDelivery(Number(id), 'EMAIL', mobile || 'whatsapp handoff');
+    db.markReportDelivery(Number(id), 'WHATSAPP', mobile || 'whatsapp handoff');
     return { file, mobile };
+  });
+  safeIpcHandle('whatsapp:open-contact', async (_e, mobileRaw) => {
+    let mobile = String(mobileRaw || '').replace(/[^0-9]/g, '');
+    if (!mobile) throw new Error('Patient mobile number is not available.');
+    // Indian mobiles are commonly stored as 10 digits; wa.me needs country code.
+    if (mobile.length === 10) mobile = `91${mobile}`;
+    await shell.openExternal(`https://wa.me/${mobile}`);
+    return { ok: true, mobile };
   });
   safeIpcHandle('reports:approved-sms', async (_e, id, options={}) => {
     const report:any = db.getReport(Number(id));
@@ -407,7 +646,10 @@ Regards`);
   safeIpcHandle('statement', (_e, filters={}) => db.statement(filters));
   safeIpcHandle('statement:excel', async (_e, filters={}) => reports.createStatementExcel(filters));
   safeIpcHandle('statement:pdf', async (_e, filters={}) => reports.createStatementPdf(filters));
-  safeIpcHandle('backup:create', () => backups.createBackup('manual'));
+  safeIpcHandle('backup:create', (_e, reason) => {
+    const cleaned = String(reason || 'manual').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40);
+    return backups.createBackup(cleaned || 'manual');
+  });
   safeIpcHandle('backup:list', () => backups.listBackups());
   safeIpcHandle('backup:validate', (_e, filePath) => backups.validateBackup(String(filePath || '')));
   safeIpcHandle('backup:restore', async (_e, filePath) => {
@@ -416,15 +658,21 @@ Regards`);
     try { return await backups.restoreBackup(String(filePath || '')); }
     finally { backups.start(); analyzerApi?.restart(); }
   });
-  safeIpcHandle('debug:reset-workflow-data', () => db.resetTransactionalWorkflowData('Manual debug reset from app'));
+  safeIpcHandle('debug:reset-workflow-data', () => {
+    if (app.isPackaged) {
+      throw new Error('Clear test data is disabled in the installed app to protect live bills and reports. Use a development build if you need a full workflow reset.');
+    }
+    return db.resetTransactionalWorkflowData('Manual debug reset from app');
+  });
   safeIpcHandle('paths:data-dir', () => db.dataDir);
   safeIpcHandle('paths:reports-dir', () => db.reportsDir);
-  safeIpcHandle('paths:open', async (_e, fileOrDir) => shell.openPath(String(fileOrDir)));
+  safeIpcHandle('paths:open', async (_e, fileOrDir) => openAllowedAppPath(fileOrDir));
   safeIpcHandle('analyzer-api:status', () => analyzerApi?.status());
   safeIpcHandle('analyzer-api:restart', () => analyzerApi?.restart());
 }
 
 app.whenReady().then(() => {
+  if (!gotSingleInstanceLock) return;
   log.initialize();
   db = new DatabaseService();
   reports = new ReportService(db);
@@ -438,4 +686,16 @@ app.whenReady().then(() => {
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
-app.on('window-all-closed', () => { backups?.stop(); analyzerApi?.stop(); if (process.platform !== 'darwin') app.quit(); });
+app.on('before-quit', () => {
+  shutdownAppServices('before-quit');
+});
+
+app.on('will-quit', () => {
+  shutdownAppServices('will-quit');
+});
+
+app.on('window-all-closed', () => {
+  if (!gotSingleInstanceLock) return;
+  shutdownAppServices('window-all-closed');
+  if (process.platform !== 'darwin') app.quit();
+});

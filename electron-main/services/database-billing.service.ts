@@ -415,7 +415,7 @@ export abstract class DatabaseBillingService extends DatabaseCoreService {  crea
     }
     if (paymentModes.length) { whereParts.push(`b.payment_mode IN (${paymentModes.map(() => '?').join(',')})`); params.push(...paymentModes); }
     if (paymentStatuses.length) { whereParts.push(`${paymentStatusExpr} IN (${paymentStatuses.map(() => '?').join(',')})`); params.push(...paymentStatuses); }
-    const sql = `SELECT b.*,p.patient_no,p.title patient_title,p.name patient_name,p.mobile,c.name consultant_name,
+    const sql = `SELECT b.*,p.patient_no,p.title patient_title,p.name patient_name,p.age,p.age_value,p.age_unit,p.gender,p.mobile,c.name consultant_name,
       ${paymentStatusExpr} payment_status,
       MAX(COALESCE(b.paid,0)-COALESCE(b.total,0),0) excess_paid
       FROM bills b JOIN patients p ON p.id=b.patient_id LEFT JOIN consultants c ON c.id=b.consultant_id

@@ -1460,6 +1460,51 @@ body.operations-modal-open .side-collapsed .side:hover { width: 84px; box-shadow
   color: var(--muted) !important;
   font-weight: 850 !important;
 }
+.billing-title-copy small.pay-paid,
+.top-bill-search input.pay-paid,
+.top-search-results b.pay-paid { color: #57d898 !important; }
+.billing-title-copy small.pay-partial,
+.top-bill-search input.pay-partial,
+.top-search-results b.pay-partial { color: #fbbf64 !important; }
+.billing-title-copy small.pay-pending,
+.top-bill-search input.pay-pending,
+.top-search-results b.pay-pending { color: #94a3b8 !important; }
+.billing-title-copy small.pay-excess,
+.top-bill-search input.pay-excess,
+.top-search-results b.pay-excess { color: #c084fc !important; }
+.billing-title-copy small.pay-cancelled,
+.top-bill-search input.pay-cancelled,
+.top-search-results b.pay-cancelled { color: #ff8ca3 !important; text-decoration: line-through; }
+.app.light .billing-title-copy small.pay-paid,
+body.light .billing-title-copy small.pay-paid,
+.app.light .top-bill-search input.pay-paid,
+body.light .top-bill-search input.pay-paid,
+.app.light .top-search-results b.pay-paid,
+body.light .top-search-results b.pay-paid { color: #16a34a !important; }
+.app.light .billing-title-copy small.pay-partial,
+body.light .billing-title-copy small.pay-partial,
+.app.light .top-bill-search input.pay-partial,
+body.light .top-bill-search input.pay-partial,
+.app.light .top-search-results b.pay-partial,
+body.light .top-search-results b.pay-partial { color: #d97706 !important; }
+.app.light .billing-title-copy small.pay-pending,
+body.light .billing-title-copy small.pay-pending,
+.app.light .top-bill-search input.pay-pending,
+body.light .top-bill-search input.pay-pending,
+.app.light .top-search-results b.pay-pending,
+body.light .top-search-results b.pay-pending { color: #64748b !important; }
+.app.light .billing-title-copy small.pay-excess,
+body.light .billing-title-copy small.pay-excess,
+.app.light .top-bill-search input.pay-excess,
+body.light .top-bill-search input.pay-excess,
+.app.light .top-search-results b.pay-excess,
+body.light .top-search-results b.pay-excess { color: #9333ea !important; }
+.app.light .billing-title-copy small.pay-cancelled,
+body.light .billing-title-copy small.pay-cancelled,
+.app.light .top-bill-search input.pay-cancelled,
+body.light .top-bill-search input.pay-cancelled,
+.app.light .top-search-results b.pay-cancelled,
+body.light .top-search-results b.pay-cancelled { color: #e11d48 !important; }
 .pro-topbar.fixed-billing-topbar { min-height: 66px !important; padding: 10px 0 12px !important; margin: -24px 0 12px !important; }
 .bill-top-tools { gap: 8px !important; }
 .top-bill-search { width: min(480px, 40vw) !important; }

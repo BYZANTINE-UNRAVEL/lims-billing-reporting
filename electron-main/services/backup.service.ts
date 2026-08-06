@@ -91,20 +91,35 @@ export class BackupService {
     } finally { stagedDb.close(); }
 
     this.db.closeDatabaseConnection();
+    let restoreError: any = null;
     try {
       for (const suffix of ['-wal','-shm']) { const sidecar = this.db.dbPath + suffix; if (fs.existsSync(sidecar)) fs.unlinkSync(sidecar); }
       fs.copyFileSync(staged, this.db.dbPath);
       this.db.reopenDatabaseConnection();
+      if (!this.db.db?.open) throw new Error('Database reopen failed after restore.');
       this.db.audit('backup.restore', `${validation.path}; safety=${safetyBackup.path}`);
       return { restoredFrom: validation.path, safetyBackup: safetyBackup.path, validation, restartRequired: false };
     } catch (error) {
+      restoreError = error;
+      let rollbackError: any = null;
       try {
         if (this.db.db?.open) this.db.closeDatabaseConnection();
         for (const suffix of ['-wal','-shm']) { const sidecar = this.db.dbPath + suffix; if (fs.existsSync(sidecar)) fs.unlinkSync(sidecar); }
         fs.copyFileSync(safetyBackup.path, this.db.dbPath);
         this.db.reopenDatabaseConnection();
-      } catch {}
-      throw error;
+        if (!this.db.db?.open) throw new Error('Database reopen failed after restore rollback.');
+      } catch (err) {
+        rollbackError = err;
+      }
+      if (rollbackError) {
+        throw new Error(
+          `Restore failed and safety rollback also failed. Restart LIMS immediately. ` +
+          `Restore error: ${String((restoreError as any)?.message || restoreError)}. ` +
+          `Rollback error: ${String((rollbackError as any)?.message || rollbackError)}. ` +
+          `Safety backup: ${safetyBackup.path}`
+        );
+      }
+      throw restoreError;
     } finally {
       try { if (fs.existsSync(staged)) fs.unlinkSync(staged); } catch {}
     }
