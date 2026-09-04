@@ -107,6 +107,7 @@ type ExitProgressState = {
       <app-report-typing-page *ngIf="tab()==='reports'" (changed)="reload()"></app-report-typing-page>
       <app-masters-page *ngIf="tab()==='masters'" (changed)="reload()"></app-masters-page>
       <app-consultants-page *ngIf="tab()==='consultants'" (changed)="reload()"></app-consultants-page>
+      <app-commissions-page *ngIf="tab()==='commissions'"></app-commissions-page>
       <app-operations-page *ngIf="tab()==='operations'" (changed)="reload()"></app-operations-page>
       <app-collection-page *ngIf="tab()==='collection'" (changed)="reload()"></app-collection-page>
       <app-analytics-page *ngIf="tab()==='analytics'"></app-analytics-page>
@@ -357,6 +358,7 @@ export class AppComponent implements OnInit, OnDestroy {
     { id: 'reports', label: 'Report Typing', icon: '▦' },
     { id: 'masters', label: 'Masters', icon: '⚙' },
     { id: 'consultants', label: 'Consultants', icon: '★' },
+    { id: 'commissions', label: 'Commissions', icon: '₪' },
     { id: 'analytics', label: 'Analytics', icon: '◒' },
     { id: 'operations', label: 'Operations', icon: '▤' },
     { id: 'collection', label: 'Lab Workflow', icon: '◈' },

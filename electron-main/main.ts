@@ -440,6 +440,12 @@ function registerIpc() {
   safeIpcHandle('commissions:status', (_e, payload={}) => db.updateCommissionStatus(payload));
   safeIpcHandle('commissions:settle', (_e, payload={}) => db.createCommissionSettlement(payload));
   safeIpcHandle('commissions:settlements', (_e, filters={}) => db.listCommissionSettlements(filters));
+  safeIpcHandle('commissions:settlement:get', (_e, id) => db.getCommissionSettlement(Number(id)));
+  safeIpcHandle('commissions:settlement:pdf', async (_e, id) => reports.createCommissionSettlementPdf(Number(id)));
+  safeIpcHandle('commissions:settlement:excel', async (_e, id) => reports.createCommissionSettlementExcel(Number(id)));
+  safeIpcHandle('commissions:report', (_e, filters={}) => db.getCommissionReport(filters));
+  safeIpcHandle('commissions:report:pdf', async (_e, filters={}) => reports.createCommissionReportPdf(filters));
+  safeIpcHandle('commissions:report:excel', async (_e, filters={}) => reports.createCommissionReportExcel(filters));
   safeIpcHandle('commissions:groups:list', () => db.listCommissionGroups());
   safeIpcHandle('commissions:groups:save', (_e,payload={}) => db.saveCommissionGroup(payload));
   safeIpcHandle('commissions:groups:delete', (_e,id) => db.deleteCommissionGroup(Number(id)));

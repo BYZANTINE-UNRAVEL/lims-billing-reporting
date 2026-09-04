@@ -464,6 +464,321 @@ export class ReportService extends ReportDocumentService {  async createBillPdf(
 
   async createStatementExcel(filters:any={}) { const s=this.db.statement(filters); const wb=new ExcelJS.Workbook(); const ws=wb.addWorksheet('Statement'); ws.columns=[{header:'Bill No',key:'bill_no',width:14},{header:'Date',key:'bill_date',width:22},{header:'Patient',key:'patient_name',width:28},{header:'Consultant',key:'consultant_name',width:22},{header:'Total',key:'total',width:12},{header:'Paid',key:'paid',width:12},{header:'Due',key:'due',width:12},{header:'Mode',key:'payment_mode',width:14}]; s.bills.forEach((b:any)=>ws.addRow(b)); ws.addRow({patient_name:'TOTAL',total:s.totals.total,paid:s.totals.paid,due:s.totals.due}); const file=path.join(this.db.reportsDir,`statement-${Date.now()}.xlsx`); await wb.xlsx.writeFile(file); return file; }
   async createReportExcel(reportOrBillId:number) { const r=this.db.getReport(reportOrBillId); if(!r) throw new Error('Report not found'); const wb=new ExcelJS.Workbook(); const ws=wb.addWorksheet('Report'); ws.addRow(['Patient',r.patient_name,'Bill',r.bill_no]); ws.addRow(['Test','Result','Unit','Reference','Method']); r.items.forEach((i:any)=>ws.addRow([i.test_name,i.result_value||'',i.unit||'',i.normal_range||'',i.method||''])); const file=path.join(this.db.reportsDir,`report-${r.bill_no}-${Date.now()}.xlsx`); await wb.xlsx.writeFile(file); return file; }
+
+  async createCommissionSettlementPdf(settlementId:number) {
+    const s = this.db.getCommissionSettlement(Number(settlementId));
+    const org = this.org();
+    const items = s.items || [];
+    const meta = [
+      [{ text: 'Settlement No', bold: true }, s.settlement_no || '-', { text: 'Date', bold: true }, this.fmtDate(s.settlement_date) ],
+      [{ text: 'Consultant', bold: true }, s.consultant_name || '-', { text: 'Clinic', bold: true }, s.consultant_clinic || '-' ],
+      [{ text: 'Payment mode', bold: true }, s.payment_mode || 'Cash', { text: 'Reference', bold: true }, s.reference_no || '-' ],
+      [{ text: 'Phone', bold: true }, s.consultant_phone || '-', { text: 'Items', bold: true }, String(items.length) ]
+    ];
+    const body = [
+      [
+        { text: '#', bold: true },
+        { text: 'Bill No', bold: true },
+        { text: 'Date', bold: true },
+        { text: 'Patient', bold: true },
+        { text: 'Item', bold: true },
+        { text: 'Rule', bold: true },
+        { text: 'Net', bold: true, alignment: 'right' },
+        { text: 'Commission', bold: true, alignment: 'right' }
+      ],
+      ...items.map((it: any, idx: number) => [
+        String(idx + 1),
+        it.bill_no || '-',
+        this.fmtDateOnly(it.bill_date),
+        it.patient_name || '-',
+        `${it.item_name || '-'}${it.item_type ? `\n${it.item_type}` : ''}`,
+        `${it.commission_profile_name || '-'}${it.commission_rule_source ? `\n${it.commission_rule_source}` : ''}`,
+        { text: this.money(it.net_amount), alignment: 'right' },
+        { text: this.money(it.amount), alignment: 'right' }
+      ]),
+      [
+        { text: 'TOTAL', bold: true, colSpan: 7 }, '', '', '', '', '', '',
+        { text: this.money(s.amount), bold: true, alignment: 'right' }
+      ]
+    ];
+    const content: any[] = [
+      { text: org.name, bold: true, fontSize: 18, alignment: 'center' },
+      { text: org.address, alignment: 'center', fontSize: 9, margin: [0, 0, 0, 8] },
+      { text: 'COMMISSION SETTLEMENT VOUCHER', bold: true, alignment: 'center', fontSize: 13, margin: [0, 2, 0, 12] },
+      { table: { widths: [90, '*', 70, '*'], body: meta }, layout: 'noBorders', margin: [0, 0, 0, 12] },
+      { table: { headerRows: 1, widths: [22, 70, 55, '*', '*', 90, 55, 65], body }, layout: 'lightHorizontalLines' }
+    ];
+    if (String(s.notes || '').trim()) {
+      content.push({ text: `Notes: ${s.notes}`, fontSize: 9, margin: [0, 12, 0, 0], color: '#444' });
+    }
+    content.push({
+      columns: [
+        { text: '\n\n________________________\nPrepared by', alignment: 'center', fontSize: 9, margin: [0, 28, 0, 0] },
+        { text: '\n\n________________________\nConsultant acknowledgement', alignment: 'center', fontSize: 9, margin: [0, 28, 0, 0] }
+      ]
+    });
+    const doc: any = {
+      pageOrientation: 'portrait',
+      pageMargins: [30, 30, 30, 40],
+      footer: (current: number, count: number) => ({
+        margin: [30, 0, 30, 14],
+        columns: [
+          { text: org.footer || 'Commission settlement voucher', fontSize: 8 },
+          { text: `Page ${current} / ${count}`, alignment: 'right', fontSize: 8 }
+        ]
+      }),
+      content
+    };
+    const safeNo = String(s.settlement_no || settlementId).replace(/[^\w.-]+/g, '_');
+    const file = path.join(this.db.reportsDir, `commission-settlement-${safeNo}-${Date.now()}.pdf`);
+    await this.writePdfFile(doc, file);
+    return file;
+  }
+
+  async createCommissionSettlementExcel(settlementId: number) {
+    const s = this.db.getCommissionSettlement(Number(settlementId));
+    const wb = new ExcelJS.Workbook();
+    const summary = wb.addWorksheet('Voucher');
+    summary.columns = [
+      { header: 'Field', key: 'field', width: 22 },
+      { header: 'Value', key: 'value', width: 40 }
+    ];
+    [
+      ['Settlement No', s.settlement_no],
+      ['Settlement Date', s.settlement_date],
+      ['Consultant', s.consultant_name],
+      ['Clinic', s.consultant_clinic || ''],
+      ['Phone', s.consultant_phone || ''],
+      ['Payment Mode', s.payment_mode || 'Cash'],
+      ['Reference No', s.reference_no || ''],
+      ['Total Amount', +s.amount || 0],
+      ['Item Count', (s.items || []).length],
+      ['Notes', s.notes || '']
+    ].forEach(([field, value]) => summary.addRow({ field, value }));
+
+    const lines = wb.addWorksheet('Line Items');
+    lines.columns = [
+      { header: 'Bill No', key: 'bill_no', width: 14 },
+      { header: 'Bill Date', key: 'bill_date', width: 18 },
+      { header: 'Patient', key: 'patient_name', width: 26 },
+      { header: 'Item', key: 'item_name', width: 28 },
+      { header: 'Type', key: 'item_type', width: 10 },
+      { header: 'Qty', key: 'quantity', width: 8 },
+      { header: 'Net', key: 'net_amount', width: 12 },
+      { header: 'Running Cost', key: 'running_cost', width: 12 },
+      { header: 'Profit', key: 'profit_amount', width: 12 },
+      { header: 'Rule', key: 'commission_rule_source', width: 18 },
+      { header: 'Profile', key: 'commission_profile_name', width: 18 },
+      { header: 'Commission', key: 'amount', width: 12 }
+    ];
+    (s.items || []).forEach((it: any) => lines.addRow(it));
+    lines.addRow({ patient_name: 'TOTAL', amount: +s.amount || 0 });
+
+    const safeNo = String(s.settlement_no || settlementId).replace(/[^\w.-]+/g, '_');
+    const file = path.join(this.db.reportsDir, `commission-settlement-${safeNo}-${Date.now()}.xlsx`);
+    await wb.xlsx.writeFile(file);
+    return file;
+  }
+
+  private commissionReportTable(report: any): { widths: any[]; body: any[][] } {
+    const type = String(report.report_type || '').toUpperCase();
+    const rows = report.rows || [];
+    if (type === 'SETTLEMENT_HISTORY') {
+      return {
+        widths: [90, 70, '*', 40, 70, 70, 65],
+        body: [
+          [{ text: 'Settlement No', bold: true }, { text: 'Date', bold: true }, { text: 'Consultant', bold: true }, { text: 'Items', bold: true }, { text: 'Mode', bold: true }, { text: 'Reference', bold: true }, { text: 'Amount', bold: true, alignment: 'right' }],
+          ...rows.map((r: any) => [r.settlement_no, this.fmtDate(r.settlement_date), r.consultant_name, String(r.item_count || 0), r.payment_mode || '-', r.reference_no || '-', { text: this.money(r.amount), alignment: 'right' }]),
+          [{ text: 'TOTAL', bold: true, colSpan: 6 }, '', '', '', '', '', { text: this.money(report.totals?.amount || 0), bold: true, alignment: 'right' }]
+        ]
+      };
+    }
+    if (type === 'CONSULTANT_SUMMARY') {
+      return {
+        widths: ['*', 70, 40, 35, 50, 50, 55, 50, 45, 45, 40, 45],
+        body: [
+          [{ text: 'Consultant', bold: true }, { text: 'Clinic', bold: true }, { text: 'Entries', bold: true }, { text: 'Bills', bold: true }, { text: 'Net', bold: true, alignment: 'right' }, { text: 'Cost', bold: true, alignment: 'right' }, { text: 'Commission', bold: true, alignment: 'right' }, { text: 'Profit', bold: true, alignment: 'right' }, { text: 'Pending', bold: true, alignment: 'right' }, { text: 'Approved', bold: true, alignment: 'right' }, { text: 'Held', bold: true, alignment: 'right' }, { text: 'Paid', bold: true, alignment: 'right' }],
+          ...rows.map((r: any) => [r.consultant_name, r.clinic || '-', String(r.entries), String(r.bill_count), { text: this.money(r.net_amount), alignment: 'right' }, { text: this.money(r.running_cost), alignment: 'right' }, { text: this.money(r.commission_amount), alignment: 'right' }, { text: this.money(r.profit_amount), alignment: 'right' }, { text: this.money(r.generated), alignment: 'right' }, { text: this.money(r.approved), alignment: 'right' }, { text: this.money(r.held), alignment: 'right' }, { text: this.money(r.paid), alignment: 'right' }]),
+          [{ text: 'TOTAL', bold: true, colSpan: 4 }, '', '', '', { text: this.money(report.totals?.net_amount || 0), bold: true, alignment: 'right' }, { text: this.money(report.totals?.running_cost || 0), bold: true, alignment: 'right' }, { text: this.money(report.totals?.commission || 0), bold: true, alignment: 'right' }, { text: this.money(report.totals?.profit_amount || 0), bold: true, alignment: 'right' }, '', '', '', '']
+        ]
+      };
+    }
+    if (type === 'BILL_DETAILS') {
+      return {
+        widths: [70, 55, '*', '*', 35, 55, 50, 55, 55],
+        body: [
+          [{ text: 'Bill No', bold: true }, { text: 'Date', bold: true }, { text: 'Patient', bold: true }, { text: 'Consultant', bold: true }, { text: 'Items', bold: true }, { text: 'Net', bold: true, alignment: 'right' }, { text: 'Cost', bold: true, alignment: 'right' }, { text: 'Commission', bold: true, alignment: 'right' }, { text: 'Profit', bold: true, alignment: 'right' }],
+          ...rows.map((r: any) => [r.bill_no, this.fmtDateOnly(r.bill_date), r.patient_name || '-', r.consultant_name || '-', String(r.items || 0), { text: this.money(r.net_amount), alignment: 'right' }, { text: this.money(r.running_cost), alignment: 'right' }, { text: this.money(r.commission_amount), alignment: 'right' }, { text: this.money(r.profit_amount), alignment: 'right' }]),
+          [{ text: 'TOTAL', bold: true, colSpan: 5 }, '', '', '', '', { text: this.money(report.totals?.net_amount || 0), bold: true, alignment: 'right' }, '', { text: this.money(report.totals?.commission || 0), bold: true, alignment: 'right' }, { text: this.money(report.totals?.profit_amount || 0), bold: true, alignment: 'right' }]
+        ]
+      };
+    }
+    if (type === 'PROFIT') {
+      return {
+        widths: [65, 50, '*', '*', '*', 50, 50, 55, 50, 55],
+        body: [
+          [{ text: 'Bill No', bold: true }, { text: 'Date', bold: true }, { text: 'Patient', bold: true }, { text: 'Consultant', bold: true }, { text: 'Item', bold: true }, { text: 'Net', bold: true, alignment: 'right' }, { text: 'Cost', bold: true, alignment: 'right' }, { text: 'Commission', bold: true, alignment: 'right' }, { text: 'Profit', bold: true, alignment: 'right' }, { text: 'Status', bold: true }],
+          ...rows.map((r: any) => [r.bill_no, this.fmtDateOnly(r.bill_date), r.patient_name || '-', r.consultant_name || '-', r.item_name || '-', { text: this.money(r.net_amount), alignment: 'right' }, { text: this.money(r.running_cost), alignment: 'right' }, { text: this.money(r.commission_amount), alignment: 'right' }, { text: this.money(r.profit_amount), alignment: 'right' }, r.commission_status || '-']),
+          [{ text: 'TOTAL', bold: true, colSpan: 5 }, '', '', '', '', { text: this.money(report.totals?.net_amount || 0), bold: true, alignment: 'right' }, { text: this.money(report.totals?.running_cost || 0), bold: true, alignment: 'right' }, { text: this.money(report.totals?.commission || 0), bold: true, alignment: 'right' }, { text: this.money(report.totals?.profit_amount || 0), bold: true, alignment: 'right' }, '']
+        ]
+      };
+    }
+    return {
+      widths: [65, 50, '*', '*', '*', 50, 55, 70, 55],
+      body: [
+        [{ text: 'Bill No', bold: true }, { text: 'Date', bold: true }, { text: 'Patient', bold: true }, { text: 'Consultant', bold: true }, { text: 'Item', bold: true }, { text: 'Net', bold: true, alignment: 'right' }, { text: 'Commission', bold: true, alignment: 'right' }, { text: 'Rule', bold: true }, { text: 'Status', bold: true }],
+        ...rows.map((r: any) => [r.bill_no, this.fmtDateOnly(r.bill_date), r.patient_name || '-', r.consultant_name || '-', r.item_name || '-', { text: this.money(r.net_amount), alignment: 'right' }, { text: this.money(r.commission_amount), alignment: 'right' }, r.commission_rule_source || r.commission_profile_name || '-', r.commission_status || '-']),
+        [{ text: 'TOTAL', bold: true, colSpan: 5 }, '', '', '', '', { text: this.money(report.totals?.net_amount || 0), bold: true, alignment: 'right' }, { text: this.money(report.totals?.commission || 0), bold: true, alignment: 'right' }, '', '']
+      ]
+    };
+  }
+
+  async createCommissionReportPdf(filters: any = {}) {
+    const report = this.db.getCommissionReport(filters || {});
+    const org = this.org();
+    const table = this.commissionReportTable(report);
+    const doc: any = {
+      pageOrientation: 'landscape',
+      pageMargins: [24, 28, 24, 36],
+      footer: (current: number, count: number) => ({
+        margin: [24, 0, 24, 12],
+        columns: [
+          { text: org.footer || 'Commission report', fontSize: 8 },
+          { text: `Page ${current} / ${count}`, alignment: 'right', fontSize: 8 }
+        ]
+      }),
+      content: [
+        { text: org.name, bold: true, fontSize: 16, alignment: 'center' },
+        { text: org.address, alignment: 'center', fontSize: 8, margin: [0, 0, 0, 6] },
+        { text: String(report.title || 'Commission Report').toUpperCase(), bold: true, alignment: 'center', fontSize: 12, margin: [0, 2, 0, 4] },
+        { text: `Period: ${report.period || '-'}`, alignment: 'center', fontSize: 9, margin: [0, 0, 0, 10] },
+        { table: { headerRows: 1, widths: table.widths, body: table.body }, layout: 'lightHorizontalLines' }
+      ]
+    };
+    const safe = String(report.report_type || 'report').toLowerCase().replace(/[^\w.-]+/g, '_');
+    const file = path.join(this.db.reportsDir, `commission-report-${safe}-${Date.now()}.pdf`);
+    await this.writePdfFile(doc, file);
+    return file;
+  }
+
+  async createCommissionReportExcel(filters: any = {}) {
+    const report = this.db.getCommissionReport(filters || {});
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Report');
+    const type = String(report.report_type || '').toUpperCase();
+    const rows = report.rows || [];
+
+    if (type === 'SETTLEMENT_HISTORY') {
+      ws.columns = [
+        { header: 'Settlement No', key: 'settlement_no', width: 18 },
+        { header: 'Date', key: 'settlement_date', width: 20 },
+        { header: 'Consultant', key: 'consultant_name', width: 24 },
+        { header: 'Items', key: 'item_count', width: 10 },
+        { header: 'Mode', key: 'payment_mode', width: 14 },
+        { header: 'Reference', key: 'reference_no', width: 16 },
+        { header: 'Amount', key: 'amount', width: 12 }
+      ];
+      rows.forEach((r: any) => ws.addRow(r));
+      ws.addRow({ consultant_name: 'TOTAL', amount: report.totals?.amount || 0 });
+    } else if (type === 'CONSULTANT_SUMMARY') {
+      ws.columns = [
+        { header: 'Consultant', key: 'consultant_name', width: 24 },
+        { header: 'Clinic', key: 'clinic', width: 20 },
+        { header: 'Entries', key: 'entries', width: 10 },
+        { header: 'Bills', key: 'bill_count', width: 10 },
+        { header: 'Net', key: 'net_amount', width: 12 },
+        { header: 'Running Cost', key: 'running_cost', width: 12 },
+        { header: 'Commission', key: 'commission_amount', width: 12 },
+        { header: 'Profit', key: 'profit_amount', width: 12 },
+        { header: 'Pending', key: 'generated', width: 12 },
+        { header: 'Approved', key: 'approved', width: 12 },
+        { header: 'Held', key: 'held', width: 12 },
+        { header: 'Paid', key: 'paid', width: 12 }
+      ];
+      rows.forEach((r: any) => ws.addRow(r));
+      ws.addRow({
+        consultant_name: 'TOTAL',
+        net_amount: report.totals?.net_amount || 0,
+        running_cost: report.totals?.running_cost || 0,
+        commission_amount: report.totals?.commission || 0,
+        profit_amount: report.totals?.profit_amount || 0
+      });
+    } else if (type === 'BILL_DETAILS') {
+      ws.columns = [
+        { header: 'Bill No', key: 'bill_no', width: 14 },
+        { header: 'Date', key: 'bill_date', width: 18 },
+        { header: 'Patient', key: 'patient_name', width: 24 },
+        { header: 'Consultant', key: 'consultant_name', width: 22 },
+        { header: 'Items', key: 'items', width: 10 },
+        { header: 'Net', key: 'net_amount', width: 12 },
+        { header: 'Running Cost', key: 'running_cost', width: 12 },
+        { header: 'Commission', key: 'commission_amount', width: 12 },
+        { header: 'Profit', key: 'profit_amount', width: 12 }
+      ];
+      rows.forEach((r: any) => ws.addRow(r));
+      ws.addRow({
+        patient_name: 'TOTAL',
+        net_amount: report.totals?.net_amount || 0,
+        commission_amount: report.totals?.commission || 0,
+        profit_amount: report.totals?.profit_amount || 0
+      });
+      if ((report.detail_rows || []).length) {
+        const detail = wb.addWorksheet('Line Items');
+        detail.columns = [
+          { header: 'Bill No', key: 'bill_no', width: 14 },
+          { header: 'Date', key: 'bill_date', width: 18 },
+          { header: 'Patient', key: 'patient_name', width: 22 },
+          { header: 'Consultant', key: 'consultant_name', width: 20 },
+          { header: 'Item', key: 'item_name', width: 26 },
+          { header: 'Type', key: 'item_type', width: 10 },
+          { header: 'Net', key: 'net_amount', width: 12 },
+          { header: 'Running Cost', key: 'running_cost', width: 12 },
+          { header: 'Commission', key: 'commission_amount', width: 12 },
+          { header: 'Profit', key: 'profit_amount', width: 12 },
+          { header: 'Rule', key: 'commission_rule_source', width: 18 },
+          { header: 'Status', key: 'commission_status', width: 14 }
+        ];
+        report.detail_rows.forEach((r: any) => detail.addRow(r));
+      }
+    } else {
+      ws.columns = [
+        { header: 'Bill No', key: 'bill_no', width: 14 },
+        { header: 'Date', key: 'bill_date', width: 18 },
+        { header: 'Patient', key: 'patient_name', width: 22 },
+        { header: 'Consultant', key: 'consultant_name', width: 20 },
+        { header: 'Item', key: 'item_name', width: 26 },
+        { header: 'Type', key: 'item_type', width: 10 },
+        { header: 'Net', key: 'net_amount', width: 12 },
+        { header: 'Running Cost', key: 'running_cost', width: 12 },
+        { header: 'Commission', key: 'commission_amount', width: 12 },
+        { header: 'Profit', key: 'profit_amount', width: 12 },
+        { header: 'Rule', key: 'commission_rule_source', width: 16 },
+        { header: 'Profile', key: 'commission_profile_name', width: 16 },
+        { header: 'Status', key: 'commission_status', width: 14 },
+        { header: 'Hold Reason', key: 'hold_reason', width: 22 }
+      ];
+      rows.forEach((r: any) => ws.addRow(r));
+      ws.addRow({
+        patient_name: 'TOTAL',
+        net_amount: report.totals?.net_amount || 0,
+        running_cost: report.totals?.running_cost || 0,
+        commission_amount: report.totals?.commission || 0,
+        profit_amount: report.totals?.profit_amount || 0
+      });
+    }
+
+    const meta = wb.addWorksheet('Meta');
+    meta.addRow(['Title', report.title || '']);
+    meta.addRow(['Period', report.period || '']);
+    meta.addRow(['Type', report.report_type || '']);
+    meta.addRow(['Records', report.totals?.records || rows.length]);
+
+    const safe = String(report.report_type || 'report').toLowerCase().replace(/[^\w.-]+/g, '_');
+    const file = path.join(this.db.reportsDir, `commission-report-${safe}-${Date.now()}.xlsx`);
+    await wb.xlsx.writeFile(file);
+    return file;
+  }
+
   async openFile(file:string) { await shell.openPath(file); return file; }
   async printReport(reportOrBillId:number, win:BrowserWindow, options:any = {}) { const file=await this.createReportPdf(reportOrBillId, options?.withBackground !== false, {...options, pdfOutputMode:'print'}); await shell.openPath(file); return file; }
 }

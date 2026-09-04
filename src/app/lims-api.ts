@@ -32,6 +32,12 @@ export interface LimsApi {
   updateCommissionStatus?(payload: any): Promise<any>;
   settleCommissions?(payload: any): Promise<any>;
   listCommissionSettlements?(filters?: any): Promise<any[]>;
+  getCommissionSettlement?(id: number): Promise<any>;
+  commissionSettlementPdf?(id: number): Promise<string>;
+  commissionSettlementExcel?(id: number): Promise<string>;
+  commissionReport?(filters?: any): Promise<any>;
+  commissionReportPdf?(filters?: any): Promise<string>;
+  commissionReportExcel?(filters?: any): Promise<string>;
   listCommissionGroups?(): Promise<any[]>;
   saveCommissionGroup?(payload:any): Promise<any>;
   deleteCommissionGroup?(id:number): Promise<any[]>;

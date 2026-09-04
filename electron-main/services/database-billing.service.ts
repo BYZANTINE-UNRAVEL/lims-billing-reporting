@@ -76,9 +76,63 @@ export abstract class DatabaseBillingService extends DatabaseCoreService {  crea
   }
 
   protected replaceBillItems(billId: number, items: any[]) {
+    const previous = this.db.prepare(`SELECT item_type, item_id, quantity, price, net_amount, running_cost, extra_deduction,
+      commission_amount, profit_amount, commission_profile_name, commission_rule_source, commission_status,
+      commission_approved_at, commission_paid_at, commission_hold_reason, commission_settlement_id,
+      commission_formula, commission_formula_values, commission_group_id, commission_rule_version
+      FROM bill_items WHERE bill_id=?`).all(billId) as any[];
+    const protectedByKey = new Map<string, any>();
+    for (const row of previous) {
+      const status = String(row.commission_status || '').toUpperCase();
+      if (!this.isProtectedCommissionStatus(status)) continue;
+      const key = `${String(row.item_type || '').toUpperCase()}:${Number(row.item_id || 0)}`;
+      // Keep first protected match per billed item identity
+      if (!protectedByKey.has(key)) protectedByKey.set(key, row);
+    }
+    const paidStillPresent = new Set<string>();
+    for (const i of items) {
+      const key = `${String(i.item_type || '').toUpperCase()}:${Number(i.item_id || 0)}`;
+      const prior = protectedByKey.get(key);
+      if (!prior) continue;
+      if (String(prior.commission_status || '').toUpperCase() === 'PAID' || String(prior.commission_status || '').toUpperCase() === 'REVERSAL_PENDING') {
+        paidStillPresent.add(key);
+      }
+      // Preserve locked commission snapshot; refresh line pricing nets already computed upstream
+      i.running_cost = +prior.running_cost || 0;
+      i.extra_deduction = +prior.extra_deduction || 0;
+      i.commission_amount = +prior.commission_amount || 0;
+      i.profit_amount = +prior.profit_amount || 0;
+      i.commission_profile_name = prior.commission_profile_name || '';
+      i.commission_rule_source = prior.commission_rule_source || '';
+      i.commission_status = prior.commission_status || 'APPROVED';
+      i.commission_approved_at = prior.commission_approved_at || null;
+      i.commission_paid_at = prior.commission_paid_at || null;
+      i.commission_hold_reason = prior.commission_hold_reason || null;
+      i.commission_settlement_id = prior.commission_settlement_id || null;
+      i.commission_formula = prior.commission_formula || '';
+      i.commission_formula_values = prior.commission_formula_values || '';
+      i.commission_group_id = prior.commission_group_id || null;
+      i.commission_rule_version = prior.commission_rule_version || 1;
+      i._commission_locked = true;
+    }
+    for (const [key, prior] of protectedByKey) {
+      const st = String(prior.commission_status || '').toUpperCase();
+      if ((st === 'PAID' || st === 'REVERSAL_PENDING') && !paidStillPresent.has(key)) {
+        throw new Error(`Cannot remove paid commission item (${String(prior.item_type)} #${prior.item_id}). Paid commission must remain on the bill or be reversed via settlement workflow.`);
+      }
+    }
     this.db.prepare('DELETE FROM bill_items WHERE bill_id=?').run(billId);
-    const insert = this.db.prepare('INSERT INTO bill_items(bill_id,item_type,item_id,name,department_name,quantity,price,total,priority,side_header,discount_type,discount_value,discount_amount,net_amount,running_cost,extra_deduction,commission_amount,profit_amount,commission_profile_name,commission_rule_source,commission_status,commission_formula,commission_formula_values,commission_group_id,commission_rule_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-    items.forEach((i:any) => insert.run(billId, i.item_type, i.item_id, i.name, i.department_name || '', i.quantity, i.price, i.net_amount, +i.priority || 0, i.side_header || '', i.discount_type, i.discount_value, i.discount_amount, i.net_amount, +i.running_cost || 0, +i.extra_deduction || 0, +i.commission_amount || 0, +i.profit_amount || 0, i.commission_profile_name || '', i.commission_rule_source || '', i.commission_status || 'GENERATED', i.commission_formula || '', i.commission_formula_values || '', i.commission_group_id || null, i.commission_rule_version || 1));
+    const insert = this.db.prepare('INSERT INTO bill_items(bill_id,item_type,item_id,name,department_name,quantity,price,total,priority,side_header,discount_type,discount_value,discount_amount,net_amount,running_cost,extra_deduction,commission_amount,profit_amount,commission_profile_name,commission_rule_source,commission_status,commission_approved_at,commission_paid_at,commission_hold_reason,commission_settlement_id,commission_formula,commission_formula_values,commission_group_id,commission_rule_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    items.forEach((i:any) => insert.run(
+      billId, i.item_type, i.item_id, i.name, i.department_name || '', i.quantity, i.price, i.net_amount, +i.priority || 0, i.side_header || '',
+      i.discount_type, i.discount_value, i.discount_amount, i.net_amount,
+      +i.running_cost || 0, +i.extra_deduction || 0, +i.commission_amount || 0, +i.profit_amount || 0,
+      i.commission_profile_name || '', i.commission_rule_source || '', i.commission_status || 'GENERATED',
+      i.commission_approved_at || null, i.commission_paid_at || null, i.commission_hold_reason || null, i.commission_settlement_id || null,
+      i.commission_formula || '', i.commission_formula_values || '', i.commission_group_id || null, i.commission_rule_version || 1
+    ));
+    const lockedCount = items.filter((i:any) => i._commission_locked).length;
+    if (lockedCount) this.audit('commission.recalc.skipped', JSON.stringify({ billId, lockedCount }));
   }
 
 
@@ -500,6 +554,20 @@ export abstract class DatabaseBillingService extends DatabaseCoreService {  crea
         WHERE r.bill_id=? AND ri.test_id IS NOT NULL AND COALESCE(ri.collection_status,'PENDING') <> 'CANCELLED'`).get(billId) as any)?.c || 0;
 
       this.db.prepare("UPDATE bills SET status='CANCELLED', cancelled_at=?, cancel_reason=?, refund_amount=?, refund_mode=?, due=0 WHERE id=?").run(cancelledAt, reason, refundAmount, refundMode, billId);
+
+      // Unpaid commission → CANCELLED; paid commission → REVERSAL_PENDING (no silent wipe)
+      const unpaid = this.db.prepare(`UPDATE bill_items SET commission_status='CANCELLED'
+        WHERE bill_id=? AND COALESCE(commission_amount,0)>0
+          AND UPPER(COALESCE(commission_status,'GENERATED')) IN ('GENERATED','APPROVED','HELD')`).run(billId);
+      const paid = this.db.prepare(`UPDATE bill_items SET commission_status='REVERSAL_PENDING'
+        WHERE bill_id=? AND COALESCE(commission_amount,0)>0
+          AND UPPER(COALESCE(commission_status,''))='PAID'`).run(billId);
+      this.audit('commission.bill.cancel', JSON.stringify({
+        billId,
+        billNo: bill.bill_no,
+        unpaidCancelled: unpaid.changes || 0,
+        paidReversalPending: paid.changes || 0
+      }));
 
       this.db.prepare(`UPDATE reports SET status=CASE WHEN COALESCE(status,'')='APPROVED' THEN 'APPROVED_CANCELLED' ELSE 'CANCELLED' END, remarks=TRIM(COALESCE(remarks,'') || CASE WHEN COALESCE(remarks,'')<>'' THEN ' | ' ELSE '' END || ?), updated_at=? WHERE bill_id=?`)
         .run('Cancelled due to bill cancellation: ' + reason, cancelledAt, billId);

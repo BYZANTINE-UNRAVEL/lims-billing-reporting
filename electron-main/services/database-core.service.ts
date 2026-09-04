@@ -372,6 +372,18 @@ CREATE TABLE IF NOT EXISTS consultant_commission_rules(id INTEGER PRIMARY KEY AU
     );
     CREATE INDEX IF NOT EXISTS idx_bill_items_commission_status ON bill_items(commission_status);
     CREATE INDEX IF NOT EXISTS idx_commission_settlement_consultant ON commission_settlements(consultant_id, settlement_date);`);
+
+    // Backfill legacy cancelled bills that never wrote commission_status
+    this.db.prepare(`UPDATE bill_items
+      SET commission_status='CANCELLED'
+      WHERE bill_id IN (SELECT id FROM bills WHERE UPPER(COALESCE(status,'')) IN ('CANCELLED','CANCELED'))
+        AND COALESCE(commission_amount,0)>0
+        AND UPPER(COALESCE(commission_status,'GENERATED')) IN ('GENERATED','APPROVED','HELD')`).run();
+    this.db.prepare(`UPDATE bill_items
+      SET commission_status='REVERSAL_PENDING'
+      WHERE bill_id IN (SELECT id FROM bills WHERE UPPER(COALESCE(status,'')) IN ('CANCELLED','CANCELED'))
+        AND COALESCE(commission_amount,0)>0
+        AND UPPER(COALESCE(commission_status,''))='PAID'`).run();
   }
 
 
@@ -1936,10 +1948,17 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     const rows = this.db.prepare('SELECT * FROM consultants ORDER BY name').all() as any[];
     const profiles = this.db.prepare('SELECT * FROM consultant_commission_profiles ORDER BY is_default DESC, id').all() as any[];
     const rules = this.db.prepare('SELECT r.*, cp.profile_name commission_profile_name FROM consultant_commission_rules r LEFT JOIN consultant_commission_profiles cp ON cp.id=r.commission_profile_id ORDER BY r.id').all() as any[];
+    const groupAssignments = this.db.prepare(`SELECT a.*, g.name group_name
+      FROM consultant_commission_group_assignments a
+      JOIN commission_groups g ON g.id=a.group_id
+      WHERE a.active=1 AND g.active=1
+      ORDER BY a.priority,a.id`).all() as any[];
     return rows.map(c => ({
       ...c,
       commission_profiles: profiles.filter(p => +p.consultant_id === +c.id).map(p => ({...p, active: p.active !== 0, is_default: p.is_default === 1})),
-      commission_rules: rules.filter(r => +r.consultant_id === +c.id)
+      commission_rules: rules.filter(r => +r.consultant_id === +c.id),
+      commission_groups: groupAssignments.filter(a => +a.consultant_id === +c.id).map(a => ({...a, group_id:+a.group_id, group_name:a.group_name || `Group #${a.group_id}`})),
+      commission_group_ids: groupAssignments.filter(a => +a.consultant_id === +c.id).map(a => Number(a.group_id))
     }));
   }
 
@@ -1977,6 +1996,14 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
           if (r.item_id && (String(r.item_type || '').toUpperCase() === 'TEST' || String(r.item_type || '').toUpperCase() === 'PROFILE')) ruleInsert.run(id, String(r.item_type).toUpperCase(), +r.item_id, action, commissionProfileId);
         }
       }
+      if (Array.isArray(c.commission_group_ids)) {
+        this.db.prepare('DELETE FROM consultant_commission_group_assignments WHERE consultant_id=?').run(id);
+        const assign = this.db.prepare('INSERT OR IGNORE INTO consultant_commission_group_assignments(consultant_id,group_id,priority,active) VALUES(?,?,?,1)');
+        c.commission_group_ids.forEach((groupId:any, index:number) => {
+          const gid = Number(groupId || 0);
+          if (gid > 0) assign.run(id, gid, (index + 1) * 100);
+        });
+      }
     });
     tx();
     return this.listConsultants();
@@ -1994,6 +2021,7 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
 
     if (hasAuditReferences) {
       this.db.prepare('UPDATE consultants SET active=0 WHERE id=?').run(consultantId);
+      this.db.prepare('UPDATE consultant_commission_group_assignments SET active=0 WHERE consultant_id=?').run(consultantId);
       this.audit('consultant.archive', JSON.stringify({ id: consultantId, name: consultant.name, billCount }));
       return { action: 'archived', consultants: this.listConsultants() };
     }
@@ -2001,6 +2029,7 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     const tx = this.db.transaction(() => {
       this.db.prepare('DELETE FROM consultant_commission_rules WHERE consultant_id=?').run(consultantId);
       this.db.prepare('DELETE FROM consultant_commission_profiles WHERE consultant_id=?').run(consultantId);
+      this.db.prepare('DELETE FROM consultant_commission_group_assignments WHERE consultant_id=?').run(consultantId);
       this.db.prepare('DELETE FROM consultant_commissions WHERE consultant_id=?').run(consultantId);
       this.db.prepare('DELETE FROM consultants WHERE id=?').run(consultantId);
     });
@@ -2036,7 +2065,12 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
   }
   protected normalizeCommissionStatus(value:any) {
     const v = String(value || 'GENERATED').toUpperCase();
-    return ['GENERATED','APPROVED','PAID','HELD','CANCELLED'].includes(v) ? v : 'GENERATED';
+    return ['GENERATED','APPROVED','PAID','HELD','CANCELLED','REVERSAL_PENDING'].includes(v) ? v : 'GENERATED';
+  }
+
+  protected isProtectedCommissionStatus(status:any) {
+    const v = String(status || '').toUpperCase();
+    return v === 'APPROVED' || v === 'PAID' || v === 'REVERSAL_PENDING';
   }
   protected isProfileEffective(profile:any, onDate = new Date()) {
     const from = String(profile?.effective_from || '').trim();
@@ -2199,55 +2233,102 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     return this.db.prepare(`SELECT g.*,a.custom_formula,a.custom_rate,a.priority FROM consultant_commission_group_assignments a JOIN commission_groups g ON g.id=a.group_id JOIN commission_group_items gi ON gi.group_id=g.id WHERE a.consultant_id=? AND a.active=1 AND g.active=1 AND gi.item_type=? AND gi.item_id=? AND (g.effective_from IS NULL OR date(g.effective_from)<=date('now','+330 minutes')) AND (g.effective_to IS NULL OR date(g.effective_to)>=date('now','+330 minutes')) ORDER BY a.priority ASC,a.id ASC LIMIT 1`).get(consultantId,itemType,itemId) as any;
   }
 
-  protected computeItemCommission(consultantId:number, item:any, netAmount:number, runningCost:number, beforeDiscountAmount?:number): any {
-    const effectiveNetAmount = Math.max(0, +netAmount || 0);
-    const rawBeforeDiscountAmount = beforeDiscountAmount === undefined || beforeDiscountAmount === null ? effectiveNetAmount : Number(beforeDiscountAmount);
-    const preDiscountAmount = Math.max(effectiveNetAmount, Number.isFinite(rawBeforeDiscountAmount) ? rawBeforeDiscountAmount : effectiveNetAmount);
-    if (!this.commissionAllowedForItem(item)) return { commission_amount:0, extra_deduction:0, profit_amount:+(effectiveNetAmount-runningCost).toFixed(2), commission_profile_name:'No commission', commission_rule_source:'Outsourced disallowed', commission_status:'CANCELLED' };
-    if (!consultantId) return { commission_amount:0, extra_deduction:0, profit_amount:+(effectiveNetAmount-runningCost).toFixed(2), commission_profile_name:'', commission_rule_source:'No consultant', commission_status:'GENERATED' };
-    const itemType = String(item.item_type || '').toUpperCase();
-    const rule = this.db.prepare('SELECT * FROM consultant_commission_rules WHERE consultant_id=? AND item_type=? AND item_id=? ORDER BY id DESC LIMIT 1').get(consultantId, itemType, +item.item_id || 0) as any;
-    if (rule && String(rule.action || '').toUpperCase() === 'NO_COMMISSION') return { commission_amount:0, extra_deduction:0, profit_amount:+(effectiveNetAmount-runningCost).toFixed(2), commission_profile_name:'No commission', commission_rule_source:'Item exception', commission_status:'CANCELLED' };
-    let profile:any = null;
-    let group:any = null;
-    if (rule?.commission_profile_id) profile = this.db.prepare('SELECT * FROM consultant_commission_profiles WHERE id=? AND active=1').get(rule.commission_profile_id) as any;
-    if (!profile && !rule) group = this.resolveCommissionGroup(consultantId,itemType,+item.item_id||0);
+  /** Zero-commission snapshot for a billed item (profile/test line — never child tests). */
+  protected emptyCommissionResult(netAmount:number, runningCost:number, source:string, status:'GENERATED'|'CANCELLED' = 'GENERATED') {
+    return {
+      commission_amount: 0,
+      extra_deduction: 0,
+      profit_amount: +(Math.max(0, netAmount) - Math.max(0, runningCost)).toFixed(2),
+      commission_profile_name: status === 'CANCELLED' ? 'No commission' : '',
+      commission_rule_source: source,
+      commission_status: status,
+      commission_formula: '',
+      commission_formula_values: '',
+      commission_group_id: null,
+      commission_rule_version: 1
+    };
+  }
+
+  protected loadActiveCommissionProfile(profileId:number): any {
+    if (!profileId) return null;
+    const profile = this.db.prepare('SELECT * FROM consultant_commission_profiles WHERE id=? AND active=1').get(profileId) as any;
+    if (!profile || !this.isProfileEffective(profile)) return null;
+    return profile;
+  }
+
+  protected resolveDefaultCommissionProfile(consultantId:number): any {
+    let profile = this.db.prepare('SELECT cp.* FROM consultants c JOIN consultant_commission_profiles cp ON cp.id=c.default_commission_profile_id WHERE c.id=? AND cp.active=1').get(consultantId) as any;
     if (profile && !this.isProfileEffective(profile)) profile = null;
-    if (!profile && !group) profile = this.db.prepare('SELECT cp.* FROM consultants c JOIN consultant_commission_profiles cp ON cp.id=c.default_commission_profile_id WHERE c.id=? AND cp.active=1').get(consultantId) as any;
-    if (profile && !this.isProfileEffective(profile)) profile = null;
-    if (!profile && !group) profile = this.db.prepare('SELECT * FROM consultant_commission_profiles WHERE consultant_id=? AND is_default=1 AND active=1 ORDER BY id LIMIT 1').get(consultantId) as any;
-    if (profile && !this.isProfileEffective(profile)) profile = null;
-    if (!profile && !group) {
+    if (!profile) {
+      profile = this.db.prepare('SELECT * FROM consultant_commission_profiles WHERE consultant_id=? AND is_default=1 AND active=1 ORDER BY id LIMIT 1').get(consultantId) as any;
+      if (profile && !this.isProfileEffective(profile)) profile = null;
+    }
+    if (!profile) {
       const legacy = this.db.prepare('SELECT default_commission_type, default_commission_value FROM consultants WHERE id=?').get(consultantId) as any;
-      if (legacy && (+legacy.default_commission_value || 0) > 0) profile = { profile_name:'Legacy default', commission_type: legacy.default_commission_type || 'PERCENT', commission_value:+legacy.default_commission_value || 0, calculation_base:'GROSS', extra_deduction_type:'NONE', extra_deduction_value:0, discount_basis:'AFTER_DISCOUNT', round_mode:'NONE', fixed_apply_mode:'PER_ITEM', min_commission:0, max_commission:0, status:'GENERATED' };
+      if (legacy && (+legacy.default_commission_value || 0) > 0) {
+        profile = {
+          profile_name: 'Legacy default',
+          commission_type: legacy.default_commission_type || 'PERCENT',
+          commission_value: +legacy.default_commission_value || 0,
+          calculation_base: 'GROSS',
+          extra_deduction_type: 'NONE',
+          extra_deduction_value: 0,
+          discount_basis: 'AFTER_DISCOUNT',
+          round_mode: 'NONE',
+          fixed_apply_mode: 'PER_ITEM',
+          min_commission: 0,
+          max_commission: 0,
+          status: 'GENERATED'
+        };
+      }
     }
-    if (!profile && !group) return { commission_amount:0, extra_deduction:0, profit_amount:+(effectiveNetAmount-runningCost).toFixed(2), commission_profile_name:'', commission_rule_source:'No active profile', commission_status:'GENERATED' };
-    if (group) {
-      const vars=this.commissionFormulaVariables(item,effectiveNetAmount,runningCost,preDiscountAmount);
-      const kind=String(group.calculation_type||'PERCENT_NET').toUpperCase();
-      let commission=0; let formula='';
-      if(kind==='FORMULA') { formula=String(group.custom_formula||group.formula_expression||''); commission=this.evaluateCommissionFormula(formula,vars); }
-      else if(kind==='PERCENT_PROFIT') commission=Math.max(0,vars.PROFIT)*Number(group.custom_rate??group.rate??0)/100;
-      else if(kind==='PERCENT_GROSS') commission=vars.SELLING_PRICE*Number(group.custom_rate??group.rate??0)/100;
-      else if(kind==='FIXED') commission=Number(group.fixed_amount||group.custom_rate||group.rate||0)*Math.max(1,vars.QUANTITY);
-      else commission=vars.NET_AMOUNT*Number(group.custom_rate??group.rate??0)/100;
-      if(Number(group.min_commission||0)>0&&commission>0) commission=Math.max(commission,Number(group.min_commission));
-      if(Number(group.max_commission||0)>0) commission=Math.min(commission,Number(group.max_commission));
-      commission=Math.max(0,+commission.toFixed(2));
-      return {commission_amount:commission,extra_deduction:0,profit_amount:+(effectiveNetAmount-runningCost-commission).toFixed(2),commission_profile_name:group.name||'',commission_rule_source:'Commission group',commission_status:'GENERATED',commission_formula:formula,commission_formula_values:JSON.stringify(vars),commission_group_id:group.id,commission_rule_version:Number(group.version||1)};
-    }
+    return profile;
+  }
+
+  protected applyCommissionFromGroup(group:any, item:any, effectiveNetAmount:number, runningCost:number, preDiscountAmount:number) {
+    const vars = this.commissionFormulaVariables(item, effectiveNetAmount, runningCost, preDiscountAmount);
+    const kind = String(group.calculation_type || 'PERCENT_NET').toUpperCase();
+    let commission = 0;
+    let formula = '';
+    if (kind === 'FORMULA') {
+      formula = String(group.custom_formula || group.formula_expression || '');
+      commission = this.evaluateCommissionFormula(formula, vars);
+    } else if (kind === 'PERCENT_PROFIT') commission = Math.max(0, vars.PROFIT) * Number(group.custom_rate ?? group.rate ?? 0) / 100;
+    else if (kind === 'PERCENT_GROSS') commission = vars.SELLING_PRICE * Number(group.custom_rate ?? group.rate ?? 0) / 100;
+    else if (kind === 'FIXED') commission = Number(group.fixed_amount || group.custom_rate || group.rate || 0) * Math.max(1, vars.QUANTITY);
+    else commission = vars.NET_AMOUNT * Number(group.custom_rate ?? group.rate ?? 0) / 100;
+    if (Number(group.min_commission || 0) > 0 && commission > 0) commission = Math.max(commission, Number(group.min_commission));
+    if (Number(group.max_commission || 0) > 0) commission = Math.min(commission, Number(group.max_commission));
+    commission = Math.max(0, +commission.toFixed(2));
+    return {
+      commission_amount: commission,
+      extra_deduction: 0,
+      profit_amount: +(effectiveNetAmount - runningCost - commission).toFixed(2),
+      commission_profile_name: group.name || '',
+      commission_rule_source: 'Commission group',
+      commission_status: 'GENERATED',
+      commission_formula: formula,
+      commission_formula_values: JSON.stringify(vars),
+      commission_group_id: group.id,
+      commission_rule_version: Number(group.version || 1)
+    };
+  }
+
+  protected applyCommissionFromProfile(profile:any, item:any, effectiveNetAmount:number, runningCost:number, preDiscountAmount:number, ruleSource:string) {
     const discountBasis = this.normalizeDiscountBasis(profile.discount_basis);
     const commissionAmountBase = discountBasis === 'BEFORE_DISCOUNT' ? preDiscountAmount : effectiveNetAmount;
     const baseMode = this.normalizeCalculationBase(profile.calculation_base);
     const deductionType = this.normalizeDeductionType(profile.extra_deduction_type);
-    const extraDeduction = deductionType === 'PERCENT' ? Math.max(0, commissionAmountBase * (+profile.extra_deduction_value || 0) / 100) : deductionType === 'AMOUNT' ? Math.max(0, +profile.extra_deduction_value || 0) : 0;
+    const extraDeduction = deductionType === 'PERCENT'
+      ? Math.max(0, commissionAmountBase * (+profile.extra_deduction_value || 0) / 100)
+      : deductionType === 'AMOUNT' ? Math.max(0, +profile.extra_deduction_value || 0) : 0;
     const commissionBase = Math.max(0, commissionAmountBase - (baseMode === 'GROSS' ? 0 : runningCost) - (baseMode === 'NET_AFTER_COST_DEDUCTION' ? extraDeduction : 0));
     const type = this.normalizeCommissionType(profile.commission_type);
     let commission = 0;
     if (type === 'FIXED') {
       const applyMode = this.normalizeFixedApplyMode(profile.fixed_apply_mode);
       const qty = Math.max(1, +item.quantity || 1);
-      commission = applyMode === 'PER_QUANTITY' ? Math.max(0,+profile.commission_value||0) * qty : Math.max(0,+profile.commission_value||0);
+      commission = applyMode === 'PER_QUANTITY' ? Math.max(0, +profile.commission_value || 0) * qty : Math.max(0, +profile.commission_value || 0);
     } else if (type === 'PERCENT') {
       commission = Math.max(0, commissionBase * (+profile.commission_value || 0) / 100);
     }
@@ -2257,7 +2338,76 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     if (max > 0) commission = Math.min(commission, max);
     commission = this.applyCommissionRounding(commission, profile.round_mode);
     const totalExtra = baseMode === 'NET_AFTER_COST_DEDUCTION' ? extraDeduction : 0;
-    return { commission_amount:+commission.toFixed(2), extra_deduction:+totalExtra.toFixed(2), profit_amount:+(effectiveNetAmount - runningCost - totalExtra - commission).toFixed(2), commission_profile_name:profile.profile_name || '', commission_rule_source: rule ? 'Item override' : 'Default profile', commission_status:this.normalizeCommissionStatus(profile.status) };
+    return {
+      commission_amount: +commission.toFixed(2),
+      extra_deduction: +totalExtra.toFixed(2),
+      profit_amount: +(effectiveNetAmount - runningCost - totalExtra - commission).toFixed(2),
+      commission_profile_name: profile.profile_name || '',
+      commission_rule_source: ruleSource,
+      commission_status: this.normalizeCommissionStatus(profile.status),
+      commission_formula: '',
+      commission_formula_values: '',
+      commission_group_id: null,
+      commission_rule_version: 1
+    };
+  }
+
+  /**
+   * Commission hierarchy (billed item only — never child tests inside a profile):
+   * 1. Item-level No Commission
+   * 2. Item-level Special Commission (USE_PROFILE)
+   * 3. Commission Group
+   * 4. Consultant Default Commission
+   * 5. No Commission (0)
+   */
+  protected computeItemCommission(consultantId:number, item:any, netAmount:number, runningCost:number, beforeDiscountAmount?:number): any {
+    const effectiveNetAmount = Math.max(0, +netAmount || 0);
+    const rawBeforeDiscountAmount = beforeDiscountAmount === undefined || beforeDiscountAmount === null ? effectiveNetAmount : Number(beforeDiscountAmount);
+    const preDiscountAmount = Math.max(effectiveNetAmount, Number.isFinite(rawBeforeDiscountAmount) ? rawBeforeDiscountAmount : effectiveNetAmount);
+
+    // Master hard-block (outsourced with commission_allowed=0)
+    if (!this.commissionAllowedForItem(item)) {
+      return this.emptyCommissionResult(effectiveNetAmount, runningCost, 'Outsourced disallowed', 'CANCELLED');
+    }
+    if (!consultantId) {
+      return this.emptyCommissionResult(effectiveNetAmount, runningCost, 'No consultant');
+    }
+
+    const itemType = String(item.item_type || '').toUpperCase();
+    const itemId = +item.item_id || 0;
+    const rule = this.db.prepare('SELECT * FROM consultant_commission_rules WHERE consultant_id=? AND item_type=? AND item_id=? ORDER BY id DESC LIMIT 1')
+      .get(consultantId, itemType, itemId) as any;
+    const ruleAction = String(rule?.action || '').toUpperCase();
+
+    // 1. Item-level No Commission — highest priority
+    if (rule && ruleAction === 'NO_COMMISSION') {
+      return this.emptyCommissionResult(effectiveNetAmount, runningCost, 'Item no commission', 'CANCELLED');
+    }
+
+    // 2. Item-level Special Commission — overrides group and default
+    if (rule && ruleAction !== 'NO_COMMISSION') {
+      const specialProfile = this.loadActiveCommissionProfile(+rule.commission_profile_id || 0);
+      if (specialProfile) {
+        return this.applyCommissionFromProfile(specialProfile, item, effectiveNetAmount, runningCost, preDiscountAmount, 'Item special rule');
+      }
+      // Special rule exists but profile missing/inactive — do not fall through to group/default
+      return this.emptyCommissionResult(effectiveNetAmount, runningCost, 'Item special rule unavailable');
+    }
+
+    // 3. Commission Group — only when no item-level rule
+    const group = this.resolveCommissionGroup(consultantId, itemType, itemId);
+    if (group) {
+      return this.applyCommissionFromGroup(group, item, effectiveNetAmount, runningCost, preDiscountAmount);
+    }
+
+    // 4. Consultant Default Commission
+    const defaultProfile = this.resolveDefaultCommissionProfile(consultantId);
+    if (defaultProfile) {
+      return this.applyCommissionFromProfile(defaultProfile, item, effectiveNetAmount, runningCost, preDiscountAmount, 'Default profile');
+    }
+
+    // 5. No Commission
+    return this.emptyCommissionResult(effectiveNetAmount, runningCost, 'No commission');
   }
 
   listCommissionEntries(filters:any = {}) {
@@ -2273,8 +2423,14 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     if (to) { where.push('date(b.bill_date) <= date(?)'); params.push(to); }
     if (consultantId) { where.push('b.consultant_id=?'); params.push(consultantId); }
     if (status !== 'ALL') {
-      if (status === 'CANCELLED') where.push("UPPER(COALESCE(b.status,'')) IN ('CANCELLED','CANCELED')");
-      else { where.push("UPPER(COALESCE(b.status,'')) NOT IN ('CANCELLED','CANCELED')"); where.push('UPPER(COALESCE(bi.commission_status,\'GENERATED\'))=?'); params.push(status); }
+      if (status === 'CANCELLED') {
+        where.push("UPPER(COALESCE(bi.commission_status,'GENERATED'))='CANCELLED'");
+      } else if (status === 'REVERSAL_PENDING') {
+        where.push("UPPER(COALESCE(bi.commission_status,''))='REVERSAL_PENDING'");
+      } else {
+        where.push("UPPER(COALESCE(bi.commission_status,'GENERATED'))=?");
+        params.push(status);
+      }
     }
     if (search) {
       const q = `%${search}%`;
@@ -2283,7 +2439,7 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     }
     const rows = this.db.prepare(`SELECT bi.id,bi.bill_id,bi.item_type,bi.item_id,bi.name item_name,bi.quantity,bi.net_amount,
       bi.running_cost,bi.extra_deduction,bi.commission_amount,bi.profit_amount,bi.commission_profile_name,bi.commission_rule_source,
-      CASE WHEN UPPER(COALESCE(b.status,'')) IN ('CANCELLED','CANCELED') THEN 'CANCELLED' ELSE UPPER(COALESCE(bi.commission_status,'GENERATED')) END commission_status,
+      UPPER(COALESCE(bi.commission_status,'GENERATED')) commission_status,
       bi.commission_approved_at,bi.commission_paid_at,bi.commission_hold_reason,bi.commission_settlement_id,
       b.bill_no,b.bill_date,b.total bill_total,b.paid bill_paid,b.due bill_due,b.status bill_status,
       c.id consultant_id,c.name consultant_name,c.clinic consultant_clinic,p.name patient_name
@@ -2293,13 +2449,17 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
       LEFT JOIN patients p ON p.id=b.patient_id
       WHERE ${where.join(' AND ')}
       ORDER BY datetime(b.bill_date) DESC, b.id DESC, bi.id`).all(...params) as any[];
-    const totals:any = { records:rows.length, commission:0, generated:0, approved:0, held:0, paid:0, cancelled:0, billCount:0, consultantCount:0 };
+    const totals:any = { records:rows.length, commission:0, generated:0, approved:0, held:0, paid:0, cancelled:0, reversal_pending:0, billCount:0, consultantCount:0 };
     const bills = new Set<number>(), consultants = new Set<number>();
     for (const r of rows) {
       const amount = Number(r.commission_amount || 0);
-      totals.commission += r.commission_status === 'CANCELLED' ? 0 : amount;
-      const key = String(r.commission_status || 'GENERATED').toLowerCase();
-      if (key in totals) totals[key] += amount;
+      const st = String(r.commission_status || 'GENERATED').toUpperCase();
+      totals.commission += (st === 'CANCELLED' || st === 'REVERSAL_PENDING') ? 0 : amount;
+      if (st === 'REVERSAL_PENDING') totals.reversal_pending += amount;
+      else {
+        const key = st.toLowerCase();
+        if (key in totals) totals[key] += amount;
+      }
       bills.add(Number(r.bill_id)); if (r.consultant_id) consultants.add(Number(r.consultant_id));
     }
     totals.billCount=bills.size; totals.consultantCount=consultants.size;
@@ -2317,7 +2477,8 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     const now = this.nowIst();
     const reason = status === 'HELD' ? String(payload.reason || '').trim() : '';
     this.db.prepare(`UPDATE bill_items SET commission_status=?, commission_approved_at=?, commission_hold_reason=?
-      WHERE id IN (${placeholders}) AND COALESCE(commission_amount,0)>0 AND UPPER(COALESCE(commission_status,'GENERATED')) <> 'PAID'`)
+      WHERE id IN (${placeholders}) AND COALESCE(commission_amount,0)>0
+        AND UPPER(COALESCE(commission_status,'GENERATED')) NOT IN ('PAID','CANCELLED','REVERSAL_PENDING')`)
       .run(status, status === 'APPROVED' ? now : null, reason || null, ...ids);
     this.audit('commission.status', JSON.stringify({ids,status,reason}));
     return this.listCommissionEntries(payload.filters || {});
@@ -2361,6 +2522,252 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
       FROM commission_settlements cs JOIN consultants c ON c.id=cs.consultant_id
       LEFT JOIN commission_settlement_items csi ON csi.settlement_id=cs.id
       WHERE ${where.join(' AND ')} GROUP BY cs.id ORDER BY datetime(cs.settlement_date) DESC,cs.id DESC`).all(...params);
+  }
+
+  getCommissionSettlement(settlementId:number) {
+    this.ensureCommissionSchema();
+    const id = Number(settlementId || 0);
+    if (!id) throw new Error('Settlement id is required.');
+    const header = this.db.prepare(`SELECT cs.*, c.name consultant_name, c.phone consultant_phone, c.clinic consultant_clinic
+      FROM commission_settlements cs
+      JOIN consultants c ON c.id=cs.consultant_id
+      WHERE cs.id=?`).get(id) as any;
+    if (!header) throw new Error('Settlement not found.');
+    const items = this.db.prepare(`SELECT csi.id, csi.amount, bi.id bill_item_id, bi.name item_name, bi.item_type, bi.quantity,
+        bi.net_amount, bi.running_cost, bi.profit_amount, bi.commission_profile_name, bi.commission_rule_source,
+        bi.commission_status, b.bill_no, b.bill_date, p.name patient_name
+      FROM commission_settlement_items csi
+      JOIN bill_items bi ON bi.id=csi.bill_item_id
+      JOIN bills b ON b.id=bi.bill_id
+      LEFT JOIN patients p ON p.id=b.patient_id
+      WHERE csi.settlement_id=?
+      ORDER BY datetime(b.bill_date), b.bill_no, bi.id`).all(id) as any[];
+    return { ...header, items, item_count: items.length };
+  }
+
+  /**
+   * Commission reports for PDF/Excel export.
+   * report_type: CONSULTANT_SUMMARY | BILL_DETAILS | PENDING | HELD | SETTLEMENT_HISTORY | CANCELLED_REVERSAL | PROFIT
+   */
+  getCommissionReport(filters: any = {}) {
+    this.ensureCommissionSchema();
+    const reportType = String(filters.report_type || filters.type || 'CONSULTANT_SUMMARY').toUpperCase();
+    const from = String(filters.from || filters.fromDate || '').trim();
+    const to = String(filters.to || filters.toDate || '').trim();
+    const consultantId = Number(filters.consultant_id || filters.consultantId || 0);
+    const periodLabel = [from || '…', to || '…'].join(' to ');
+
+    if (reportType === 'SETTLEMENT_HISTORY') {
+      const settlements = this.listCommissionSettlements({ from, to });
+      const filtered = consultantId
+        ? settlements.filter((s: any) => Number(s.consultant_id) === consultantId)
+        : settlements;
+      const totalAmount = +filtered.reduce((s: number, r: any) => s + Number(r.amount || 0), 0).toFixed(2);
+      return {
+        report_type: reportType,
+        title: 'Paid Settlement History',
+        period: periodLabel,
+        columns: ['Settlement No', 'Date', 'Consultant', 'Items', 'Mode', 'Reference', 'Amount'],
+        rows: filtered.map((s: any) => ({
+          settlement_no: s.settlement_no,
+          settlement_date: s.settlement_date,
+          consultant_name: s.consultant_name,
+          item_count: s.item_count,
+          payment_mode: s.payment_mode,
+          reference_no: s.reference_no || '',
+          amount: +Number(s.amount || 0).toFixed(2)
+        })),
+        totals: { records: filtered.length, amount: totalAmount }
+      };
+    }
+
+    const statusMap: Record<string, string> = {
+      PENDING: 'GENERATED',
+      HELD: 'HELD',
+      BILL_DETAILS: 'ALL',
+      CONSULTANT_SUMMARY: 'ALL',
+      PROFIT: 'ALL',
+      CANCELLED_REVERSAL: 'CANCELLED_REVERSAL'
+    };
+
+    let entries: any;
+    if (reportType === 'CANCELLED_REVERSAL') {
+      const cancelled = this.listCommissionEntries({ from, to, consultant_id: consultantId, status: 'CANCELLED', search: filters.search });
+      const reversal = this.listCommissionEntries({ from, to, consultant_id: consultantId, status: 'REVERSAL_PENDING', search: filters.search });
+      entries = {
+        rows: [...(cancelled.rows || []), ...(reversal.rows || [])],
+        totals: {
+          records: (cancelled.rows?.length || 0) + (reversal.rows?.length || 0),
+          cancelled: cancelled.totals?.cancelled || 0,
+          reversal_pending: reversal.totals?.reversal_pending || 0,
+          commission: +((cancelled.totals?.cancelled || 0) + (reversal.totals?.reversal_pending || 0)).toFixed(2)
+        }
+      };
+    } else {
+      const status = statusMap[reportType] || 'ALL';
+      entries = this.listCommissionEntries({
+        from, to, consultant_id: consultantId, status, search: filters.search
+      });
+      if (['CONSULTANT_SUMMARY', 'BILL_DETAILS', 'PROFIT'].includes(reportType)) {
+        entries = {
+          ...entries,
+          rows: (entries.rows || []).filter((r: any) => {
+            const st = String(r.commission_status || '').toUpperCase();
+            return st !== 'CANCELLED' && st !== 'REVERSAL_PENDING';
+          })
+        };
+        const commission = +entries.rows.reduce((s: number, r: any) => s + Number(r.commission_amount || 0), 0).toFixed(2);
+        entries.totals = { ...entries.totals, records: entries.rows.length, commission };
+      }
+    }
+
+    const rows = entries.rows || [];
+
+    if (reportType === 'CONSULTANT_SUMMARY') {
+      const map = new Map<string, any>();
+      for (const r of rows) {
+        const key = String(r.consultant_id || 0);
+        const cur = map.get(key) || {
+          consultant_id: r.consultant_id || 0,
+          consultant_name: r.consultant_name || 'No consultant',
+          clinic: r.consultant_clinic || '',
+          entries: 0,
+          bills: new Set<number>(),
+          net_amount: 0,
+          running_cost: 0,
+          commission_amount: 0,
+          profit_amount: 0,
+          generated: 0,
+          approved: 0,
+          held: 0,
+          paid: 0
+        };
+        cur.entries += 1;
+        cur.bills.add(Number(r.bill_id));
+        cur.net_amount += Number(r.net_amount || 0);
+        cur.running_cost += Number(r.running_cost || 0);
+        cur.commission_amount += Number(r.commission_amount || 0);
+        cur.profit_amount += Number(r.profit_amount || 0);
+        const st = String(r.commission_status || 'GENERATED').toLowerCase();
+        if (st in cur) cur[st] += Number(r.commission_amount || 0);
+        map.set(key, cur);
+      }
+      const summaryRows = Array.from(map.values()).map((r: any) => ({
+        consultant_name: r.consultant_name,
+        clinic: r.clinic,
+        entries: r.entries,
+        bill_count: r.bills.size,
+        net_amount: +r.net_amount.toFixed(2),
+        running_cost: +r.running_cost.toFixed(2),
+        commission_amount: +r.commission_amount.toFixed(2),
+        profit_amount: +r.profit_amount.toFixed(2),
+        generated: +r.generated.toFixed(2),
+        approved: +r.approved.toFixed(2),
+        held: +r.held.toFixed(2),
+        paid: +r.paid.toFixed(2)
+      })).sort((a, b) => a.consultant_name.localeCompare(b.consultant_name));
+      return {
+        report_type: reportType,
+        title: 'Consultant-wise Commission Summary',
+        period: periodLabel,
+        columns: ['Consultant', 'Clinic', 'Entries', 'Bills', 'Net', 'Running Cost', 'Commission', 'Profit', 'Pending', 'Approved', 'Held', 'Paid'],
+        rows: summaryRows,
+        totals: {
+          records: summaryRows.length,
+          commission: +summaryRows.reduce((s: number, r: any) => s + r.commission_amount, 0).toFixed(2),
+          net_amount: +summaryRows.reduce((s: number, r: any) => s + r.net_amount, 0).toFixed(2),
+          running_cost: +summaryRows.reduce((s: number, r: any) => s + r.running_cost, 0).toFixed(2),
+          profit_amount: +summaryRows.reduce((s: number, r: any) => s + r.profit_amount, 0).toFixed(2)
+        }
+      };
+    }
+
+    if (reportType === 'BILL_DETAILS') {
+      const map = new Map<number, any>();
+      for (const r of rows) {
+        const billId = Number(r.bill_id);
+        const cur = map.get(billId) || {
+          bill_id: billId,
+          bill_no: r.bill_no,
+          bill_date: r.bill_date,
+          patient_name: r.patient_name || '',
+          consultant_name: r.consultant_name || 'No consultant',
+          items: 0,
+          net_amount: 0,
+          running_cost: 0,
+          commission_amount: 0,
+          profit_amount: 0
+        };
+        cur.items += 1;
+        cur.net_amount += Number(r.net_amount || 0);
+        cur.running_cost += Number(r.running_cost || 0);
+        cur.commission_amount += Number(r.commission_amount || 0);
+        cur.profit_amount += Number(r.profit_amount || 0);
+        map.set(billId, cur);
+      }
+      const billRows = Array.from(map.values()).map((r: any) => ({
+        ...r,
+        net_amount: +r.net_amount.toFixed(2),
+        running_cost: +r.running_cost.toFixed(2),
+        commission_amount: +r.commission_amount.toFixed(2),
+        profit_amount: +r.profit_amount.toFixed(2)
+      }));
+      return {
+        report_type: reportType,
+        title: 'Bill-wise Commission Details',
+        period: periodLabel,
+        columns: ['Bill No', 'Date', 'Patient', 'Consultant', 'Items', 'Net', 'Running Cost', 'Commission', 'Profit'],
+        rows: billRows,
+        detail_rows: rows,
+        totals: {
+          records: billRows.length,
+          commission: +billRows.reduce((s: number, r: any) => s + r.commission_amount, 0).toFixed(2),
+          net_amount: +billRows.reduce((s: number, r: any) => s + r.net_amount, 0).toFixed(2),
+          profit_amount: +billRows.reduce((s: number, r: any) => s + r.profit_amount, 0).toFixed(2)
+        }
+      };
+    }
+
+    const titles: Record<string, string> = {
+      PENDING: 'Pending Approval Commission List',
+      HELD: 'Held Commission List',
+      CANCELLED_REVERSAL: 'Cancelled / Reversal Pending Commission',
+      PROFIT: 'Profit Report (with Commission Deduction)'
+    };
+
+    const detailRows = rows.map((r: any) => ({
+      bill_no: r.bill_no,
+      bill_date: r.bill_date,
+      patient_name: r.patient_name || '',
+      consultant_name: r.consultant_name || 'No consultant',
+      item_name: r.item_name,
+      item_type: r.item_type,
+      net_amount: +Number(r.net_amount || 0).toFixed(2),
+      running_cost: +Number(r.running_cost || 0).toFixed(2),
+      commission_amount: +Number(r.commission_amount || 0).toFixed(2),
+      profit_amount: +Number(r.profit_amount || 0).toFixed(2),
+      commission_rule_source: r.commission_rule_source || '',
+      commission_profile_name: r.commission_profile_name || '',
+      commission_status: r.commission_status,
+      hold_reason: r.commission_hold_reason || ''
+    }));
+
+    return {
+      report_type: reportType,
+      title: titles[reportType] || 'Commission Report',
+      period: periodLabel,
+      columns: reportType === 'PROFIT'
+        ? ['Bill No', 'Date', 'Patient', 'Consultant', 'Item', 'Net', 'Running Cost', 'Commission', 'Profit', 'Status']
+        : ['Bill No', 'Date', 'Patient', 'Consultant', 'Item', 'Net', 'Commission', 'Rule', 'Status'],
+      rows: detailRows,
+      totals: {
+        records: detailRows.length,
+        commission: +detailRows.reduce((s: number, r: any) => s + r.commission_amount, 0).toFixed(2),
+        net_amount: +detailRows.reduce((s: number, r: any) => s + r.net_amount, 0).toFixed(2),
+        running_cost: +detailRows.reduce((s: number, r: any) => s + r.running_cost, 0).toFixed(2),
+        profit_amount: +detailRows.reduce((s: number, r: any) => s + r.profit_amount, 0).toFixed(2)
+      }
+    };
   }
 
   calculateBillCommission(payload:any) {
