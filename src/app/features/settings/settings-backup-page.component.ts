@@ -100,6 +100,19 @@ import { dateRangePresets, matchesDateRange, openNativeDatePicker, DATE_RANGE_FI
             <label *ngFor="let f of patientFieldOptions"><input type="checkbox" [checked]="isRequired('patient.requiredFields', f.key)" (change)="toggleRequired('patient.requiredFields', f.key, $event)"> {{f.label}}</label>
           </div>
         </div>
+        <div class="config-block">
+          <div class="config-head"><b>Patient field capitalization</b><span class="muted">Applies to billing entry and saved patient text fields</span></div>
+          <div class="form-grid">
+            <label>
+              <span>Patient fields caps</span>
+              <select [(ngModel)]="settingsForm['patient.fieldsCaps']">
+                <option value="off">As entered (no caps)</option>
+                <option value="upper">UPPERCASE</option>
+              </select>
+            </label>
+          </div>
+          <p class="settings-subtitle">When UPPERCASE is on, name, title, guardian, address and history are stored in caps. Age, mobile, email and DOB are unchanged.</p>
+        </div>
         <button class="btn primary" (click)="saveSettings()">Save Patient Config</button>
       </mat-card>
 
@@ -107,6 +120,29 @@ import { dateRangePresets, matchesDateRange, openNativeDatePicker, DATE_RANGE_FI
         <div class="panel-title"><h3>Billing Validation</h3><span class="status-pill">Required fields</span></div>
         <div class="check-grid">
           <label *ngFor="let f of billingFieldOptions"><input type="checkbox" [checked]="isRequired('billing.requiredFields', f.key)" (change)="toggleRequired('billing.requiredFields', f.key, $event)"> {{f.label}}</label>
+        </div>
+        <div class="config-block" style="margin-top:14px">
+          <div class="config-head">
+            <b>Billing Edit Permissions</b>
+            <span class="muted">Applies only when Quick Reporting is ON. Default keeps today’s lock after finished quick reports.</span>
+          </div>
+          <p class="settings-subtitle">When Quick Reporting is OFF these toggles are ignored. Cancelled bills stay read-only.</p>
+          <div class="form-grid">
+            <label>
+              <span>Allow item edits after finished quick reports</span>
+              <select [(ngModel)]="settingsForm['billing.edit.allowItemsAfterWorkflow']">
+                <option value="false">Disable (default lock)</option>
+                <option value="true">Enable (add/edit unfinished only; finished lines stay locked)</option>
+              </select>
+            </label>
+            <label>
+              <span>Allow patient / consultant edits after finished quick reports</span>
+              <select [(ngModel)]="settingsForm['billing.edit.allowPatientAfterWorkflow']">
+                <option value="false">Disable (default lock)</option>
+                <option value="true">Enable (patient + consultant editable)</option>
+              </select>
+            </label>
+          </div>
         </div>
         <button class="btn primary" (click)="saveSettings()">Save Billing Config</button>
       </mat-card>
@@ -591,6 +627,18 @@ export class SettingsBackupPageComponent implements OnInit {
     if (this.settingsForm['backup.onClose'] == null || this.settingsForm['backup.onClose'] === '') this.settingsForm['backup.onClose'] = 'true';
     if (this.settingsForm['backup.onStart'] == null || this.settingsForm['backup.onStart'] === '') this.settingsForm['backup.onStart'] = 'false';
     this.normalizeBackupInterval();
+    this.applyBillingEditPermissionDefaults();
+  }
+  private applyBillingEditPermissionDefaults(){
+    if (this.settingsForm['billing.edit.allowItemsAfterWorkflow'] == null || this.settingsForm['billing.edit.allowItemsAfterWorkflow'] === '') {
+      this.settingsForm['billing.edit.allowItemsAfterWorkflow'] = 'false';
+    }
+    if (this.settingsForm['billing.edit.allowPatientAfterWorkflow'] == null || this.settingsForm['billing.edit.allowPatientAfterWorkflow'] === '') {
+      this.settingsForm['billing.edit.allowPatientAfterWorkflow'] = 'false';
+    }
+    if (this.settingsForm['patient.fieldsCaps'] == null || this.settingsForm['patient.fieldsCaps'] === '') {
+      this.settingsForm['patient.fieldsCaps'] = 'off';
+    }
   }
   setBackupInterval(minutes: number){
     this.settingsForm['backup.intervalMinutes'] = String(Math.max(5, Math.round(Number(minutes) || 60)));
@@ -672,9 +720,8 @@ export class SettingsBackupPageComponent implements OnInit {
   nextBackupPage(){ this.backupPage.set(Math.min(this.backupPageCount(),this.backupPage()+1)); }
   clearBackupRange(){ this.backupFrom=''; this.backupTo=''; this.resetBackupPage(); }
   openDatePicker(event: Event) { openNativeDatePicker(event); }
-  setBackupDatePreset(key: keyof ReturnType<typeof dateRangePresets>) { const range = this.backupDatePresets()[key]; this.backupFrom = range.from; this.backupTo = range.to; this.resetBackupPage(); }
-  private backupDatePresets() { return dateRangePresets(DateTimeSettingsService.nowInputValue()); }
-  private matchesBackupPreset(key: keyof ReturnType<typeof dateRangePresets>) { return matchesDateRange(this.backupFrom, this.backupTo, this.backupDatePresets()[key]); }
+  setBackupDatePreset(key: keyof ReturnType<typeof dateRangePresets>) { const range = dateRangePresets()[key]; this.backupFrom = range.from; this.backupTo = range.to; this.resetBackupPage(); }
+  private matchesBackupPreset(key: keyof ReturnType<typeof dateRangePresets>) { return matchesDateRange(this.backupFrom, this.backupTo, dateRangePresets()[key]); }
   isBackupTodayRange() { return this.matchesBackupPreset('today'); }
   isBackupPreviousDayRange() { return this.matchesBackupPreset('previousDay'); }
   isBackupCurrentMonthRange() { return this.matchesBackupPreset('currentMonth'); }

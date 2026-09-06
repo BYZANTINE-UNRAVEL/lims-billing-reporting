@@ -98,16 +98,28 @@ CREATE INDEX IF NOT EXISTS idx_quick_barcode_sample_test ON quick_reporting_barc
       item.collection_datetime = saved?.collection_datetime || item.collection_datetime || '';
       item.barcode_generated = saved?.barcode_generated ? 1 : (item.barcode_generated ? 1 : 0);
       item.barcode_generated_at = saved?.barcode_generated_at || item.barcode_generated_at || '';
-      item.result_value = saved?.result_value ?? item.result_value ?? '';
-      item.raw_result_value = saved?.raw_result_value ?? item.raw_result_value ?? '';
-      item.transformed_result_value = saved?.transformed_result_value ?? item.transformed_result_value ?? '';
-      item.result_updated_at = saved?.result_updated_at || item.result_updated_at || '';
-      item.result_updated_date = saved?.result_updated_date || item.result_updated_date || '';
-      item.result_updated_time = saved?.result_updated_time || item.result_updated_time || '';
-      item.result_source = saved?.result_source || item.result_source || '';
-      item.result_equipment_id = saved?.result_equipment_id || item.result_equipment_id || '';
-      item.result_analyzer_code = saved?.result_analyzer_code || item.result_analyzer_code || '';
-      if (saved?.result_value !== undefined && saved?.result_value !== null && String(item.result_value || '').trim()) item.final_result_source = item.final_result_source || 'ANALYZER';
+      // Analyzer API seeds empty results only. Never overwrite a typed/saved value
+      // (edit finished / manual correction must win over instrument store).
+      const existingResult = item.result_value;
+      const hasExistingResult = existingResult !== undefined && existingResult !== null && String(existingResult).trim() !== '';
+      const analyzerResult = saved?.result_value;
+      const hasAnalyzerResult = analyzerResult !== undefined && analyzerResult !== null && String(analyzerResult).trim() !== '';
+      if (!hasExistingResult && hasAnalyzerResult) {
+        item.result_value = analyzerResult;
+        if (!item.final_result_source || String(item.final_result_source).toUpperCase() === 'MANUAL') {
+          item.final_result_source = 'ANALYZER';
+        }
+      } else if (!hasExistingResult) {
+        item.result_value = existingResult ?? '';
+      }
+      item.raw_result_value = item.raw_result_value || saved?.raw_result_value || '';
+      item.transformed_result_value = item.transformed_result_value || saved?.transformed_result_value || '';
+      item.result_updated_at = item.result_updated_at || saved?.result_updated_at || '';
+      item.result_updated_date = item.result_updated_date || saved?.result_updated_date || '';
+      item.result_updated_time = item.result_updated_time || saved?.result_updated_time || '';
+      item.result_source = item.result_source || saved?.result_source || '';
+      item.result_equipment_id = item.result_equipment_id || saved?.result_equipment_id || '';
+      item.result_analyzer_code = item.result_analyzer_code || saved?.result_analyzer_code || '';
     }
     return items;
   }

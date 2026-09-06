@@ -8,21 +8,6 @@ export function isoDate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-export type DateRangePresetBase = Date | string | null | undefined;
-
-function presetBaseDate(value?: DateRangePresetBase): Date {
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
-  }
-  const raw = String(value ?? '').trim();
-  const wall = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (wall) return new Date(Number(wall[1]), Number(wall[2]) - 1, Number(wall[3]));
-  const parsed = new Date(raw || Date.now());
-  if (!Number.isNaN(parsed.getTime())) return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
-  const fallback = new Date();
-  return new Date(fallback.getFullYear(), fallback.getMonth(), fallback.getDate());
-}
-
 export function openNativeDatePicker(event: Event): void {
   const input = event.currentTarget as HTMLInputElement | null;
   if (!input || input.disabled) return;
@@ -34,8 +19,8 @@ export function openNativeDatePicker(event: Event): void {
   }
 }
 
-export function dateRangePresets(baseDate?: DateRangePresetBase) {
-  const today = presetBaseDate(baseDate);
+export function dateRangePresets() {
+  const today = new Date();
   const previous = new Date(today);
   previous.setDate(today.getDate() - 1);
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);

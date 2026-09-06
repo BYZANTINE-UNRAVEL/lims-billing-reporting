@@ -9,6 +9,8 @@ export abstract class DatabaseBillingService extends DatabaseCoreService {  crea
       const billId = Number(this.db.prepare('INSERT INTO bills(bill_no,patient_id,consultant_id,bill_date,subtotal,discount,discount_type,discount_value,total,paid,due,payment_mode,round_mode,round_off,cash_received,cash_return,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
         .run(billNo, patientId, payload.consultant_id || null, this.nowIst(), data.subtotal, data.finalDiscount, data.discountType, data.discountValue, data.total, 0, data.total, data.paymentMode, data.roundMode, data.roundOff, 0, 0, data.notes).lastInsertRowid);
       this.replaceBillItems(billId, data.preparedItems);
+      const patientRow = this.db.prepare('SELECT * FROM patients WHERE id=?').get(+patientId) as any;
+      this.setBillPatientSnapshot(billId, this.buildPatientSnapshot(payload.patient || patientRow));
       // Quick Reporting must stay isolated from the normal lab workflow.
       // In quick mode billing creates only bill/bill_items; Report Typing reads those directly.
       if (!this.isQuickReportingEnabled()) {
@@ -25,16 +27,26 @@ export abstract class DatabaseBillingService extends DatabaseCoreService {  crea
     this.ensureBillingSchema();
     const billId = Number(payload.id || 0);
     if (!billId) throw new Error('Bill id is required for update.');
-    const existing = this.db.prepare('SELECT bill_no FROM bills WHERE id=?').get(billId) as any;
+    const existing = this.db.prepare('SELECT bill_no,consultant_id,patient_id,notes,payment_mode FROM bills WHERE id=?').get(billId) as any;
     if (!existing) throw new Error('Bill not found.');
-    this.assertBillEditableForClinicalWorkflow(billId);
+    const data = this.prepareBillPayload({ ...payload, paid: 0, cash_received: 0 });
+    const itemsChanging = this.billItemsChanged(billId, data.preparedItems);
+    const patientChanging = this.billPatientOrConsultantChanging(billId, payload, existing);
+    this.assertBillUpdateAllowed(billId, {
+      itemsChanging,
+      patientChanging,
+      nextItems: data.preparedItems,
+      nextDiscountType: data.discountType,
+      nextDiscountValue: data.discountValue,
+    });
     const tx = this.db.transaction(() => {
       const patientId = this.savePatient(payload.patient);
-      const data = this.prepareBillPayload({ ...payload, paid: 0, cash_received: 0 });
       this.replaceBillItems(billId, data.preparedItems);
       this.db.prepare('UPDATE bills SET patient_id=?,consultant_id=?,subtotal=?,discount=?,discount_type=?,discount_value=?,total=?,payment_mode=?,round_mode=?,round_off=?,cash_received=?,cash_return=?,notes=? WHERE id=?')
         .run(patientId, payload.consultant_id || null, data.subtotal, data.finalDiscount, data.discountType, data.discountValue, data.total, payload.payment_mode || 'Cash', data.roundMode, data.roundOff, 0, 0, data.notes, billId);
       this.recalculateBillPayment(billId);
+      const patientRow = this.db.prepare('SELECT * FROM patients WHERE id=?').get(+patientId) as any;
+      this.setBillPatientSnapshot(billId, this.buildPatientSnapshot(payload.patient || patientRow));
       // Quick Reporting must not rebuild/create Pending Request, Collection, or normal report rows.
       if (!this.isQuickReportingEnabled()) {
         this.rebuildReportFromBill(billId);
@@ -44,6 +56,217 @@ export abstract class DatabaseBillingService extends DatabaseCoreService {  crea
       return billId;
     });
     return this.getBill(tx());
+  }
+
+  protected isBillingEditSettingEnabled(key: string): boolean {
+    return String(this.getSetting(key, 'false')).toLowerCase() === 'true';
+  }
+
+  protected assertBillUpdateAllowed(billId: number, opts: {
+    itemsChanging: boolean;
+    patientChanging: boolean;
+    nextItems: any[];
+    nextDiscountType?: string;
+    nextDiscountValue?: number;
+  }) {
+    const unsettled = this.isBillFullyUnsettled(billId);
+    const billDiscountChanging = this.billDiscountChanged(billId, opts.nextDiscountType, opts.nextDiscountValue);
+    const rateOnly = opts.itemsChanging && this.billItemsOnlyRateOrDiscountChanged(billId, opts.nextItems);
+    const pricingOnly = (rateOnly || (!opts.itemsChanging && billDiscountChanging)) && !opts.patientChanging;
+
+    // Once any receipt / part payment exists, rate and all discounts are locked.
+    if (!unsettled) {
+      if (opts.itemsChanging && this.billItemsRateOrDiscountChanged(billId, opts.nextItems)) {
+        throw new Error('Rate and discount cannot be edited after a receipt or part payment is recorded for this bill.');
+      }
+      if (billDiscountChanging) {
+        throw new Error('Bill discount cannot be edited after a receipt or part payment is recorded for this bill.');
+      }
+    }
+
+    if (!this.isQuickReportingEnabled()) {
+      // Unsettled bills may still change rates/discounts even after collection/report work started.
+      if (!(unsettled && pricingOnly)) this.assertBillEditableForClinicalWorkflow(billId);
+      return;
+    }
+    // Quick Reporting: default whole-bill lock when finished items exist, unless opt-in settings unlock parts.
+    const allowItems = this.isBillingEditSettingEnabled('billing.edit.allowItemsAfterWorkflow');
+    const allowPatient = this.isBillingEditSettingEnabled('billing.edit.allowPatientAfterWorkflow');
+    if (opts.itemsChanging) {
+      if (unsettled && rateOnly) {
+        // Allow rate/discount edits on fully unsettled bills (no receipt yet).
+        this.assertQuickBillFinishedItemsPreserved(billId, opts.nextItems, { allowRateEdit: true });
+      } else if (allowItems) {
+        this.assertQuickBillFinishedItemsPreserved(billId, opts.nextItems, { allowRateEdit: false });
+      } else {
+        this.assertQuickBillFullyPending(billId);
+      }
+    }
+    if (opts.patientChanging && !allowPatient) {
+      this.assertQuickBillFullyPending(billId);
+    }
+    if (!opts.itemsChanging && !opts.patientChanging && !allowItems && !allowPatient) {
+      // Unsettled bill-level discount-only edits stay allowed; other fields follow quick lock.
+      if (!(unsettled && billDiscountChanging)) {
+        this.assertQuickBillFullyPending(billId);
+      }
+    }
+  }
+
+  protected billDiscountChanged(billId: number, nextDiscountType?: string, nextDiscountValue?: number): boolean {
+    const row = this.db.prepare('SELECT discount_type,discount_value FROM bills WHERE id=?').get(billId) as any;
+    if (!row) return false;
+    if (this.normalizeBillDiscountType(nextDiscountType) !== this.normalizeBillDiscountType(row.discount_type)) return true;
+    return (+(nextDiscountValue ?? 0) || 0) !== (+row.discount_value || 0);
+  }
+
+  protected billHasReceipts(billId: number): boolean {
+    return +((this.db.prepare('SELECT COUNT(*) c FROM receipts WHERE bill_id=?').get(billId) as any)?.c || 0) > 0;
+  }
+
+  /** Fully unsettled = no receipts created and paid amount is still zero. */
+  protected isBillFullyUnsettled(billId: number): boolean {
+    if (this.billHasReceipts(billId)) return false;
+    const paid = +((this.db.prepare('SELECT COALESCE(paid,0) paid FROM bills WHERE id=?').get(billId) as any)?.paid || 0);
+    return paid <= 0;
+  }
+
+  /** True when item set/ids/qty are unchanged and only price or line discount fields differ. */
+  protected billItemsOnlyRateOrDiscountChanged(billId: number, nextItems: any[]): boolean {
+    const current = this.db.prepare('SELECT item_type,item_id,name,quantity,price,discount_type,discount_value,discount_amount,net_amount,priority FROM bill_items WHERE bill_id=? ORDER BY priority,name,id').all(billId) as any[];
+    const next = Array.isArray(nextItems) ? nextItems : [];
+    if (current.length !== next.length) return false;
+    const keyOf = (r: any) => `${String(r.item_type || '').toUpperCase()}:${+r.item_id || 0}`;
+    const currentKeys = current.map(keyOf).sort();
+    const nextKeys = next.map(keyOf).sort();
+    if (JSON.stringify(currentKeys) !== JSON.stringify(nextKeys)) return false;
+    for (const row of current) {
+      const match = next.find((n: any) => keyOf(n) === keyOf(row));
+      if (!match) return false;
+      if ((+match.quantity || 0) !== (+row.quantity || 0)) return false;
+    }
+    // Same lines/qty — any remaining difference is rate/discount (or equivalent net).
+    return this.billItemsChanged(billId, next);
+  }
+
+  /** True if any line's price or discount fields differ from the saved bill. */
+  protected billItemsRateOrDiscountChanged(billId: number, nextItems: any[]): boolean {
+    const current = this.db.prepare('SELECT item_type,item_id,price,discount_type,discount_value FROM bill_items WHERE bill_id=?').all(billId) as any[];
+    const next = Array.isArray(nextItems) ? nextItems : [];
+    const keyOf = (r: any) => `${String(r.item_type || '').toUpperCase()}:${+r.item_id || 0}`;
+    for (const row of current) {
+      const match = next.find((n: any) => keyOf(n) === keyOf(row));
+      if (!match) continue;
+      if ((+match.price || 0) !== (+row.price || 0)) return true;
+      if (this.normalizeBillDiscountType(match.discount_type) !== this.normalizeBillDiscountType(row.discount_type)) return true;
+      if ((+match.discount_value || 0) !== (+row.discount_value || 0)) return true;
+    }
+    // New lines also count as rate entry after payment — block adding priced items with different rates via this check only when matching ids; structural add/remove is handled elsewhere.
+    for (const row of next) {
+      const match = current.find((c: any) => keyOf(c) === keyOf(row));
+      if (!match) continue;
+      if ((+row.price || 0) !== (+match.price || 0)) return true;
+      if (this.normalizeBillDiscountType(row.discount_type) !== this.normalizeBillDiscountType(match.discount_type)) return true;
+      if ((+row.discount_value || 0) !== (+match.discount_value || 0)) return true;
+    }
+    return false;
+  }
+
+  protected billItemsChanged(billId: number, nextItems: any[]): boolean {
+    const current = this.db.prepare('SELECT item_type,item_id,name,quantity,price,discount_type,discount_value,discount_amount,net_amount,priority FROM bill_items WHERE bill_id=? ORDER BY priority,name,id').all(billId) as any[];
+    const norm = (rows: any[]) => rows.map((r: any) => ({
+      item_type: String(r.item_type || '').toUpperCase(),
+      item_id: +r.item_id || 0,
+      name: String(r.name || ''),
+      quantity: +r.quantity || 0,
+      price: +r.price || 0,
+      discount_type: this.normalizeBillDiscountType(r.discount_type),
+      discount_value: +r.discount_value || 0,
+      discount_amount: +r.discount_amount || 0,
+      net_amount: +r.net_amount || 0,
+      priority: +r.priority || 0
+    }));
+    return JSON.stringify(norm(current)) !== JSON.stringify(norm(nextItems || []));
+  }
+
+  protected billPatientOrConsultantChanging(billId: number, payload: any, existing: any): boolean {
+    const nextConsultant = payload.consultant_id || null;
+    const prevConsultant = existing?.consultant_id || null;
+    if (String(nextConsultant || '') !== String(prevConsultant || '')) return true;
+    const snap = (() => {
+      try {
+        const raw = (this.db.prepare('SELECT patient_snapshot_json FROM bills WHERE id=?').get(billId) as any)?.patient_snapshot_json;
+        return raw ? JSON.parse(String(raw)) : {};
+      } catch { return {}; }
+    })();
+    const p = payload.patient || {};
+    const keys = ['title','name','dob','age','age_value','age_unit','gender','relation_type','guardian_name','guardian_mobile','mobile','email','address','history'];
+    return keys.some((k) => String(p[k] ?? '').trim() !== String(snap[k] ?? '').trim());
+  }
+
+  protected finishedQuickTestIdsForBill(billId: number): Set<number> {
+    this.ensureQuickReportingSchema();
+    const rows = this.db.prepare(`SELECT DISTINCT qri.test_id
+      FROM quick_reports qr
+      JOIN quick_report_items qri ON qri.quick_report_id=qr.id
+      WHERE qr.bill_id=?
+        AND UPPER(COALESCE(qr.status,'FINISHED'))='FINISHED'
+        AND qri.test_id IS NOT NULL`).all(billId) as any[];
+    return new Set(rows.map((r: any) => +r.test_id).filter(Boolean));
+  }
+
+  protected profileTestIds(profileId: number): number[] {
+    return (this.db.prepare('SELECT test_id FROM profile_tests WHERE profile_id=?').all(profileId) as any[])
+      .map((r: any) => +r.test_id).filter(Boolean);
+  }
+
+  protected billItemIsQuickFinished(item: any, finishedTestIds: Set<number>): boolean {
+    const type = String(item?.item_type || 'TEST').toUpperCase();
+    const id = +item?.item_id || 0;
+    if (!id || !finishedTestIds.size) return false;
+    if (type === 'PROFILE') return this.profileTestIds(id).some((tid) => finishedTestIds.has(tid));
+    return finishedTestIds.has(id);
+  }
+
+  /** Align legacy bill discount labels with prepareBillPayload (amount → VALUE). */
+  protected normalizeBillDiscountType(value: any): 'PERCENT' | 'VALUE' {
+    const raw = String(value || 'VALUE').trim().toUpperCase();
+    if (raw === 'PERCENT' || raw === '%') return 'PERCENT';
+    return 'VALUE';
+  }
+
+  protected assertQuickBillFinishedItemsPreserved(billId: number, nextItems: any[], opts: { allowRateEdit?: boolean } = {}) {
+    const finishedTestIds = this.finishedQuickTestIdsForBill(billId);
+    if (!finishedTestIds.size) return;
+    const allowRateEdit = !!opts.allowRateEdit;
+    const current = this.db.prepare('SELECT item_type,item_id,name,quantity,price,discount_type,discount_value,net_amount FROM bill_items WHERE bill_id=?').all(billId) as any[];
+    const finishedCurrent = current.filter((row) => this.billItemIsQuickFinished(row, finishedTestIds));
+    for (const row of finishedCurrent) {
+      const match = (nextItems || []).find((n: any) =>
+        String(n.item_type || '').toUpperCase() === String(row.item_type || '').toUpperCase()
+        && +n.item_id === +row.item_id
+      );
+      if (!match) {
+        throw new Error(`Cannot remove finished Quick Reporting item: ${row.name || 'Test'}.`);
+      }
+      // Only block real clinical edits. Ignore legacy discount_type aliases (e.g. "amount" vs "VALUE")
+      // so adding new unfinished lines is allowed when billing.edit.allowItemsAfterWorkflow is on.
+      // When the bill is fully unsettled / has no receipt, rate and discount may still change.
+      if (allowRateEdit) {
+        if ((+match.quantity || 0) !== (+row.quantity || 0)) {
+          throw new Error(`Cannot change finished Quick Reporting item: ${row.name || 'Test'}.`);
+        }
+        continue;
+      }
+      const same =
+        (+match.quantity || 0) === (+row.quantity || 0)
+        && (+match.price || 0) === (+row.price || 0)
+        && this.normalizeBillDiscountType(match.discount_type) === this.normalizeBillDiscountType(row.discount_type)
+        && (+match.discount_value || 0) === (+row.discount_value || 0);
+      if (!same) {
+        throw new Error(`Cannot change finished Quick Reporting item: ${row.name || 'Test'}.`);
+      }
+    }
   }
 
   protected assertQuickBillFullyPending(billId: number) {
@@ -276,10 +499,14 @@ export abstract class DatabaseBillingService extends DatabaseCoreService {  crea
     const profileDisplayName = (profile:any, fallback='Profile / group') => String(profile?.display_name || profile?.name || fallback || 'Profile / group').trim();
     const rememberTest = (testId:number, sourceProfileId:any, sourceProfileName:any, fallbackOrder:any=0) => {
       if (!testId || sourceByTest.has(+testId)) return;
-      const t = this.db.prepare('SELECT id FROM tests WHERE id=? AND COALESCE(active_for_reporting,1)=1').get(+testId) as any;
+      const t = this.db.prepare('SELECT id, report_order, priority FROM tests WHERE id=? AND COALESCE(active_for_reporting,1)=1').get(+testId) as any;
       if (!t?.id) return;
       seq += 1;
-      sourceByTest.set(+testId, { sourceProfileId: sourceProfileId ? +sourceProfileId : null, sourceProfileName: String(sourceProfileName || '').trim(), order: (+fallbackOrder || 0) + seq / 1000 });
+      const isSingle = !(+(sourceProfileId || 0)) && !String(sourceProfileName || '').trim();
+      const baseOrder = isSingle
+        ? (+(t.report_order || t.priority || 0) || 0)
+        : (+fallbackOrder || 0);
+      sourceByTest.set(+testId, { sourceProfileId: sourceProfileId ? +sourceProfileId : null, sourceProfileName: String(sourceProfileName || '').trim(), order: baseOrder + seq / 1000 });
     };
     const expandProfile = (profileId:number, seen:Set<number>, sourceProfileId:any, sourceProfileName:any, fallbackOrder:any=0) => {
       if (!profileId || seen.has(profileId)) return;
@@ -289,22 +516,27 @@ export abstract class DatabaseBillingService extends DatabaseCoreService {  crea
       const baseSourceId = sourceProfileId || profile.id || profileId;
       const baseSourceName = String(sourceProfileName || profileDisplayName(profile)).trim();
       const profileItems = this.db.prepare('SELECT * FROM profile_items WHERE profile_id=? ORDER BY priority,id').all(profileId) as any[];
+      const slotBase = +fallbackOrder || 0;
+      const localMin = profileItems.length ? Math.min(...profileItems.map((r:any) => +r.priority || 0)) : 0;
+      const slotPri = (local:any) => slotBase + (((+local || 0) - localMin) / 1000);
       if (profileItems.length) {
         for (const pi of profileItems) {
           const type = String(pi.item_type || 'TEST').toUpperCase();
-          if (type === 'TEST') rememberTest(+pi.test_id, baseSourceId, baseSourceName, pi.priority || fallbackOrder);
+          const pri = slotPri(pi.priority);
+          if (type === 'TEST') rememberTest(+pi.test_id, baseSourceId, baseSourceName, pri);
           else if (type === 'PROFILE') {
             const child = this.db.prepare('SELECT * FROM profiles WHERE id=? AND COALESCE(active_for_reporting,1)=1').get(+pi.child_profile_id) as any;
             if (!child?.id) continue;
             const childShows = pi.display_profile_name !== 0;
             const childSourceId = childShows ? (+pi.child_profile_id || +child.id || baseSourceId) : baseSourceId;
             const childSourceName = childShows ? profileDisplayName(child, baseSourceName) : baseSourceName;
-            expandProfile(+pi.child_profile_id, nextSeen, childSourceId, childSourceName, pi.priority || fallbackOrder);
+            expandProfile(+pi.child_profile_id, nextSeen, childSourceId, childSourceName, pri);
           }
         }
       } else {
         const rows = this.db.prepare('SELECT pt.test_id,pt.priority FROM profile_tests pt JOIN tests t ON t.id=pt.test_id WHERE pt.profile_id=? AND COALESCE(t.active_for_reporting,1)=1 ORDER BY pt.priority,t.report_order,t.priority').all(profileId) as any[];
-        for (const r of rows) rememberTest(+r.test_id, baseSourceId, baseSourceName, r.priority || fallbackOrder);
+        const ptMin = rows.length ? Math.min(...rows.map((r:any) => +r.priority || 0)) : 0;
+        for (const r of rows) rememberTest(+r.test_id, baseSourceId, baseSourceName, slotBase + (((+r.priority || 0) - ptMin) / 1000));
       }
     };
     const items = this.db.prepare('SELECT * FROM bill_items WHERE bill_id=? ORDER BY priority,name').all(billId) as any[];
@@ -404,7 +636,12 @@ export abstract class DatabaseBillingService extends DatabaseCoreService {  crea
       if (t?.id) {
         insertedTestIds.add(+testId);
         const refText = this.selectedReferenceTextForItem({ test_id: t.id, normal_range: t.normal_range || '' }, billPatient) || t.normal_range || '';
-        insert.run(reportId, t.id, t.display_name || t.name, t.department_name, '', t.unit_name || '', refText, t.method || '', nextOrder(fallbackPriority || t.report_order || t.priority || 0), t.highlight_parameter ? 1 : 0, '', sourceProfileId || null, sourceProfileName || '');
+        // Singles use Masters Report order; profile members keep layout/slot priority.
+        const isSingle = !(+(sourceProfileId || 0)) && !String(sourceProfileName || '').trim();
+        const orderBase = isSingle
+          ? (t.report_order || t.priority || 0)
+          : (fallbackPriority || t.report_order || t.priority || 0);
+        insert.run(reportId, t.id, t.display_name || t.name, t.department_name, '', t.unit_name || '', refText, t.method || '', nextOrder(orderBase), t.highlight_parameter ? 1 : 0, '', sourceProfileId || null, sourceProfileName || '');
       }
     };
     const expandProfile = (profileId:number, showHeading:boolean, seen:Set<number>, fallbackPriority:any=0, sourceProfileId:any=null, sourceProfileName:any='', forceSource=false) => {
@@ -417,21 +654,37 @@ export abstract class DatabaseBillingService extends DatabaseCoreService {  crea
       const ownSourceName = ownName || sourceProfileName || '';
       const cardSourceId = forceSource || showHeading ? ownSourceId : (sourceProfileId || ownSourceId);
       const cardSourceName = forceSource || showHeading ? ownSourceName : (sourceProfileName || ownSourceName);
-      if (showHeading) insertHeading(ownSourceName, fallbackPriority || profile.report_order || profile.priority || 0, 'PROFILE', ownSourceId, ownSourceName);
+      const slotBase = +fallbackPriority || 0;
+      if (showHeading) insertHeading(ownSourceName, slotBase || profile.report_order || profile.priority || 0, 'PROFILE', ownSourceId, ownSourceName);
       // Profile interpretation is rendered as rich PDF content by ReportService when Report Settings allow it.
       const profileItems = this.db.prepare('SELECT * FROM profile_items WHERE profile_id=? ORDER BY priority,id').all(profileId) as any[];
+      // Remap local priorities into the parent/bill slot so nested profiles keep parent order.
+      const localMin = profileItems.length ? Math.min(...profileItems.map((r:any) => +r.priority || 0)) : 0;
+      const slotPri = (local:any) => slotBase + (((+local || 0) - localMin) / 1000);
       if (profileItems.length) {
         for (const pi of profileItems) {
           const type = String(pi.item_type || 'TEST').toUpperCase();
-          if (type === 'HEADER') { insertHeading(pi.side_header || pi.header_text || '', pi.priority, 'INNER', cardSourceId, cardSourceName); continue; }
+          const pri = slotPri(pi.priority);
+          if (type === 'HEADER') { insertHeading(pi.side_header || pi.header_text || '', pri, 'INNER', cardSourceId, cardSourceName); continue; }
           if (type === 'PROFILE') {
-            const childShow = pi.display_profile_name !== 0;
-            expandProfile(+pi.child_profile_id, childShow, nextSeen, pi.priority, cardSourceId, cardSourceName, childShow);
-          } else insertTest(+pi.test_id, pi.priority, cardSourceId, cardSourceName);
+            const childId = +pi.child_profile_id || 0;
+            const layoutShow = pi.display_profile_name !== 0;
+            let masterShow = true;
+            try {
+              const child = this.db.prepare('SELECT show_profile_name FROM profiles WHERE id=?').get(childId) as any;
+              masterShow = Number(child?.show_profile_name ?? 1) !== 0;
+            } catch { masterShow = true; }
+            // Title hide (masterShow) ≠ lose own card/department (layoutShow).
+            expandProfile(childId, layoutShow && masterShow, nextSeen, pri, cardSourceId, cardSourceName, layoutShow);
+          } else insertTest(+pi.test_id, pri, cardSourceId, cardSourceName);
         }
       } else {
         const rows = this.db.prepare('SELECT pt.*,t.*,d.name department_name,u.name unit_name FROM profile_tests pt JOIN tests t ON t.id=pt.test_id LEFT JOIN departments d ON d.id=t.department_id LEFT JOIN units u ON u.id=t.unit_id WHERE pt.profile_id=? AND COALESCE(t.active_for_reporting,1)=1 ORDER BY pt.priority,t.report_order,t.priority').all(profileId) as any[];
-        rows.forEach(r => insertTest(+r.test_id, r.report_order || r.priority, cardSourceId, cardSourceName));
+        const ptMin = rows.length ? Math.min(...rows.map((r:any) => +(r.priority || r.report_order || 0))) : 0;
+        rows.forEach(r => {
+          const local = +(r.priority || r.report_order || 0);
+          insertTest(+r.test_id, slotBase + ((local - ptMin) / 1000), cardSourceId, cardSourceName);
+        });
       }
     };
     for (const item of items) {
@@ -445,7 +698,28 @@ export abstract class DatabaseBillingService extends DatabaseCoreService {  crea
       AND NOT EXISTS (SELECT 1 FROM report_items child WHERE child.report_id=report_items.report_id AND child.test_id IS NOT NULL AND child.source_profile_name=report_items.source_profile_name AND COALESCE(child.source_profile_id,0)=COALESCE(report_items.source_profile_id,0))`).run(reportId);
   }
 
-  getBill(id:number) { const bill=this.db.prepare('SELECT b.*,p.*,b.id id,p.id patient_id,p.created_at patient_registered_at,c.name consultant_name FROM bills b JOIN patients p ON p.id=b.patient_id LEFT JOIN consultants c ON c.id=b.consultant_id WHERE b.id=?').get(id) as any; if(!bill) return null; return {...bill, items:this.db.prepare('SELECT * FROM bill_items WHERE bill_id=? ORDER BY priority,name').all(id), receipts:this.db.prepare('SELECT * FROM receipts WHERE bill_id=? ORDER BY id').all(id)}; }
+  getBill(id:number) {
+    const bill=this.db.prepare('SELECT b.*,p.*,b.id id,b.patient_snapshot_json patient_snapshot_json,p.id patient_id,p.created_at patient_registered_at,c.name consultant_name FROM bills b JOIN patients p ON p.id=b.patient_id LEFT JOIN consultants c ON c.id=b.consultant_id WHERE b.id=?').get(id) as any;
+    if(!bill) return null;
+    const display = this.applyPatientSnapshotToRow(bill);
+    const items = this.db.prepare('SELECT * FROM bill_items WHERE bill_id=? ORDER BY priority,name').all(id) as any[];
+    let finishedTestIds = new Set<number>();
+    let hasFinishedQuickItems = false;
+    if (this.isQuickReportingEnabled()) {
+      finishedTestIds = this.finishedQuickTestIdsForBill(id);
+      hasFinishedQuickItems = finishedTestIds.size > 0;
+    }
+    const decoratedItems = items.map((item: any) => ({
+      ...item,
+      quick_finished: this.billItemIsQuickFinished(item, finishedTestIds) ? 1 : 0
+    }));
+    return {
+      ...display,
+      has_finished_quick_items: hasFinishedQuickItems ? 1 : 0,
+      items: decoratedItems,
+      receipts: this.db.prepare('SELECT * FROM receipts WHERE bill_id=? ORDER BY id').all(id)
+    };
+  }
   listBills(filters:any={}) {
     this.ensureBillingSchema();
     const from = filters.from || '1900-01-01';
@@ -474,7 +748,7 @@ export abstract class DatabaseBillingService extends DatabaseCoreService {  crea
       MAX(COALESCE(b.paid,0)-COALESCE(b.total,0),0) excess_paid
       FROM bills b JOIN patients p ON p.id=b.patient_id LEFT JOIN consultants c ON c.id=b.consultant_id
       WHERE ${whereParts.join(' AND ')} ORDER BY b.id DESC LIMIT 1000`;
-    return this.db.prepare(sql).all(...params);
+    return (this.db.prepare(sql).all(...params) as any[]).map(row => this.applyPatientSnapshotToRow(row));
   }
   analytics(filters:any={}) {
     this.ensureBillingSchema();

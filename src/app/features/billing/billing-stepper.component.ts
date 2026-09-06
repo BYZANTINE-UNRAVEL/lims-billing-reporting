@@ -158,14 +158,17 @@ export class BillingStepperComponent implements OnInit {
   toggleVisibleBillItems(event?: Event) {
     event?.preventDefault();
     event?.stopPropagation();
-    if (this.isCancelledBill()) return;
+    if (!this.canAddBillItems()) return;
     const query = String(this.billSearch || '').trim();
     const rows = this.billItemResultsCache;
     if (!rows.length) return;
     const allSelected = rows.every((row: any) => this.isBillItemAlreadyAdded(row));
     if (allSelected) {
       const visibleKeys = new Set(rows.map((row: any) => this.billItemKey(row)));
-      this.bill.items = this.bill.items.filter((item: any) => !visibleKeys.has(`${item.item_type}:${item.item_id}`));
+      this.bill.items = this.bill.items.filter((item: any) => {
+        if (this.isBillItemLineLocked(item)) return true;
+        return !visibleKeys.has(`${item.item_type}:${item.item_id}`);
+      });
       this.pendingBillItemSelections = this.pendingBillItemSelections.filter((item: any) => !visibleKeys.has(this.billItemKey(item)));
       this.scheduleCommissionPreview();
       this.billSearch = query;
@@ -242,20 +245,23 @@ export class BillingStepperComponent implements OnInit {
   addBillItemFromResult(event: Event, value: any) {
     event.preventDefault();
     event.stopPropagation();
-    if (!value || this.isCancelledBill()) return;
+    if (!value || !this.canAddBillItems()) return;
     if (!this.isBillItemAlreadyAdded(value)) {
       this.addSuggestedBillItem(value);
     }
   }
 
   removeBillItemAt(index: number) {
-    if (this.isCancelledBill()) return;
+    const item = this.bill.items[index];
+    if (!item || this.isBillItemLineLocked(item)) return;
     this.bill.items = this.bill.items.filter((_: any, idx: number) => idx !== index);
     this.scheduleCommissionPreview();
   }
 
   dropSelectedBillItem(event: CdkDragDrop<any[]>) {
     if (this.isCancelledBill() || event.previousIndex === event.currentIndex) return;
+    const moving = this.bill.items[event.previousIndex];
+    if (this.isBillItemLineLocked(moving)) return;
     const next = [...this.bill.items];
     moveItemInArray(next, event.previousIndex, event.currentIndex);
     this.bill.items = next;
@@ -280,6 +286,7 @@ export class BillingStepperComponent implements OnInit {
   }
 
   onSelectedItemRateChange(item: any, value: string | number): void {
+    if (!this.canEditBillItemRate(item)) return;
     const numeric = String(value ?? '').replace(/\D/g, '');
     item.price = numeric ? Number(numeric) : 0;
     item.base_rate = item.price;
@@ -289,13 +296,14 @@ export class BillingStepperComponent implements OnInit {
   }
 
   onSelectedItemDiscountChange(item: any, value: string | number): void {
+    if (!this.canEditBillItemRate(item)) return;
     const numeric = String(value ?? '').replace(/\D/g, '');
     item.discount_value = numeric ? Number(numeric) : 0;
     // Keep focus stable; totals recalculate from the local item immediately.
   }
 
   toggleSelectedItemDiscountType(item: any): void {
-    if (!item || this.isCancelledBill()) return;
+    if (!item || !this.canEditBillItemRate(item)) return;
     item.discount_type = item.discount_type === 'VALUE' ? 'PERCENT' : 'VALUE';
   }
 
@@ -344,6 +352,7 @@ export class BillingStepperComponent implements OnInit {
   }
 
   private billItemTapAllowed() {
+    if (!this.canAddBillItems()) return false;
     const now = Date.now();
     if (now - this.lastBillItemTapAt < 120) return false;
     this.lastBillItemTapAt = now;
@@ -458,7 +467,7 @@ export class BillingStepperComponent implements OnInit {
   onSearchResultActionClick(event: Event, value: any) {
     event.preventDefault();
     event.stopPropagation();
-    if (!value || this.isCancelledBill() || this.isBillItemAlreadyAdded(value)) return;
+    if (!value || !this.canAddBillItems() || this.isBillItemAlreadyAdded(value)) return;
     const key = this.billItemKey(value);
     this.addItem(value.itemType, value, false);
     this.pendingBillItemSelections = [...this.pendingBillItemSelections.filter(item => this.billItemKey(item) !== key), value];
@@ -470,13 +479,13 @@ export class BillingStepperComponent implements OnInit {
 
   addFirstMatchFromSearch(event: Event) {
     event.preventDefault();
-    if (!this.hasBillSearch() || this.isCancelledBill()) return;
+    if (!this.hasBillSearch() || !this.canAddBillItems()) return;
     const first = this.billItemResultsCache[0];
     if (first) this.toggleBillItemSelection(first);
   }
 
   addSuggestedBillItem(value: any) {
-    if (!value || this.isCancelledBill() || this.isBillItemAlreadyAdded(value)) return;
+    if (!value || !this.canAddBillItems() || this.isBillItemAlreadyAdded(value)) return;
     const key = this.billItemKey(value);
     this.addItem(value.itemType, value, false);
     this.pendingBillItemSelections = [...this.pendingBillItemSelections.filter(item => this.billItemKey(item) !== key), value];
@@ -624,6 +633,27 @@ export class BillingStepperComponent implements OnInit {
 
   parseSettingList(value: any, fallback: string[]) { const items = String(value || '').split(',').map(x => x.trim()).filter(Boolean); return items.length ? Array.from(new Set(items)) : fallback; }
 
+  patientFieldsCapsEnabled() {
+    const mode = String(this.settings?.['patient.fieldsCaps'] || 'off').trim().toLowerCase();
+    return mode === 'upper' || mode === 'uppercase' || mode === 'caps' || mode === 'true' || mode === '1' || mode === 'on';
+  }
+
+  applyPatientFieldsCapsUi() {
+    if (!this.patientFieldsCapsEnabled() || !this.bill?.patient) return;
+    const up = (v: any) => {
+      const s = String(v ?? '').trim();
+      return s ? s.toUpperCase() : String(v ?? '');
+    };
+    const p = this.bill.patient;
+    p.title = up(p.title);
+    p.name = up(p.name);
+    p.relation_type = up(p.relation_type);
+    p.guardian_name = up(p.guardian_name);
+    p.address = up(p.address);
+    p.history = up(p.history);
+    p.gender = up(p.gender);
+  }
+
   consultantSearchScore(c: any, q: string) {
     const name = String(c.name || '').toLowerCase();
     const phone = String(c.phone || '').toLowerCase();
@@ -677,7 +707,7 @@ export class BillingStepperComponent implements OnInit {
   }
   openRegistrationReferenceSearch() {
     this.registrationTypeOpen = false;
-    if (!this.requiresReference() || this.isCancelledBill()) return;
+    if (!this.requiresReference() || !this.patientEditable()) return;
     this.runConsultantAutocompleteSearch();
   }
   searchPatientConsultantsForBilling() {
@@ -690,7 +720,7 @@ export class BillingStepperComponent implements OnInit {
   }
   openPatientConsultantSearch() {
     this.registrationTypeOpen = false;
-    if (this.isCancelledBill() || !this.requiresReference()) return;
+    if (!this.patientEditable() || !this.requiresReference()) return;
     this.runConsultantAutocompleteSearch();
   }
   searchConsultantsForBilling() {
@@ -703,7 +733,7 @@ export class BillingStepperComponent implements OnInit {
   toggleRegistrationTypeMenu(ev?: Event) {
     ev?.preventDefault();
     ev?.stopPropagation();
-    if (this.isCancelledBill()) return;
+    if (!this.patientEditable()) return;
     this.registrationTypeOpen = !this.registrationTypeOpen;
   }
   selectRegistrationType(value: string) {
@@ -839,7 +869,7 @@ export class BillingStepperComponent implements OnInit {
   }
 
   emptyBill() {
-    return { patient: { age_unit: 'YEARS', age_split: true }, referrer_type: 'Walk-in', consultant_id: null, items: [], receipts: [], discount_type: 'VALUE', discount_value: 0, round_mode: 'NONE', paid: 0, cash_received: 0, payment_mode: 'Cash', status: 'BILLED' };
+    return { patient: { age_unit: 'YEARS', age_split: false }, referrer_type: 'Walk-in', consultant_id: null, items: [], receipts: [], discount_type: 'VALUE', discount_value: 0, round_mode: 'NONE', paid: 0, cash_received: 0, payment_mode: 'Cash', status: 'BILLED' };
   }
 
   canGoItems() { return !this.billingValidationMessage(true); }
@@ -958,8 +988,8 @@ export class BillingStepperComponent implements OnInit {
   }
 
   startFreshPatient() {
-    if (this.isCancelledBill()) return;
-    this.bill.patient = { age_unit: 'YEARS', age_split: true };
+    if (!this.patientEditable()) return;
+    this.bill.patient = { age_unit: 'YEARS', age_split: false };
     this.patientBillQuery = '';
     this.billingPatientResults.set([]);
     this.selectedPatientMobileFromSearch = '';
@@ -983,6 +1013,8 @@ export class BillingStepperComponent implements OnInit {
   }
   selectPatientForBill(p: any) {
     this.bill.patient = this.normalizePatient(p);
+    this.applyPatientFieldsCapsUi();
+    this.syncAgeText();
     this.patientBillQuery = this.patientSearchLabel(p);
     this.billingPatientResults.set([]);
     this.duplicateMobileModal.set({ open: false, mobile: '', patients: [], proceedAfter: false });
@@ -1204,7 +1236,11 @@ export class BillingStepperComponent implements OnInit {
   }
   receiptHeaderStatus() { if (this.isCancelledBill()) return 'Cancelled'; return this.receiptExcess() > 0 ? `Excess ₹${this.receiptExcess()}` : this.receiptDueOnly() > 0 ? `Due ₹${this.receiptDueOnly()}` : 'Paid in full'; }
 
-  displayPatientName(p: any) { return [p?.title, p?.name].filter(Boolean).join(' ').trim(); }
+  displayPatientName(p: any) {
+    const name = [p?.title, p?.name].filter(Boolean).join(' ').trim();
+    if (!this.patientFieldsCapsEnabled() || !name) return name;
+    return name.toUpperCase();
+  }
 
   patientSearchLabel(p: any) {
     if (!p) return '';
@@ -1219,7 +1255,24 @@ export class BillingStepperComponent implements OnInit {
   displayPatientSearchOption = (value: any) => this.patientSearchLabel(value);
 
   normalizePatient(p: any) {
-    return { ...p, age_unit: p?.age_unit || this.parseAgeUnit(p?.age), age_value: p?.age_value ?? this.parseAgeValue(p?.age), age_split: p?.age_split === undefined ? true : !!p.age_split };
+    const age_split = p?.age_split === undefined ? false : !!p.age_split;
+    const base = {
+      ...p,
+      age_unit: p?.age_unit || this.parseAgeUnit(p?.age) || 'YEARS',
+      age_value: p?.age_value ?? this.parseAgeValue(p?.age),
+      age_split
+    };
+    const parts = p?.dob
+      ? this.agePartsFromDob(p.dob)
+      : this.parseSplitAgeParts(p?.age);
+    base.age_years = p?.age_years ?? parts.years ?? (base.age_unit === 'YEARS' ? base.age_value : 0) ?? 0;
+    base.age_months = p?.age_months ?? parts.months ?? 0;
+    base.age_days = p?.age_days ?? parts.days ?? 0;
+    if (age_split) {
+      base.age_value = Number(base.age_years || 0);
+      base.age_unit = 'YEARS';
+    }
+    return base;
   }
   parseAgeValue(age: any) { const m = String(age || '').match(/\d+/); return m ? Number(m[0]) : ''; }
   parseAgeUnit(age: any) {
@@ -1228,6 +1281,15 @@ export class BillingStepperComponent implements OnInit {
     if (text.includes('day') || text.endsWith('d')) return 'DAYS';
     if (text.includes('month') || text.includes('mts') || text.endsWith('m')) return 'MONTHS';
     return 'YEARS';
+  }
+  parseSplitAgeParts(age: any) {
+    const text = String(age || '').toLowerCase();
+    const years = Number((text.match(/(\d+)\s*y/) || [])[1] || 0);
+    const months = Number((text.match(/(\d+)\s*m/) || [])[1] || 0);
+    const days = Number((text.match(/(\d+)\s*d/) || [])[1] || 0);
+    if (years || months || days) return { years, months, days };
+    const only = Number((text.match(/\d+/) || [])[0] || 0);
+    return { years: only, months: 0, days: 0 };
   }
   ageUnitLabel(unit: string, value: number) {
     const u = unit === 'DAYS' ? 'day' : unit === 'WEEKS' ? 'week' : unit === 'MONTHS' ? 'month' : 'year';
@@ -1246,52 +1308,195 @@ export class BillingStepperComponent implements OnInit {
     const totalDays = Math.max(0, Math.floor((today.getTime() - dob.getTime()) / 86400000));
     return { years: Math.max(0, years), months: Math.max(0, months), weeks: Math.floor(totalDays / 7), days: Math.max(0, days), totalDays };
   }
+  /** Numeric-only age fields: digits only (no letters / signs / decimals). */
+  blockNonNumericAge(event: KeyboardEvent) {
+    const allow = ['Backspace', 'Delete', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
+    if (allow.includes(event.key)) return;
+    if (event.ctrlKey || event.metaKey) return;
+    if (!/^\d$/.test(event.key)) event.preventDefault();
+  }
+  /** Strip non-digits while typing; keep empty string so the field stays editable. */
+  private digitsOnlyWhileTyping(value: any): string {
+    return String(value ?? '').replace(/\D/g, '');
+  }
+  private clampInt(value: any, min: number, max: number): number {
+    const digits = String(value ?? '').replace(/\D/g, '');
+    if (digits === '') return 0;
+    return Math.min(max, Math.max(min, parseInt(digits, 10) || 0));
+  }
+  currentAgeParts() {
+    if (this.bill.patient?.age_split) {
+      return {
+        years: this.clampInt(this.bill.patient.age_years ?? this.bill.patient.age_value, 0, 150),
+        months: this.clampInt(this.bill.patient.age_months, 0, 11),
+        days: this.clampInt(this.bill.patient.age_days, 0, 31),
+        weeks: 0,
+        totalDays: 0
+      };
+    }
+    const years = this.clampInt(this.bill.patient?.age_value, 0, 150);
+    return { years, months: 0, days: 0, weeks: 0, totalDays: 0 };
+  }
   formatAgeFromParts(parts: any, split = !!this.bill.patient?.age_split) {
-    if (parts.years >= 1) return `${parts.years} ${this.ageUnitLabel('YEARS', parts.years)}`;
+    const years = Math.max(0, Number(parts?.years || 0) || 0);
+    const months = Math.max(0, Number(parts?.months || 0) || 0);
+    const days = Math.max(0, Number(parts?.days || 0) || 0);
     if (!split) {
-      const unit = this.bill.patient?.age_unit || 'MONTHS';
-      const value = Number(this.bill.patient?.age_value || 0);
-      return value > 0 ? `${value} ${this.ageUnitLabel(unit, value)}` : '';
+      return `${years} ${this.ageUnitLabel('YEARS', years)}`;
     }
-    const totalDays = Number(parts.totalDays || 0);
-    const months = Math.floor(totalDays / 30);
-    const monthDays = totalDays % 30;
-    if ((this.bill.patient?.age_unit || '') === 'WEEKS') {
-      const weeks = Math.floor(totalDays / 7); const weekDays = totalDays % 7;
-      return weeks > 0 ? `${weeks} ${this.ageUnitLabel('WEEKS', weeks)}${weekDays ? ` ${weekDays} ${this.ageUnitLabel('DAYS', weekDays)}` : ''}` : `${totalDays} ${this.ageUnitLabel('DAYS', totalDays)}`;
-    }
-    if (months > 0) return `${months} mts${monthDays ? ` ${monthDays} ${this.ageUnitLabel('DAYS', monthDays)}` : ''}`;
-    const weeks = Math.floor(totalDays / 7); const weekDays = totalDays % 7;
-    if (weeks > 0) return `${weeks} ${this.ageUnitLabel('WEEKS', weeks)}${weekDays ? ` ${weekDays} ${this.ageUnitLabel('DAYS', weekDays)}` : ''}`;
-    return totalDays > 0 ? `${totalDays} ${this.ageUnitLabel('DAYS', totalDays)}` : '0 days';
+    const bits: string[] = [];
+    if (years > 0) bits.push(`${years} ${this.ageUnitLabel('YEARS', years)}`);
+    if (months > 0) bits.push(`${months} ${this.ageUnitLabel('MONTHS', months)}`);
+    if (days > 0) bits.push(`${days} ${this.ageUnitLabel('DAYS', days)}`);
+    if (!bits.length) return years === 0 && months === 0 && days === 0 ? `0 ${this.ageUnitLabel('YEARS', 0)}` : '';
+    return bits.join(' ');
   }
   formattedAgeDisplay() {
-    if (this.bill.patient?.dob) return this.formatAgeFromParts(this.agePartsFromDob(this.bill.patient.dob));
-    const value = Number(this.bill.patient?.age_value || 0);
-    const unit = this.bill.patient?.age_unit || 'YEARS';
-    return value > 0 ? `${value} ${this.ageUnitLabel(unit, value)}` : '';
+    if (this.bill.patient?.age_split) {
+      if (this.bill.patient?.dob) return this.formatAgeFromParts(this.agePartsFromDob(this.bill.patient.dob), true);
+      return this.formatAgeFromParts(this.currentAgeParts(), true);
+    }
+    if (this.bill.patient?.dob) {
+      const parts = this.agePartsFromDob(this.bill.patient.dob);
+      return this.formatAgeFromParts({ years: parts.years, months: 0, days: 0 }, false);
+    }
+    const years = this.clampInt(this.bill.patient?.age_value, 0, 150);
+    return years || years === 0 ? this.formatAgeFromParts({ years, months: 0, days: 0 }, false) : '';
   }
-  syncAgeText() { this.bill.patient.age = this.formattedAgeDisplay(); }
+  syncAgeText() {
+    const p = this.bill.patient || {};
+    if (p.age_split) {
+      const parts = this.currentAgeParts();
+      p.age_years = parts.years;
+      p.age_months = parts.months;
+      p.age_days = parts.days;
+      p.age_value = parts.years;
+      p.age_unit = 'YEARS';
+    } else {
+      p.age_value = this.clampInt(p.age_value, 0, 150);
+      p.age_unit = 'YEARS';
+      p.age_years = p.age_value;
+      p.age_months = 0;
+      p.age_days = 0;
+    }
+    p.age = this.formattedAgeDisplay();
+  }
+  patientAgeLabel(p: any): string {
+    if (!p) return '';
+    const stored = String(p.age || '').trim();
+    const split = p.age_split === undefined ? false : !!p.age_split;
+    if (stored && /month|day|week/i.test(stored)) return stored;
+    if (split && p.dob) return this.formatAgeFromParts(this.agePartsFromDob(p.dob), true);
+    if (stored && !/^0\s*years?$/i.test(stored)) return stored;
+    if (split) {
+      return this.formatAgeFromParts({
+        years: Number(p.age_years ?? p.age_value ?? 0) || 0,
+        months: Number(p.age_months || 0) || 0,
+        days: Number(p.age_days || 0) || 0
+      }, true);
+    }
+    const value = p.age_value;
+    if (value !== '' && value !== undefined && value !== null && Number.isFinite(+value)) {
+      return `${+value} ${this.ageUnitLabel('YEARS', +value)}`;
+    }
+    return stored;
+  }
   updateAgeFromDob() {
     const dobValue = this.bill.patient?.dob;
     if (!dobValue) return;
     const parts = this.agePartsFromDob(dobValue);
-    if (parts.years >= 1) { this.bill.patient.age_value = parts.years; this.bill.patient.age_unit = 'YEARS'; }
-    else if ((this.bill.patient?.age_unit || '') === 'WEEKS') { this.bill.patient.age_value = Math.max(0, parts.weeks); this.bill.patient.age_unit = 'WEEKS'; }
-    else if (parts.totalDays >= 30) { this.bill.patient.age_value = Math.floor(parts.totalDays / 30); this.bill.patient.age_unit = 'MONTHS'; }
-    else { this.bill.patient.age_value = Math.max(0, parts.totalDays); this.bill.patient.age_unit = parts.totalDays >= 7 ? 'WEEKS' : 'DAYS'; if (this.bill.patient.age_unit === 'WEEKS') this.bill.patient.age_value = Math.floor(parts.totalDays / 7); }
+    this.bill.patient.age_years = parts.years;
+    this.bill.patient.age_months = parts.months;
+    this.bill.patient.age_days = parts.days;
+    this.bill.patient.age_value = parts.years;
+    this.bill.patient.age_unit = 'YEARS';
     this.syncAgeText();
   }
   updateDobFromAge() {
-    const value = Number(this.bill.patient?.age_value || 0);
-    const unit = this.bill.patient?.age_unit || 'YEARS';
-    if (!value || value < 0) { this.syncAgeText(); return; }
+    const split = !!this.bill.patient?.age_split;
+    const parts = split ? this.currentAgeParts() : { years: this.clampInt(this.bill.patient?.age_value, 0, 150), months: 0, days: 0 };
+    if (!parts.years && !parts.months && !parts.days) {
+      this.syncAgeText();
+      return;
+    }
     const d = new Date();
-    if (unit === 'DAYS') d.setDate(d.getDate() - value);
-    else if (unit === 'WEEKS') d.setDate(d.getDate() - value * 7);
-    else if (unit === 'MONTHS') d.setMonth(d.getMonth() - value);
-    else d.setFullYear(d.getFullYear() - value);
+    d.setHours(0, 0, 0, 0);
+    d.setFullYear(d.getFullYear() - parts.years);
+    d.setMonth(d.getMonth() - parts.months);
+    d.setDate(d.getDate() - parts.days);
     this.bill.patient.dob = d.toISOString().slice(0, 10);
+    // Re-normalize parts from the computed DOB so months/days stay calendar-accurate.
+    const normalized = this.agePartsFromDob(this.bill.patient.dob);
+    this.bill.patient.age_years = normalized.years;
+    this.bill.patient.age_months = normalized.months;
+    this.bill.patient.age_days = normalized.days;
+    this.bill.patient.age_value = split ? normalized.years : parts.years;
+    this.bill.patient.age_unit = 'YEARS';
+    this.syncAgeText();
+  }
+  onSplitAgeInput(field: 'age_years' | 'age_months' | 'age_days') {
+    if (field === 'age_years') this.bill.patient.age_years = this.digitsOnlyWhileTyping(this.bill.patient.age_years);
+    if (field === 'age_months') this.bill.patient.age_months = this.digitsOnlyWhileTyping(this.bill.patient.age_months);
+    if (field === 'age_days') this.bill.patient.age_days = this.digitsOnlyWhileTyping(this.bill.patient.age_days);
+    this.bill.patient.age_value = this.digitsOnlyWhileTyping(this.bill.patient.age_years);
+    this.bill.patient.age_unit = 'YEARS';
+    // Do not clamp/rewrite fields while typing — keep empty editable until blur.
+    this.bill.patient.age = this.formatAgeFromParts({
+      years: this.clampInt(this.bill.patient.age_years, 0, 150),
+      months: this.clampInt(this.bill.patient.age_months, 0, 11),
+      days: this.clampInt(this.bill.patient.age_days, 0, 31)
+    }, true);
+  }
+  onYearsOnlyAgeInput() {
+    this.bill.patient.age_value = this.digitsOnlyWhileTyping(this.bill.patient.age_value);
+    this.bill.patient.age_years = this.bill.patient.age_value;
+    this.bill.patient.age_months = 0;
+    this.bill.patient.age_days = 0;
+    this.bill.patient.age_unit = 'YEARS';
+    this.bill.patient.age = this.formatAgeFromParts({
+      years: this.clampInt(this.bill.patient.age_value, 0, 150),
+      months: 0,
+      days: 0
+    }, false);
+  }
+  /** Clamp + sync DOB after the user leaves an age field. */
+  commitAgeFromFields() {
+    if (this.bill.patient?.age_split) {
+      this.bill.patient.age_years = this.clampInt(this.bill.patient.age_years, 0, 150);
+      this.bill.patient.age_months = this.clampInt(this.bill.patient.age_months, 0, 11);
+      this.bill.patient.age_days = this.clampInt(this.bill.patient.age_days, 0, 31);
+      this.bill.patient.age_value = this.bill.patient.age_years;
+    } else {
+      this.bill.patient.age_value = this.clampInt(this.bill.patient.age_value, 0, 150);
+      this.bill.patient.age_years = this.bill.patient.age_value;
+      this.bill.patient.age_months = 0;
+      this.bill.patient.age_days = 0;
+    }
+    this.bill.patient.age_unit = 'YEARS';
+    this.updateDobFromAge();
+  }
+  onAgeSplitToggle() {
+    if (this.bill.patient.age_split) {
+      if (this.bill.patient.dob) this.updateAgeFromDob();
+      else {
+        this.bill.patient.age_years = this.clampInt(this.bill.patient.age_value ?? this.bill.patient.age_years, 0, 150);
+        this.bill.patient.age_months = this.clampInt(this.bill.patient.age_months, 0, 11);
+        this.bill.patient.age_days = this.clampInt(this.bill.patient.age_days, 0, 31);
+        this.updateDobFromAge();
+      }
+    } else {
+      if (this.bill.patient.dob) {
+        const parts = this.agePartsFromDob(this.bill.patient.dob);
+        this.bill.patient.age_value = parts.years;
+      } else {
+        this.bill.patient.age_value = this.clampInt(this.bill.patient.age_years ?? this.bill.patient.age_value, 0, 150);
+      }
+      this.bill.patient.age_unit = 'YEARS';
+      this.bill.patient.age_months = 0;
+      this.bill.patient.age_days = 0;
+      this.bill.patient.age_years = this.bill.patient.age_value;
+      this.updateDobFromAge();
+    }
     this.syncAgeText();
   }
   inferGenderFromHonorific(title: string) {
@@ -1310,10 +1515,11 @@ export class BillingStepperComponent implements OnInit {
     if (gender) this.bill.patient.gender = gender;
     if (h.includes('baby') || h.includes('child') || ['master', 'kumari'].includes(h)) {
       if (!this.bill.patient.relation_type) this.bill.patient.relation_type = h.includes('girl') ? 'Daughter of' : h.includes('boy') ? 'Son of' : 'Baby of';
-      if (!this.bill.patient.age_unit || this.bill.patient.age_unit === 'YEARS') this.bill.patient.age_unit = 'MONTHS';
       this.bill.patient.age_split = true;
+      this.bill.patient.age_unit = 'YEARS';
       this.syncAgeText();
     }
+    this.applyPatientFieldsCapsUi();
   }
   shouldShowGuardianSection() {
     const h = String(this.bill.patient?.title || '').toLowerCase();
@@ -1341,7 +1547,8 @@ export class BillingStepperComponent implements OnInit {
 
   patientAgeGenderSummary() {
     const age = this.formattedAgeDisplay() || this.bill?.patient?.age || '-';
-    const gender = this.bill?.patient?.gender || '-';
+    let gender = this.bill?.patient?.gender || '-';
+    if (this.patientFieldsCapsEnabled() && gender && gender !== '-') gender = String(gender).toUpperCase();
     return `${age} / ${gender}`;
   }
 
@@ -1367,7 +1574,68 @@ export class BillingStepperComponent implements OnInit {
   isCancelledBill() { return String((this.lastBill()?.status || this.bill?.status || '')).toUpperCase() === 'CANCELLED'; }
   cancelledDetails() { const b:any = this.lastBill() || this.bill || {}; const parts = []; if (b.cancelled_at) parts.push(`Cancelled: ${DateTimeSettingsService.dateTime(b.cancelled_at)}`); if (b.cancel_reason) parts.push(`Reason: ${b.cancel_reason}`); if (+b.refund_amount > 0) parts.push(`Refund: ₹${b.refund_amount} ${b.refund_mode || ''}`); return parts.join(' · '); }
 
-
+  isQuickReportingEnabled() {
+    return String(this.settings['quickReporting.enabled'] || 'false').toLowerCase() === 'true';
+  }
+  private billingEditSettingOn(key: string) {
+    return String(this.settings[key] || 'false').toLowerCase() === 'true';
+  }
+  allowItemsAfterWorkflow() { return this.billingEditSettingOn('billing.edit.allowItemsAfterWorkflow'); }
+  allowPatientAfterWorkflow() { return this.billingEditSettingOn('billing.edit.allowPatientAfterWorkflow'); }
+  hasFinishedQuickItems() {
+    const meta: any = this.lastBill() || {};
+    if (+meta.has_finished_quick_items === 1) return true;
+    return (this.bill?.items || []).some((i: any) => this.isBillItemFinished(i));
+  }
+  isBillItemFinished(item: any) {
+    return +item?.quick_finished === 1 || item?.quick_finished === true;
+  }
+  /** Patient/registration/consultant fields (Quick Reporting unlock settings). */
+  patientEditable() {
+    if (this.isCancelledBill()) return false;
+    if (!this.editingBillId) return true;
+    if (!this.isQuickReportingEnabled()) return true;
+    if (!this.hasFinishedQuickItems()) return true;
+    return this.allowPatientAfterWorkflow();
+  }
+  /** Add / search / select new bill items. */
+  canAddBillItems() {
+    if (this.isCancelledBill()) return false;
+    if (!this.editingBillId) return true;
+    if (!this.isQuickReportingEnabled()) return true;
+    if (!this.hasFinishedQuickItems()) return true;
+    return this.allowItemsAfterWorkflow();
+  }
+  /** Per-line lock: finished quick items stay locked when unlock is enabled; otherwise all lines lock under default quick lock. */
+  isBillItemLineLocked(item: any) {
+    if (this.isCancelledBill()) return true;
+    if (!this.editingBillId) return false;
+    if (!this.isQuickReportingEnabled()) return false;
+    if (!this.hasFinishedQuickItems()) return false;
+    if (this.allowItemsAfterWorkflow()) return this.isBillItemFinished(item);
+    return true;
+  }
+  /** Rate/discount can still be edited when the bill is fully unsettled (no receipts yet). */
+  isBillFullyUnsettled() {
+    if (this.isCancelledBill()) return false;
+    const receipts = this.bill?.receipts || [];
+    if (receipts.length > 0) return false;
+    return this.existingReceiptTotal() <= 0;
+  }
+  /** Any receipt / part payment locks rate, line discount, and bill discount. */
+  canEditBillPricing() {
+    if (this.isCancelledBill()) return false;
+    if (!this.editingBillId) return true;
+    return this.isBillFullyUnsettled();
+  }
+  canEditBillItemRate(item: any) {
+    if (!item) return false;
+    return this.canEditBillPricing();
+  }
+  patientLockedBanner() {
+    if (this.isCancelledBill() || this.patientEditable() || !this.editingBillId) return '';
+    return 'Patient and consultant fields are locked because finished Quick Reporting items exist. Enable “Allow patient / consultant edits…” in Settings → Billing Config to unlock.';
+  }
 
   hasUnsavedWork() {
     const patient = this.bill?.patient || {};
@@ -1397,7 +1665,10 @@ export class BillingStepperComponent implements OnInit {
         age: existing.age || '',
         age_value: existing.age_value || this.parseAgeValue(existing.age),
         age_unit: existing.age_unit || this.parseAgeUnit(existing.age),
-        age_split: existing.age_split === undefined ? true : !!existing.age_split,
+        age_split: existing.age_split === undefined ? false : !!existing.age_split,
+        age_years: existing.age_years,
+        age_months: existing.age_months,
+        age_days: existing.age_days,
         gender: existing.gender || '',
         relation_type: existing.relation_type || '',
         guardian_name: existing.guardian_name || '',
@@ -1419,14 +1690,15 @@ export class BillingStepperComponent implements OnInit {
         price: +i.price || 0,
         priority: +i.priority || 0,
         side_header: i.side_header || '',
-        discount_type: i.discount_type || 'VALUE',
+        discount_type: String(i.discount_type || '').toUpperCase() === 'PERCENT' ? 'PERCENT' : 'VALUE',
         discount_value: +i.discount_value || 0,
         running_cost:+i.running_cost || 0,
         extra_deduction:+i.extra_deduction || 0,
         commission_amount:+i.commission_amount || 0,
         profit_amount:+i.profit_amount || 0,
         commission_profile_name:i.commission_profile_name || '',
-        commission_rule_source:i.commission_rule_source || ''
+        commission_rule_source:i.commission_rule_source || '',
+        quick_finished: +i.quick_finished === 1 || i.quick_finished === true
       })),
       discount_type: existing.discount_type || 'VALUE',
       discount_value: existing.discount_value !== undefined && existing.discount_value !== null && existing.discount_value !== '' ? Number(existing.discount_value) || 0 : Number(existing.discount) || 0,
@@ -1439,7 +1711,8 @@ export class BillingStepperComponent implements OnInit {
       cancelled_at: existing.cancelled_at || '',
       cancel_reason: existing.cancel_reason || '',
       refund_amount: +existing.refund_amount || 0,
-      refund_mode: existing.refund_mode || ''
+      refund_mode: existing.refund_mode || '',
+      has_finished_quick_items: +existing.has_finished_quick_items === 1
     };
     this.patientBillQuery = this.patientSearchLabel(this.bill.patient);
     this.consultantQuery = this.selectedConsultantName();
@@ -1455,6 +1728,8 @@ export class BillingStepperComponent implements OnInit {
     const validationError = this.billingValidationMessage();
     if (validationError) { this.notify(validationError, 'error'); return; }
     if (!this.canGoPayment() || this.creating()) return;
+    this.commitAgeFromFields();
+    this.applyPatientFieldsCapsUi();
     this.creating.set(true);
     try {
       const wasEditing = !!this.editingBillId;
@@ -1473,6 +1748,16 @@ export class BillingStepperComponent implements OnInit {
       this.bill.receipts = b.receipts || [];
       this.bill.paid = 0;
       this.bill.cash_received = 0;
+      this.bill.has_finished_quick_items = +b.has_finished_quick_items === 1;
+      if (Array.isArray(b.items)) {
+        const finishedByKey = new Map(
+          (b.items as any[]).map((i: any) => [`${String(i.item_type || '').toUpperCase()}:${+i.item_id || 0}`, +i.quick_finished === 1])
+        );
+        this.bill.items = (this.bill.items || []).map((item: any) => ({
+          ...item,
+          quick_finished: finishedByKey.get(`${String(item.item_type || '').toUpperCase()}:${+item.item_id || 0}`) || false
+        }));
+      }
       this.lastBill.set(b);
       this.billCreated.emit(b);
       this.notify(wasEditing ? `Bill ${b.bill_no} updated successfully.` : `Bill ${b.bill_no} created successfully.`);
@@ -1561,11 +1846,41 @@ export class BillingStepperComponent implements OnInit {
 
   async openPatientWhatsApp(source?: any) {
     const bill = source || this.lastBill() || (this.editingBillId ? this.bill : null);
+    const billId = +(bill?.id || this.editingBillId || this.lastBill()?.id || 0);
     const patient = bill?.patient || this.bill?.patient || {};
+    const patientName = patient?.name || bill?.patient_name;
+    const billNo = bill?.bill_no || this.lastBill()?.bill_no;
+    const mobileHint = patient?.mobile || bill?.mobile || bill?.patient_mobile;
+
+    if (billId && (window.limsApi as any).billWhatsApp) {
+      const prompted = await this.whatsAppPrompt?.promptMobile({
+        mobile: mobileHint,
+        patientName,
+        billNo
+      });
+      if (!prompted || prompted.cancelled || !prompted.mobile) return;
+      try {
+        const result = await (window.limsApi as any).billWhatsApp(billId, {
+          mobile: prompted.mobile,
+          includeReceipts: true
+        });
+        this.notify(
+          result?.clipboardCopied && result?.clipboardMode === 'file'
+            ? 'Clipboard: copied. WhatsApp opened — press Ctrl+V in the chat to attach the bill PDF.'
+            : result?.clipboardCopied
+              ? 'Clipboard: path copied. WhatsApp opened — attach the bill PDF manually if paste fails.'
+              : `WhatsApp opened for ${result?.mobile || prompted.mobile}. Clipboard: not copied — attach the bill PDF manually.`
+        );
+      } catch (e: any) {
+        this.notify(e?.message || 'Unable to open WhatsApp with bill PDF.', 'error');
+      }
+      return;
+    }
+
     const result = await this.whatsAppPrompt?.openContact({
-      mobile: patient?.mobile || bill?.mobile || bill?.patient_mobile,
-      patientName: patient?.name || bill?.patient_name,
-      billNo: bill?.bill_no || this.lastBill()?.bill_no
+      mobile: mobileHint,
+      patientName,
+      billNo
     });
     if (!result || result.cancelled) return;
     if (!result.ok) this.notify(result.error || 'Unable to open WhatsApp.', 'error');

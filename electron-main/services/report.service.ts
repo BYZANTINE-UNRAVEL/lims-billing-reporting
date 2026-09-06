@@ -56,10 +56,12 @@ export class ReportService extends ReportDocumentService {  async createBillPdf(
     const isCancelled = String(b.status || '').toUpperCase() === 'CANCELLED';
     const paidStatus = this.statusLabel(b);
     const paymentType = receipts.length > 1 ? 'Multiple' : receipts.length === 1 ? receipts[0].payment_mode : 'Pending';
-    const patientName = [b.title, b.name].filter(Boolean).join(' ') || b.name || '-';
+    const patientName = this.billPatientText([b.title, b.name].filter(Boolean).join(' ') || b.name || '-');
     const ageParts = this.formatAgeForDisplay(b);
-    const ageGender = [ageParts || '-', b.gender || '-'].join(' / ');
+    const ageGender = [ageParts || '-', this.billPatientText(b.gender || '-')].join(' / ');
     const patientRegistered = b.patient_registered_at || b.created_at;
+    const patientAddress = this.billPatientText(b.address || '');
+    const consultantName = this.billPatientText(b.consultant_name || 'Walk-in');
 
     const navy = settingColor('primaryColor','#0b3a70');
     const blue = settingColor('accentColor','#0f68b7');
@@ -183,7 +185,7 @@ export class ReportService extends ReportDocumentService {  async createBillPdf(
                   ['Registered', this.fmtDate(patientRegistered)],
                   ['Mobile', b.mobile],
                   ['Age / Gender', ageGender],
-                  ...(showConsultant ? [['Consultant', b.consultant_name || 'Walk-in']] : [])
+                  ...(showConsultant ? [['Consultant', consultantName]] : [])
                 ])
               ], margin:[10,8,10,8]
             }]]},
@@ -196,7 +198,7 @@ export class ReportService extends ReportDocumentService {  async createBillPdf(
               {table:{widths:['*'],body:[[{text:isCancelled ? `CANCELLED ${invoiceTitle}` : invoiceTitle,alignment:'center',bold:true,fontSize:15,color:'#fff',fillColor:isCancelled ? red : navy,margin:[0,5,0,5]}]]},layout:'noBorders',margin:[0,0,0,12]},
               {table:{widths:[88,10,'*'],body:billInfoRows([
                 ['Bill No / Date', `${b.bill_no}  •  ${this.fmtDate(b.bill_date)}`, true],
-                ...(showPatientAddress && b.address ? [['Patient Address', b.address]] : [])
+                ...(showPatientAddress && patientAddress ? [['Patient Address', patientAddress]] : [])
               ])},layout:{hLineColor:()=>border,vLineColor:()=>border,fillColor:()=> '#ffffff'}}
             ]
           }
@@ -332,7 +334,8 @@ export class ReportService extends ReportDocumentService {  async createBillPdf(
     for (const r of sorted) { paidBefore += +r.amount || 0; if (Number(r.id)===Number(receipt.id)) break; }
     const dueAfter = Math.max(0,(+b.total||0)-paidBefore);
     const excessAfter = Math.max(0, paidBefore-(+b.total||0));
-    const patientName = [b.title,b.name].filter(Boolean).join(' ') || b.name || '-';
+    const patientName = this.billPatientText([b.title,b.name].filter(Boolean).join(' ') || b.name || '-');
+    const consultantName = this.billPatientText(b.consultant_name || 'Walk-in');
 
     const identityText:any[] = [
       {text:billingName,bold:true,fontSize:centreNameSize,color:primary},
@@ -364,7 +367,7 @@ export class ReportService extends ReportDocumentService {  async createBillPdf(
           [{text:`Receipt No: ${receipt.receipt_no}`,bold:true,fontSize:patientSize},{text:`Date: ${this.fmtDate(receipt.received_at)}`,alignment:'right',fontSize:patientSize}],
           [{text:`Bill No: ${b.bill_no}`,fontSize:patientSize},{text:`Mode: ${receipt.payment_mode}`,alignment:'right',fontSize:patientSize}],
           [{text:`Patient: ${patientName} (${b.patient_no || '-'})`,colSpan:2,bold:true,fontSize:patientSize},{}],
-          ...(showConsultant ? [[{text:`Consultant: ${b.consultant_name || 'Walk-in'}`,colSpan:2,fontSize:patientSize},{ }]] : [])
+          ...(showConsultant ? [[{text:`Consultant: ${consultantName}`,colSpan:2,fontSize:patientSize},{ }]] : [])
         ]},
         layout:{hLineColor:()=>border,vLineColor:()=>border,paddingLeft:()=>8,paddingRight:()=>8,paddingTop:()=>5,paddingBottom:()=>5},
         margin:[0,0,0,12]
@@ -399,6 +402,18 @@ export class ReportService extends ReportDocumentService {  async createBillPdf(
     return file;
   }
 
+
+  /** When patient.fieldsCaps=upper, force uppercase on bill/receipt patient display text. */
+  protected patientFieldsCapsEnabled(): boolean {
+    const mode = String(this.db.getSetting('patient.fieldsCaps', 'off') || 'off').trim().toLowerCase();
+    return mode === 'upper' || mode === 'uppercase' || mode === 'caps' || mode === 'true' || mode === '1' || mode === 'on';
+  }
+  protected billPatientText(value: any): string {
+    const text = String(value ?? '');
+    if (!this.patientFieldsCapsEnabled()) return text;
+    const trimmed = text.trim();
+    return trimmed ? text.toUpperCase() : text;
+  }
 
   protected statementTitle(filters:any) {
     const from = filters?.from || '';
@@ -444,7 +459,7 @@ export class ReportService extends ReportDocumentService {  async createBillPdf(
         ...bills.map((b:any)=>{
           const excess = Math.max(0,(+b.paid||0)-(+b.total||0));
           const paymentStatus = b.status === 'CANCELLED' ? 'Cancelled' : excess > 0 ? 'Overpaid' : (+b.paid||0)<=0 ? 'Pending' : (+b.paid||0)>=(+b.total||0) ? 'Paid' : 'Partial';
-          return [b.bill_no, this.fmtDate(b.bill_date), `${b.patient_name || ''}\n${b.mobile || b.patient_no || ''}`, b.consultant_name || '-', this.money(b.total), this.money(b.paid), excess>0 ? `+${this.money(excess)}` : this.money(b.due), paymentStatus];
+          return [b.bill_no, this.fmtDate(b.bill_date), `${this.billPatientText(b.patient_name || '')}\n${b.mobile || b.patient_no || ''}`, this.billPatientText(b.consultant_name || '-'), this.money(b.total), this.money(b.paid), excess>0 ? `+${this.money(excess)}` : this.money(b.due), paymentStatus];
         }),
         [{text:'TOTAL',bold:true,colSpan:4},'', '', '', {text:this.money(statement.totals.total),bold:true}, {text:this.money(statement.totals.paid),bold:true}, {text:this.money(statement.totals.due),bold:true}, '']
       ];

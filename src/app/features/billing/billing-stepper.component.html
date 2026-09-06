@@ -16,8 +16,11 @@
       </div>
 
       <div class="cancelled-banner" *ngIf="isCancelledBill()">
-        <div><b>Cancelled bill — read only</b><span>{{ cancelledDetails() || 'This bill was cancelled and cannot be edited. You can only print bill/receipts or navigate to another bill.' }}</span></div>
+        <div><b>Cancelled bill - read only</b><span>{{ cancelledDetails() || 'This bill was cancelled and cannot be edited. You can only print bill/receipts or navigate to another bill.' }}</span></div>
         <strong>CANCELLED</strong>
+      </div>
+      <div class="cancelled-banner" *ngIf="!isCancelledBill() && patientLockedBanner()" style="background:#fff7ed;border-color:#fdba74">
+        <div><b>Patient fields locked</b><span>{{ patientLockedBanner() }}</span></div>
       </div>
 
 
@@ -25,7 +28,7 @@
         <div *ngIf="step() === 1" class="step-panel registration-step">
           <section class="patient-section-card registration-type-card">
             <div class="section-heading registration-heading">
-              <span class="section-icon">🧾</span>
+              <span class="section-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 4h8a2 2 0 0 1 2 2v14l-6-3-6 3V6a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
               <div class="inline-heading-copy">
                 <h4>Registration</h4>
                 <p>Choose billing registration type and reference before patient details.</p>
@@ -37,11 +40,11 @@
                 <label>Registration type <b>*</b></label>
                 <div class="select-plus-row attached-plus registration-type-combo">
                   <select [(ngModel)]="bill.referrer_type"
-                    [disabled]="isCancelledBill()"
+                    [disabled]="!patientEditable()"
                     (change)="onRegistrationTypeChanged()">
                     <option *ngFor="let t of registrationTypeOptions" [value]="t">{{ t }}</option>
                   </select>
-                  <button class="mini-plus" type="button" title="Add registration type" [disabled]="isCancelledBill()" (click)="openCustomOption('registrationType')">＋</button>
+                  <button class="mini-plus" type="button" title="Add registration type" [disabled]="!patientEditable()" (click)="openCustomOption('registrationType')">+</button>
                 </div>
               </div>
 
@@ -51,7 +54,7 @@
                   <input matInput
                     [(ngModel)]="consultantQuery"
                     [matAutocomplete]="registrationReferenceAuto"
-                    [disabled]="isCancelledBill()"
+                    [disabled]="!patientEditable()"
                     [readonly]="!requiresReference()"
                     (focus)="openRegistrationReferenceSearch()"
                     (input)="searchRegistrationReference()"
@@ -68,7 +71,7 @@
                         <b [innerHTML]="highlightReferenceMatch(c.name)"></b>
                         <span class="reference-meta-line">
                           <span [innerHTML]="highlightReferenceMatch(c.clinic || 'Consultant')"></span>
-                          <span *ngIf="c.phone"> · <span [innerHTML]="highlightReferenceMatch(c.phone)"></span></span>
+                          <span *ngIf="c.phone">  - <span [innerHTML]="highlightReferenceMatch(c.phone)"></span></span>
                         </span>
                       </div>
                     </mat-option>
@@ -76,7 +79,7 @@
                       No reference found. Use + to add.
                     </mat-option>
                   </mat-autocomplete>
-                  <button class="mini-plus consultant-plus" type="button" title="Add consultant / referrer" [disabled]="isCancelledBill()" (click)="openConsultantModal()">＋</button>
+                  <button class="mini-plus consultant-plus" type="button" title="Add consultant / referrer" [disabled]="!patientEditable()" (click)="openConsultantModal()">+</button>
                 </div>
                 <small class="field-hint registration-hint" *ngIf="!requiresReference()">Walk-in bills use Self as the default reference.</small>
               </div>
@@ -114,9 +117,9 @@
                       <b [innerHTML]="highlightPatientMatch(p.patient_no)"></b>
                       <span>
                         <span [innerHTML]="highlightPatientMatch(displayPatientName(p))"></span>
-                        · {{ p.age || '-' }} / {{ p.gender || '-' }}
-                        · <span [innerHTML]="highlightPatientMatch(p.mobile || 'No mobile')"></span>
-                        · Reg: {{ formatIstDateTime(p.created_at || p.createdAt) }}
+                         - {{ patientAgeLabel(p) || '-' }} / {{ p.gender || '-' }}
+                         - <span [innerHTML]="highlightPatientMatch(p.mobile || 'No mobile')"></span>
+                         - Reg: {{ formatIstDateTime(p.created_at || p.createdAt) }}
                       </span>
                     </div>
                   </mat-option>
@@ -133,15 +136,15 @@
 
           <div class="patient-detail-tabs" role="tablist" aria-label="Patient detail sections">
             <button type="button" role="tab" [class.active]="patientDetailSection() === 'basic'" (click)="patientDetailSection.set('basic')">
-              <span class="tab-icon">👤</span>
+              <span class="tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5.5 19c1.4-3.2 3.6-4.8 6.5-4.8S16.6 15.8 18.5 19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
               <span>Basic Details</span>
             </button>
             <button type="button" role="tab" [class.active]="patientDetailSection() === 'contact'" (click)="patientDetailSection.set('contact')">
-              <span class="tab-icon">☎</span>
+              <span class="tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v9A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-9z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5 8l7 5 7-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
               <span>Address & Contact</span>
             </button>
             <button type="button" role="tab" [class.active]="patientDetailSection() === 'other'" (click)="patientDetailSection.set('other')">
-              <span class="tab-icon">⋯</span>
+              <span class="tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="18" cy="12" r="1.6" fill="currentColor"/></svg></span>
               <span>Others</span>
             </button>
           </div>
@@ -151,13 +154,13 @@
               <section class="patient-section-card basic-info-card" *ngIf="patientDetailSection() === 'basic'">
                 <div class="section-heading basic-info-heading">
                   <div class="basic-info-title-group">
-                    <span class="section-icon">👤</span>
+                    <span class="section-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5.5 19c1.4-3.2 3.6-4.8 6.5-4.8S16.6 15.8 18.5 19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
                     <div class="inline-heading-copy">
                       <h4>{{ bill.patient.id ? 'Selected patient details' : 'New patient details' }}</h4>
                       <p>{{ bill.patient.id ? 'Using existing patient information for this bill.' : 'Enter basic information. Patient ID will be generated automatically.' }}</p>
                     </div>
                   </div>
-                  <button class="clear-basic-info-btn" type="button" (click)="resetBill()" [disabled]="isCancelledBill()">Clear</button>
+                  <button class="clear-basic-info-btn" type="button" (click)="resetBill()" [disabled]="!patientEditable()">Clear</button>
                 </div>
                 <div class="patient-grid basic-grid priority-patient-grid">
                   <div class="field consultant-priority-field priority-field">
@@ -166,7 +169,7 @@
                       <input matInput
                         [(ngModel)]="consultantQuery"
                         [matAutocomplete]="patientConsultantAuto"
-                        [disabled]="isCancelledBill()"
+                        [disabled]="!patientEditable()"
                         [readonly]="!requiresReference()"
                         (focus)="openPatientConsultantSearch()"
                         (input)="searchPatientConsultantsForBilling()"
@@ -183,7 +186,7 @@
                             <b [innerHTML]="highlightReferenceMatch(c.name)"></b>
                             <span class="reference-meta-line">
                               <span [innerHTML]="highlightReferenceMatch(c.clinic || 'Consultant')"></span>
-                              <span *ngIf="c.phone"> · <span [innerHTML]="highlightReferenceMatch(c.phone)"></span></span>
+                              <span *ngIf="c.phone">  - <span [innerHTML]="highlightReferenceMatch(c.phone)"></span></span>
                             </span>
                           </div>
                         </mat-option>
@@ -191,32 +194,32 @@
                           No consultant found. Use + to add.
                         </mat-option>
                       </mat-autocomplete>
-                      <button class="mini-plus consultant-plus" type="button" title="Add consultant" [disabled]="isCancelledBill()" (click)="openConsultantModal()">＋</button>
+                      <button class="mini-plus consultant-plus" type="button" title="Add consultant" [disabled]="!patientEditable()" (click)="openConsultantModal()">+</button>
                     </div>
                   </div>
                   <div class="field honorific-field">
                     <label>Honorific <b *ngIf="isPatientFieldRequired('title')">*</b></label>
                     <div class="select-plus-row attached-plus">
-                      <select [(ngModel)]="bill.patient.title" (change)="onHonorificChanged()" [disabled]="isCancelledBill()">
+                      <select [(ngModel)]="bill.patient.title" (change)="onHonorificChanged()" [disabled]="!patientEditable()">
                         <option value="">Select</option>
                         <option *ngFor="let h of honorificOptions" [value]="h">{{ h }}</option>
                       </select>
-                      <button class="mini-plus" type="button" title="Add honorific" [disabled]="isCancelledBill()" (click)="openCustomOption('honorific')">＋</button>
+                      <button class="mini-plus" type="button" title="Add honorific" [disabled]="!patientEditable()" (click)="openCustomOption('honorific')">+</button>
                     </div>
                   </div>
                   <div class="field referrer-type-field">
                     <label>Referrer Type</label>
-                    <select [(ngModel)]="bill.referrer_type" [disabled]="isCancelledBill()" (change)="onPatientReferrerTypeChanged()">
+                    <select [(ngModel)]="bill.referrer_type" [disabled]="!patientEditable()" (change)="onPatientReferrerTypeChanged()">
                       <option *ngFor="let t of registrationTypeOptions" [value]="t">{{ t }}</option>
                     </select>
                   </div>
                   <div class="field patient-name-field">
                     <label>Patient name <b *ngIf="isPatientFieldRequired('name')">*</b></label>
-                    <input [(ngModel)]="bill.patient.name" [disabled]="isCancelledBill()" placeholder="Enter patient name">
+                    <input [(ngModel)]="bill.patient.name" (blur)="applyPatientFieldsCapsUi()" [disabled]="!patientEditable()" placeholder="Enter patient name">
                   </div>
                   <div class="field gender-field">
                     <label>Gender <b *ngIf="isPatientFieldRequired('gender')">*</b></label>
-                    <select [(ngModel)]="bill.patient.gender" [disabled]="isCancelledBill()">
+                    <select [(ngModel)]="bill.patient.gender" (change)="applyPatientFieldsCapsUi()" [disabled]="!patientEditable()">
                       <option value="">Select gender</option>
                       <option>Male</option>
                       <option>Female</option>
@@ -229,30 +232,50 @@
                   </div>
                   <div class="field age-combo-field">
                     <label>Age <b *ngIf="isPatientFieldRequired('age')">*</b></label>
-                    <div class="age-combo-row">
-                      <input type="number" min="0" [(ngModel)]="bill.patient.age_value" (input)="updateDobFromAge()" [disabled]="isCancelledBill()" placeholder="0">
-                      <select [(ngModel)]="bill.patient.age_unit" (change)="updateDobFromAge()" [disabled]="isCancelledBill()" aria-label="Age unit">
-                        <option value="YEARS">Years</option>
-                        <option value="MONTHS">Months</option>
-                        <option value="WEEKS">Weeks</option>
-                        <option value="DAYS">Days</option>
-                      </select>
+                    <div class="age-combo-row" [class.split-ymd]="!!bill.patient.age_split">
+                      <ng-container *ngIf="bill.patient.age_split; else yearsOnlyAge">
+                        <div class="age-part"><span>Years</span>
+                          <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+                            [(ngModel)]="bill.patient.age_years" (keydown)="blockNonNumericAge($event)"
+                            (input)="onSplitAgeInput('age_years')" (blur)="commitAgeFromFields()"
+                            [disabled]="!patientEditable()" placeholder="0">
+                        </div>
+                        <div class="age-part"><span>Months</span>
+                          <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+                            [(ngModel)]="bill.patient.age_months" (keydown)="blockNonNumericAge($event)"
+                            (input)="onSplitAgeInput('age_months')" (blur)="commitAgeFromFields()"
+                            [disabled]="!patientEditable()" placeholder="0">
+                        </div>
+                        <div class="age-part"><span>Days</span>
+                          <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+                            [(ngModel)]="bill.patient.age_days" (keydown)="blockNonNumericAge($event)"
+                            (input)="onSplitAgeInput('age_days')" (blur)="commitAgeFromFields()"
+                            [disabled]="!patientEditable()" placeholder="0">
+                        </div>
+                      </ng-container>
+                      <ng-template #yearsOnlyAge>
+                        <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+                          [(ngModel)]="bill.patient.age_value" (keydown)="blockNonNumericAge($event)"
+                          (input)="onYearsOnlyAgeInput()" (blur)="commitAgeFromFields()"
+                          [disabled]="!patientEditable()" placeholder="0">
+                        <span class="age-unit-fixed">Years</span>
+                      </ng-template>
                     </div>
                     </div>
                   <div class="field dob-field">
                     <label>Date of birth <b *ngIf="isPatientFieldRequired('dob')">*</b></label>
-                    <input type="date" [(ngModel)]="bill.patient.dob" (change)="updateAgeFromDob()" [disabled]="isCancelledBill()">
+                    <input type="date" [(ngModel)]="bill.patient.dob" (change)="updateAgeFromDob()" [disabled]="!patientEditable()">
                   </div>
                   <div class="field mobile-priority-field">
                     <label>Mobile <b *ngIf="isPatientFieldRequired('mobile')">*</b></label>
-                    <input [(ngModel)]="bill.patient.mobile" (input)="onMobileEdited()" (blur)="checkMobileDuplicate()" [disabled]="isCancelledBill()" placeholder="Enter mobile number">
+                    <input [(ngModel)]="bill.patient.mobile" (input)="onMobileEdited()" (blur)="checkMobileDuplicate()" [disabled]="!patientEditable()" placeholder="Enter mobile number">
                   </div>
                 </div>
                 <div class="patient-card-bottom-row">
                   <label class="soft-check inline-split-check split-below-row">
-                    <input type="checkbox" [(ngModel)]="bill.patient.age_split" (change)="syncAgeText()" [disabled]="isCancelledBill()">
-                    <span>Split below 1 year</span>
-                    <em title="For babies, show months/weeks plus days">ⓘ</em>
+                    <input type="checkbox" [(ngModel)]="bill.patient.age_split" (change)="onAgeSplitToggle()" [disabled]="!patientEditable()">
+                    <span>Split age</span>
+                    <em title="Show years, months and days. Syncs both ways with date of birth. Used on bill and report.">i</em>
                   </label>
                   <div class="compact-age-inline" aria-label="Calculated age">
                     <span>Age calculated:</span>
@@ -263,55 +286,55 @@
 
               <section class="patient-section-card guardian-section" *ngIf="patientDetailSection() === 'basic' && shouldShowGuardianSection()">
                 <div class="section-heading">
-                  <span class="section-icon">👪</span>
+                  <span class="section-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="2.6" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="16" cy="9" r="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.8 19c1-2.6 2.8-3.9 5.2-3.9S13.2 16.4 14.2 19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M14.8 18.8c.7-1.7 1.9-2.6 3.6-2.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
                   <div><h4>Guardian / Relation</h4><p>Shown for baby/child patients or when configured as required</p></div>
                 </div>
                 <div class="patient-grid guardian-grid">
                   <div class="field relation-field">
                     <label>Relation / guardian <b *ngIf="isPatientFieldRequired('relation')">*</b></label>
                     <div class="select-plus-row attached-plus">
-                      <select [(ngModel)]="bill.patient.relation_type" [disabled]="isCancelledBill()">
+                      <select [(ngModel)]="bill.patient.relation_type" (change)="applyPatientFieldsCapsUi()" [disabled]="!patientEditable()">
                         <option value="">Not required</option>
                         <option *ngFor="let r of relationOptions" [value]="r">{{ r }}</option>
                       </select>
-                      <button class="mini-plus" type="button" title="Add relation" [disabled]="isCancelledBill()" (click)="openCustomOption('relation')">＋</button>
+                      <button class="mini-plus" type="button" title="Add relation" [disabled]="!patientEditable()" (click)="openCustomOption('relation')">+</button>
                     </div>
                   </div>
                   <div class="field guardian-name-field">
                     <label>Parent / guardian name <b *ngIf="isPatientFieldRequired('guardian')">*</b></label>
-                    <input [(ngModel)]="bill.patient.guardian_name" [disabled]="isCancelledBill()" placeholder="Enter parent or guardian name">
+                    <input [(ngModel)]="bill.patient.guardian_name" (blur)="applyPatientFieldsCapsUi()" [disabled]="!patientEditable()" placeholder="Enter parent or guardian name">
                   </div>
                   <div class="field">
                     <label>Guardian mobile</label>
-                    <input [(ngModel)]="bill.patient.guardian_mobile" [disabled]="isCancelledBill()" placeholder="Optional guardian mobile">
+                    <input [(ngModel)]="bill.patient.guardian_mobile" [disabled]="!patientEditable()" placeholder="Optional guardian mobile">
                   </div>
                 </div>
               </section>
 
               <section class="patient-section-card contact-details-card" *ngIf="patientDetailSection() === 'contact'">
                 <div class="section-heading">
-                  <span class="section-icon">☏</span>
+                  <span class="section-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v9A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-9z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5 8l7 5 7-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
                   <div><h4>Address & Contact</h4><p>Optional patient contact details.</p></div>
                 </div>
                 <div class="patient-grid contact-grid">
                   <div class="field">
                     <label>Email <b *ngIf="isPatientFieldRequired('email')">*</b></label>
-                    <input [(ngModel)]="bill.patient.email" [disabled]="isCancelledBill()" placeholder="Email address">
+                    <input [(ngModel)]="bill.patient.email" [disabled]="!patientEditable()" placeholder="Email address">
                   </div>
                   <div class="field address-field">
                     <label>Address <b *ngIf="isPatientFieldRequired('address')">*</b></label>
-                    <input [(ngModel)]="bill.patient.address" [disabled]="isCancelledBill()" placeholder="Enter address">
+                    <input [(ngModel)]="bill.patient.address" (blur)="applyPatientFieldsCapsUi()" [disabled]="!patientEditable()" placeholder="Enter address">
                   </div>
                   <div class="field notes-field">
                     <label>Patient history / clinical notes <b *ngIf="isPatientFieldRequired('history')">*</b></label>
-                    <textarea [(ngModel)]="bill.patient.history" [disabled]="isCancelledBill()" placeholder="Clinical notes, history or special instructions"></textarea>
+                    <textarea [(ngModel)]="bill.patient.history" (blur)="applyPatientFieldsCapsUi()" [disabled]="!patientEditable()" placeholder="Clinical notes, history or special instructions"></textarea>
                   </div>
                 </div>
               </section>
 
               <section class="patient-section-card patient-other-card" *ngIf="patientDetailSection() === 'other'">
                 <div class="section-heading">
-                  <span class="section-icon">⋯</span>
+                  <span class="section-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="18" cy="12" r="1.6" fill="currentColor"/></svg></span>
                   <div><h4>Others</h4><p>Future patient details can be added here.</p></div>
                 </div>
                 <div class="patient-empty-section">No extra details configured yet.</div>
@@ -336,7 +359,7 @@
             <section class="select-add-panel patient-section-card template-add-panel">
               <div class="template-search" id="billItemSearchArea">
                 <div class="template-search-input-shell">
-                  <span class="template-search-glyph" aria-hidden="true">⌕</span>
+                  <svg class="template-search-glyph" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="M20 20l-3.5-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
                   <input
                     class="template-search-input"
                     type="text"
@@ -353,14 +376,14 @@
                     *ngIf="billSearch"
                     aria-label="Clear search"
                     (click)="clearBillItemSearch()">
-                    ×
+                    x
                   </button>
                 </div>
 
                 <div class="template-search-popover" *ngIf="searchOpen && hasBillSearch()">
                   <div class="template-info-row">
                     <span>{{ billItemResultsCache.length }} result{{ billItemResultsCache.length === 1 ? '' : 's' }} found for <b>"{{ billSearch }}"</b></span>
-                    <span>Use ↑ ↓ and Enter</span>
+                    <span>Use Up/Down and Enter</span>
                   </div>
 
                   <div class="template-results" *ngIf="billItemResultsCache.length; else noBillItemMatches">
@@ -380,15 +403,15 @@
                       <mat-checkbox
                         class="template-check"
                         [checked]="isBillItemAlreadyAdded(s)"
-                        [disabled]="isCancelledBill()"
+                        [disabled]="!canAddBillItems()"
                         (click)="onBillItemResultCheckboxClick($event, s)">
                       </mat-checkbox>
                       <div class="template-result-copy">
                         <div class="template-result-title">
                           <b [innerHTML]="highlightBillItemMatch(s.display_name || s.name)"></b>
-                          <small>{{ billItemKindLabel(s) }}</small>
                         </div>
-                        <span><ng-container *ngIf="isBillItemAlreadyAdded(s)">Selected • </ng-container><span [innerHTML]="highlightBillItemMatch(billItemOptionDescription(s))"></span></span>
+                        <small class="template-result-kind">{{ billItemKindLabel(s) }}</small>
+                        <span class="template-result-meta"><ng-container *ngIf="isBillItemAlreadyAdded(s)">Selected - </ng-container><span [innerHTML]="highlightBillItemMatch(billItemOptionDescription(s))"></span></span>
                       </div>
                       <div class="template-result-price">
                         <b>₹{{ s.price }}</b>
@@ -421,7 +444,7 @@
                     (keydown.space)="onSuggestedBillItemCardClick($event, s)">
                     <div>
                       <h3>{{ s.shortName || s.display_name || s.name }}</h3>
-                      <small>{{ isBillItemAlreadyAdded(s) ? 'Selected • ' : '' }}{{ billItemKindLabel(s) }}</small>
+                      <small class="template-result-kind">{{ isBillItemAlreadyAdded(s) ? 'Selected - ' : '' }}{{ billItemKindLabel(s) }}</small>
                     </div>
                     <small>{{ billItemOptionDescription(s) }}</small>
                     <h2>₹{{ s.price }}</h2>
@@ -443,8 +466,8 @@
                 </div>
                 <div class="selected-test-row compact-rate-row" *ngFor="let i of bill.items; let idx = index; trackBy: trackSelectedBillItem" cdkDrag>
                   <div class="selected-test-name" cdkDragHandle title="Drag to reorder">
-                    <span class="v54-drag-dots" aria-hidden="true">⠿</span>
-                    <b>{{ i.name }}</b>
+                    <span class="v54-drag-dots" aria-hidden="true"></span>
+                    <b>{{ i.name }}</b> <small *ngIf="isBillItemFinished(i)" class="status-pill">Finished</small>
                   </div>
                   <div class="rate-edit-box money-edit-box">
                     <span>₹</span>
@@ -457,6 +480,7 @@
                       (keydown)="allowOnlyNumberKey($event)"
                       (mousedown)="$event.stopPropagation()"
                       (click)="$event.stopPropagation()"
+                      [disabled]="!canEditBillItemRate(i)"
                       aria-label="Base rate">
                   </div>
                   <div class="discount-inline rate-edit-box">
@@ -469,19 +493,20 @@
                       (keydown)="allowOnlyNumberKey($event)"
                       (mousedown)="$event.stopPropagation()"
                       (click)="$event.stopPropagation()"
+                      [disabled]="!canEditBillItemRate(i)"
                       aria-label="Discount value">
                   </div>
                   <button
                     type="button"
                     class="discount-type-toggle rate-edit-box"
-                    [disabled]="isCancelledBill()"
+                    [disabled]="!canEditBillItemRate(i)"
                     (click)="$event.stopPropagation(); toggleSelectedItemDiscountType(i)"
                     (mousedown)="$event.stopPropagation()"
                     aria-label="Toggle discount type">
-                    {{ i.discount_type === 'VALUE' ? '₹' : '%' }}
+                  - {{ i.discount_type === 'VALUE' ? '₹' : '%' }}
                   </button>
                   <strong class="final-rate">₹{{ lineTotal(i) }}</strong>
-                  <button type="button" class="remove-selected-test" title="Remove item" [disabled]="isCancelledBill()" (click)="removeBillItemAt(idx)">×</button>
+                  <button type="button" class="remove-selected-test" title="Remove item" [disabled]="isBillItemLineLocked(i)" (click)="removeBillItemAt(idx)">x</button>
                 </div>
               </div>
 
@@ -556,13 +581,13 @@
               <section class="bill-detail-section named-section">
                 <div class="section-title-line"><h4>Bill Details</h4><span>{{ isCancelledBill() ? 'Read only - cancelled bill' : 'Discount and rounding only' }}</span></div>
                 <div class="billing-summary split-form-grid">
-                  <label>Discount type<select [(ngModel)]="bill.discount_type"><option value="VALUE">Value ₹</option><option value="PERCENT">Percent %</option></select></label>
-                  <label>Discount value<input type="number" [(ngModel)]="bill.discount_value"></label>
+                  <label>Discount type<select [(ngModel)]="bill.discount_type" [disabled]="!canEditBillPricing()"><option value="VALUE">Value ₹</option><option value="PERCENT">Percent %</option></select></label>
+                  <label>Discount value<input type="number" [(ngModel)]="bill.discount_value" [disabled]="!canEditBillPricing()"></label>
                   <label>Round off<select [(ngModel)]="bill.round_mode"><option value="NONE">No round off</option><option value="NEAREST">Nearest rupee</option><option value="UP">Round up</option><option value="DOWN">Round down</option></select></label>
                   <label>Default payment mode<select [(ngModel)]="bill.payment_mode"><option>Cash</option><option>UPI</option><option>Card</option><option>Bank</option></select></label>
                 </div>
                 <button class="primary-action" type="button" (click)="createBill()" [disabled]="isCancelledBill() || creating() || !canGoPayment()">
-                  {{ isCancelledBill() ? 'Cancelled - Read Only' : (creating() ? (editingBillId ? 'Updating Bill...' : 'Creating Bill...') : (editingBillId ? 'Update Bill' : 'Create Bill')) }}
+                - {{ isCancelledBill() ? 'Cancelled - Read Only' : (creating() ? (editingBillId ? 'Updating Bill...' : 'Creating Bill...') : (editingBillId ? 'Update Bill' : 'Create Bill')) }}
                 </button>
               </section>
 
@@ -583,8 +608,8 @@
                   <div class="receipt-history-head"><b>Receipts</b><span>{{ bill.receipts.length }} receipt{{ bill.receipts.length === 1 ? '' : 's' }}</span></div>
                   <div class="receipt-history-row" *ngFor="let r of bill.receipts">
                     <span>{{ r.receipt_no }}</span><b>₹{{ r.amount }}</b><small>{{ r.payment_mode }}</small>
-                    <button class="btn secondary tiny safe-action" type="button" (click)="receipt(editingBillId!, r.id)" title="Print receipt">🧾</button>
-                    <button class="btn danger-soft tiny" type="button" [disabled]="isCancelledBill()" (click)="askDeleteReceipt(r)" title="Delete receipt">🗑</button>
+                    <button class="btn secondary tiny safe-action" type="button" (click)="receipt(editingBillId!, r.id)" title="Print receipt">R</button>
+                    <button class="btn danger-soft tiny" type="button" [disabled]="isCancelledBill()" (click)="askDeleteReceipt(r)" title="Delete receipt">X</button>
                   </div>
                 </div>
               </section>
@@ -625,7 +650,7 @@
             <ng-container *ngSwitchCase="4">
               <button class="btn secondary dynamic-step-back" type="button" (click)="step.set(3)">Back</button>
               <button class="btn primary dynamic-step-next" type="button" [disabled]="isCancelledBill() || creating() || !canGoPayment()" (click)="createBill()">
-                {{ creating() ? (editingBillId ? 'Updating Bill...' : 'Creating Bill...') : (editingBillId ? 'Update Bill' : 'Create Bill') }}
+              - {{ creating() ? (editingBillId ? 'Updating Bill...' : 'Creating Bill...') : (editingBillId ? 'Update Bill' : 'Create Bill') }}
               </button>
             </ng-container>
           </ng-container>
@@ -671,7 +696,7 @@
           <p class="modal-copy">We found {{ duplicateMobileModal().patients.length }} patient record{{ duplicateMobileModal().patients.length === 1 ? '' : 's' }} using <b>{{ duplicateMobileModal().mobile }}</b>. Select an existing patient to avoid duplicate registration, or continue only if this is a different patient using the same phone.</p>
           <div class="duplicate-patient-list">
             <button type="button" *ngFor="let p of duplicateMobileModal().patients" (click)="useDuplicatePatient(p)">
-              <span><b>{{ p.patient_no }} · {{ displayPatientName(p) || p.name }}</b><small>{{ p.age || '-' }} / {{ p.gender || '-' }} · {{ p.mobile }}</small><small>Registered: {{ formatIstDateTime(p.created_at || p.createdAt) }}</small></span>
+              <span><b>{{ p.patient_no }}  - {{ displayPatientName(p) || p.name }}</b><small>{{ patientAgeLabel(p) || '-' }} / {{ p.gender || '-' }}  - {{ p.mobile }}</small><small>Registered: {{ formatIstDateTime(p.created_at || p.createdAt) }}</small></span>
               <strong>Use</strong>
             </button>
           </div>
@@ -685,7 +710,7 @@
 
     <div class="pro-modal-backdrop" *ngIf="customOptionModal.open" (click)="closeCustomOption()">
       <section class="pro-modal-card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()" (mousedown)="$event.stopPropagation()">
-        <div class="modal-icon">＋</div>
+        <div class="modal-icon">+</div>
         <div class="modal-content">
           <h3>{{ customOptionTitle() }}</h3>
           <p class="modal-copy">This option will be saved into Settings and will be available for future bills.</p>
@@ -700,7 +725,7 @@
 
     <div class="pro-modal-backdrop" *ngIf="consultantModal.open" (click)="closeConsultantModal()">
       <section class="pro-modal-card consultant-add-modal" role="dialog" aria-modal="true" (click)="$event.stopPropagation()" (mousedown)="$event.stopPropagation()">
-        <div class="modal-icon">＋</div>
+        <div class="modal-icon">+</div>
         <div class="modal-content">
           <h3>Add consultant / referrer</h3>
           <p class="modal-copy">The consultant will be saved and selected for this bill.</p>

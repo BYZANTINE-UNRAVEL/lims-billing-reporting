@@ -137,9 +137,12 @@
   color: #0f172a !important;
 }
 
-:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-result-title small,
-:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-result-title small,
-:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-result-title small,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-result-kind,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-result-kind,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-result-kind,
+:host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-result-meta,
+:host-context(.light) .billing-stepper.pro-billing .select-items-template .template-result-meta,
+:host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-result-meta,
 :host-context(body.light) .billing-stepper.pro-billing .select-items-template .template-result-desc,
 :host-context(.light) .billing-stepper.pro-billing .select-items-template .template-result-desc,
 :host-context(.light-mode) .billing-stepper.pro-billing .select-items-template .template-result-desc {

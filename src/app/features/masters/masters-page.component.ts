@@ -72,9 +72,27 @@ import { MatTabsModule } from '@angular/material/tabs';
               <b>{{ department.active ? 'Yes' : 'No' }}</b>
             </span>
           </label>
+          <div class="propagation-box department-rename-scope span-all" *ngIf="department.id && isDepartmentRenamePending()">
+            <strong>Rename scope</strong>
+            <p class="editor-help">Department master always updates. Frozen bill/report prints keep the old name unless you rewrite them below.</p>
+            <label class="master-field select-field"><span>Update mode</span>
+              <select [(ngModel)]="departmentRenameScope.update_scope">
+                <option value="future">Future only — keep existing bill/report names frozen</option>
+                <option value="fromDate">From selected date</option>
+                <option value="all">All history</option>
+              </select>
+            </label>
+            <label class="master-field" *ngIf="departmentRenameScope.update_scope==='fromDate'"><span>Apply from date</span>
+              <input type="date" [(ngModel)]="departmentRenameScope.apply_from" (focus)="departmentRenameScope.update_scope='fromDate'">
+            </label>
+            <div class="check-row">
+              <label class="check-pill"><input type="checkbox" [(ngModel)]="departmentRenameScope.update_billing" [disabled]="departmentRenameScope.update_scope==='future'"> Billing prints</label>
+              <label class="check-pill"><input type="checkbox" [(ngModel)]="departmentRenameScope.update_reporting" [disabled]="departmentRenameScope.update_scope==='future'"> Reporting prints</label>
+            </div>
+          </div>
           <div class="form-actions">
-            <button class="action-btn primary" type="button" (click)="saveDepartment()">Save</button>
-            <button class="action-btn ghost" type="button" (click)="department={name:'',priority:0,page_break_after:false,active:true}">Clear</button>
+            <button class="action-btn primary" type="button" (click)="saveDepartment()">{{ department.id ? 'Save changes' : 'Save' }}</button>
+            <button class="action-btn ghost" type="button" (click)="clearDepartmentForm()">Clear</button>
           </div>
         </div>
 
@@ -86,14 +104,21 @@ import { MatTabsModule } from '@angular/material/tabs';
             <tbody>
               <tr *ngFor="let d of departments()" draggable="true" (dragstart)="onDepartmentDragStart(d)" (dragover)="onDepartmentDragOver($event)" (drop)="onDepartmentDrop(d)">
                 <td class="drag-cell"><span class="drag-handle" title="Drag to reorder">⋮⋮</span><span class="order-chip">{{d.priority}}</span></td>
-                <td><strong class="entity-name">{{d.name}}</strong></td>
+                <td><strong class="entity-name">{{d.name || '(unnamed)'}}</strong></td>
                 <td><span class="status-badge" [class.inactive]="!d.page_break_after"><i></i>{{d.page_break_after?'Yes':'No'}}</span></td>
-                <td><span class="status-badge" [class.inactive]="!d.active"><i></i>{{d.active?'Active':'Inactive'}}</span></td>
-                <td><button class="edit-btn" type="button" (click)="editDepartment(d)">Edit</button></td>
+                <td><span class="status-badge" [class.inactive]="!isDepartmentActive(d)"><i></i>{{isDepartmentActive(d)?'Active':'Inactive'}}</span></td>
+                <td class="row-actions">
+                  <button class="edit-btn" type="button" (click)="editDepartment(d)">Edit</button>
+                  <button class="mini-status-action" *ngIf="isDepartmentActive(d)" type="button" title="Hide from future test/profile assignment" (click)="deactivateDepartment(d)">Deactivate</button>
+                  <button class="mini-status-action activate" *ngIf="!isDepartmentActive(d)" type="button" title="Show again for future use" (click)="activateDepartment(d)">Activate</button>
+                  <button class="icon-action delete" type="button" title="Delete only if unused" aria-label="Delete department" (click)="deleteDepartment(d)">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M6 6l1 15h10l1-15"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>
-          <div class="table-footer"><span>Total Departments: <b>{{ departments().length }}</b></span><span>Drag rows to update display order using safe gaps.</span></div>
+          <div class="table-footer"><span>Total Departments: <b>{{ departments().length }}</b></span><span>Deactivate hides from future assignment. Delete only when unused.</span></div>
         </div>
       </section>
 
@@ -152,7 +177,7 @@ import { MatTabsModule } from '@angular/material/tabs';
             <button type="button" [class.active]="!testListDepartment" (click)="setTestListDepartment('')">
               <span>All</span><b>{{testListTotalCount()}}</b>
             </button>
-            <button type="button" *ngFor="let d of departments()" [class.active]="isTestDepartmentSelected(d.id)" (click)="setTestListDepartment(d.id)">
+            <button type="button" *ngFor="let d of activeDepartments()" [class.active]="isTestDepartmentSelected(d.id)" (click)="setTestListDepartment(d.id)">
               <span>{{d.name}}</span><b>{{testCountForDepartment(d.id)}}</b>
             </button>
           </div>
@@ -226,7 +251,7 @@ import { MatTabsModule } from '@angular/material/tabs';
                 <label class="master-field"><span>Test cost</span><input type="number" [(ngModel)]="test.running_cost" placeholder="Internal test cost"></label>
                 <label class="master-field wide"><span>Search keywords</span><input [(ngModel)]="test.search_keywords" placeholder="Auto keywords from code/name"></label>
 
-                <label class="master-field select-field"><span>Department <b class="req" *ngIf="test.active_for_reporting">*</b></span><select [(ngModel)]="test.department_id"><option [ngValue]="null">Department</option><option *ngFor="let d of departments()" [ngValue]="d.id">{{d.name}}</option></select></label>
+                <label class="master-field select-field"><span>Department <b class="req" *ngIf="test.active_for_reporting">*</b></span><select [(ngModel)]="test.department_id"><option [ngValue]="null">Department</option><option *ngFor="let d of departmentsForSelect(test.department_id)" [ngValue]="d.id">{{d.name}}{{isDepartmentActive(d) ? '' : ' (inactive)'}}</option></select></label>
                 <label class="master-field select-field"><span>Unit <b class="req" *ngIf="test.active_for_reporting">*</b></span><select [(ngModel)]="test.unit_id"><option [ngValue]="null">Unit</option><option *ngFor="let u of units()" [ngValue]="u.id">{{u.name}}</option></select></label>
                 <label class="master-field order-entry-field"><span>Billing order</span><input type="number" [(ngModel)]="test.billing_order" (focus)="openOrderHelper('billing')" (input)="openOrderHelper('billing')" placeholder="Auto"></label>
                 <label class="master-field order-entry-field"><span>Report order <small>Auto</small></span><input type="number" [(ngModel)]="test.report_order" (focus)="openOrderHelper('report')" (input)="openOrderHelper('report')" placeholder="Auto"></label>
@@ -683,7 +708,7 @@ Pregnancy: 11.0 - 14.0"></textarea><button class="reference-format-btn" type="bu
                 <label class="master-field"><span>Code <b class="req">*</b></span><input [(ngModel)]="profile.code" (ngModelChange)="onProfileCodeChange($event)" placeholder="Auto from name"></label>
                 <label class="master-field"><span>Profile name <b class="req">*</b></span><input [(ngModel)]="profile.name" (ngModelChange)="onProfileNameChange($event)" placeholder="Profile name"></label>
                 <label class="master-field"><span>Profile display name <b class="req">*</b></span><input [(ngModel)]="profile.display_name" (ngModelChange)="onProfileDisplayNameChange($event)" placeholder="Auto from profile name"></label>
-                <label class="master-field select-field"><span>Department</span><select [(ngModel)]="profile.department_id"><option [ngValue]="0">Mixed</option><option *ngFor="let d of departments()" [ngValue]="d.id">{{d.name}}</option></select></label>
+                <label class="master-field select-field"><span>Department</span><select [(ngModel)]="profile.department_id"><option [ngValue]="0">Mixed</option><option *ngFor="let d of departmentsForSelect(profile.department_id)" [ngValue]="d.id">{{d.name}}{{isDepartmentActive(d) ? '' : ' (inactive)'}}</option></select></label>
                 <label class="master-field"><span>Price</span><input type="number" [(ngModel)]="profile.price" placeholder="Price"></label>
                 <label class="master-field select-field"><span>Running cost mode</span><select [(ngModel)]="profile.running_cost_mode"><option value="AUTO">Auto from tests</option><option value="MANUAL">Manual profile cost</option></select></label>
                 <label class="master-field" *ngIf="profile.running_cost_mode === 'MANUAL'"><span>Profile running cost</span><input type="number" [(ngModel)]="profile.running_cost" placeholder="Manual cost"></label>
@@ -894,6 +919,9 @@ Pregnancy: 11.0 - 14.0"></textarea><button class="reference-format-btn" type="bu
     .info-pill{display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:0 12px;border-radius:12px;border:1px solid color-mix(in srgb,var(--accent) 40%,var(--border));background:color-mix(in srgb,var(--accent) 10%,var(--panel));color:color-mix(in srgb,var(--accent) 76%,var(--text));font-size:12px;font-weight:850;white-space:nowrap}
     .entry-card,.profile-builder{border:1px solid var(--border);border-radius:14px;background:color-mix(in srgb,var(--row) 62%,transparent);padding:10px;margin-bottom:10px}
     .department-entry{display:grid;grid-template-columns:minmax(240px,1.45fr) minmax(150px,.75fr) minmax(120px,.45fr) auto;gap:10px;align-items:end}
+    .department-rename-scope{grid-column:1/-1;align-items:stretch;margin-top:2px}
+    .department-rename-scope .check-row{display:flex;flex-wrap:wrap;gap:8px}
+    .department-entry .form-actions{grid-column:1/-1;justify-content:flex-end}
     .compact-entry{display:grid;grid-template-columns:minmax(240px,1fr) minmax(130px,.4fr) auto;gap:10px;align-items:end}
     .test-entry,.profile-entry{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:10px;align-items:end}
     .test-entry .wide,.profile-entry .wide{grid-column:span 2}.span-actions{grid-column:span 2}
@@ -1048,6 +1076,8 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
   @Output() changed = new EventEmitter<void>();
   departments = signal<any[]>([]); units = signal<any[]>([]); tests = signal<any[]>([]); profiles = signal<any[]>([]); specimens = signal<any[]>([]); methods = signal<any[]>([]); formulaTestResults = signal<any[]>([]);
   department:any = { name:'', priority:0, page_break_after:false, active:true };
+  departmentOriginalName = '';
+  departmentRenameScope = { update_scope: 'future' as 'future' | 'fromDate' | 'all', apply_from: '', update_billing: true, update_reporting: true };
   unit:any = { name:'', active:true };
   dataTypes = [
     { value:'NUMBER', label:'Number' },
@@ -1119,6 +1149,7 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
   selectedPredefinedFormula = '';
   egfrSourceTestId: number | null = null;
   roundingModes = [
+    { value:'NO_TRANSFORM', label:'No transformation' },
     { value:'NONE', label:'No rounding' },
     { value:'NEAREST', label:'Round nearest' },
     { value:'UP', label:'Round up' },
@@ -1155,7 +1186,105 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
   async ngOnInit(){ await this.reload(); }
   ngAfterViewChecked(){ this.syncInterpretationEditorIfNeeded(); this.syncProfileInterpretationEditorIfNeeded(); }
   async reload(){ const api=window.limsApi; this.departments.set(await api.listDepartments()); this.units.set(await api.listUnits()); this.tests.set(await api.listTests()); this.profiles.set(await api.listProfiles()); this.specimens.set(api.listSpecimens ? await api.listSpecimens() : []); this.methods.set(api.listMethods ? await api.listMethods() : []); }
-  async saveDepartment(){ await window.limsApi.saveDepartment(this.department); this.department={name:'',priority:0,page_break_after:false,active:true}; await this.reload(); this.changed.emit(); }
+  isDepartmentActive(d:any){ return !(d?.active === false || d?.active === 0 || d?.active === '0'); }
+  activeDepartments(){ return this.departments().filter((d:any) => this.isDepartmentActive(d) && String(d?.name || '').trim()); }
+  departmentsForSelect(currentId:any){
+    const cur = +currentId || 0;
+    return this.departments().filter((d:any) => {
+      if (!String(d?.name || '').trim() && +d.id !== cur) return false;
+      return this.isDepartmentActive(d) || +d.id === cur;
+    });
+  }
+  isDepartmentRenamePending(){
+    if (!this.department?.id) return false;
+    return String(this.department.name || '').trim().toLowerCase() !== String(this.departmentOriginalName || '').trim().toLowerCase();
+  }
+  clearDepartmentForm(){
+    this.department = { name:'', priority:0, page_break_after:false, active:true };
+    this.departmentOriginalName = '';
+    this.departmentRenameScope = { update_scope:'future', apply_from:this.todayIso(), update_billing:true, update_reporting:true };
+  }
+  async saveDepartment(){
+    const name = String(this.department?.name || '').trim();
+    if (!name) { await this.showMasterAlert('Department name required', 'Enter a department name before saving.'); return; }
+    const renaming = this.isDepartmentRenamePending();
+    if (renaming && this.departmentRenameScope.update_scope === 'fromDate' && !String(this.departmentRenameScope.apply_from || '').trim()) {
+      await this.showMasterAlert('Apply from date required', 'Select Apply from date, or choose Future only / All history.');
+      return;
+    }
+    if (renaming && this.departmentRenameScope.update_scope !== 'future' && !this.departmentRenameScope.update_billing && !this.departmentRenameScope.update_reporting) {
+      await this.showMasterAlert('Rename scope required', 'Turn on Billing and/or Reporting prints, or use Future only.');
+      return;
+    }
+    try {
+      const payload:any = {
+        ...this.department,
+        name,
+        page_break_after: !!this.department.page_break_after,
+        active: this.isDepartmentActive(this.department)
+      };
+      if (renaming) {
+        payload.apply_scope = true;
+        payload.update_scope = this.departmentRenameScope.update_scope;
+        payload.apply_from = this.departmentRenameScope.apply_from;
+        payload.update_billing = this.departmentRenameScope.update_scope !== 'future' && !!this.departmentRenameScope.update_billing;
+        payload.update_reporting = this.departmentRenameScope.update_scope !== 'future' && !!this.departmentRenameScope.update_reporting;
+      }
+      const result:any = await window.limsApi.saveDepartment(payload);
+      if (result && !Array.isArray(result) && result.scope) {
+        const s = result.scope;
+        await this.showMasterAlert(
+          'Department updated',
+          `Name saved${renaming ? ` (“${result.old_name}” → “${result.name}”)` : ''}. Billing rows updated: ${s.billing || 0}. Reporting rows updated: ${s.reporting || 0}.`
+        );
+      }
+      this.clearDepartmentForm();
+      await this.reload();
+      this.changed.emit();
+    } catch (err:any) {
+      await this.showMasterAlert('Department save failed', String(err?.message || err || 'Could not save department.').replace(/^Error:\s*/i, ''));
+    }
+  }
+  async deactivateDepartment(d:any){
+    const ok = await this.showMasterConfirm(
+      'Deactivate department?',
+      [`Deactivate "${d.name || 'Department'}"?`, 'Existing tests/profiles/history stay as-is. It will not appear for new assignment.'],
+      'Deactivate',
+      true
+    );
+    if(!ok) return;
+    try {
+      await window.limsApi.saveDepartment({ ...d, active:false, page_break_after:!!d.page_break_after });
+      await this.reload(); this.changed.emit();
+    } catch (err:any) {
+      await this.showMasterAlert('Deactivate failed', String(err?.message || err || 'Could not deactivate.').replace(/^Error:\s*/i, ''));
+    }
+  }
+  async activateDepartment(d:any){
+    try {
+      await window.limsApi.saveDepartment({ ...d, active:true, page_break_after:!!d.page_break_after });
+      await this.reload(); this.changed.emit();
+    } catch (err:any) {
+      await this.showMasterAlert('Activate failed', String(err?.message || err || 'Could not activate.').replace(/^Error:\s*/i, ''));
+    }
+  }
+  async deleteDepartment(d:any){
+    const ok = await this.showMasterConfirm(
+      'Delete department?',
+      [`Delete "${d.name || '(unnamed)'}"?`, 'Allowed only when unused on tests, profiles, bills, or reports.', 'If already used, deactivate it instead.'],
+      'Delete',
+      true
+    );
+    if(!ok) return;
+    try {
+      if(!window.limsApi.deleteDepartment) throw new Error('Delete API is not available. Restart the app.');
+      await window.limsApi.deleteDepartment(d.id);
+      if(+this.department?.id === +d.id) this.clearDepartmentForm();
+      await this.reload(); this.changed.emit();
+    } catch (err:any) {
+      await this.showMasterAlert('Department in use', String(err?.message || err || 'This department could not be deleted.').replace(/^Error:\s*/i, ''));
+    }
+  }
   async saveUnit(){ await window.limsApi.saveUnit(this.unit); this.unit={name:'',active:true}; await this.reload(); this.changed.emit(); }
   onTestCodeChange(value:string){ this.testCodeTouched = true; this.test.code = String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12); }
   onDisplayNameChange(value:string){ this.testDisplayNameTouched = true; this.test.display_name = value || ''; }
@@ -1439,7 +1568,10 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
   syncInputTypeForDataType(){
     const map:any = { NUMBER:'TEXTBOX', TEXT:'TEXTBOX' };
     if (!['TEXTBOX','OPTION','CALCULATED_EDITABLE'].includes(this.test.input_control_type)) this.test.input_control_type = map[this.test.result_data_type] || 'TEXTBOX';
-    if (this.test.input_control_type === 'CALCULATED_EDITABLE') this.test.result_mode = 'CALCULATED';
+    if (this.test.input_control_type === 'CALCULATED_EDITABLE') {
+      this.test.result_mode = 'CALCULATED';
+      this.test.allow_manual_override = true;
+    }
   }
   addReferenceRule(){
     if(!Array.isArray(this.test.reference_ranges)) this.test.reference_ranges = [];
@@ -1548,6 +1680,7 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
     this.test.result_data_type = 'NUMBER';
     this.test.input_control_type = 'CALCULATED_EDITABLE';
     this.test.result_mode = 'CALCULATED';
+    this.test.allow_manual_override = true;
     this.test.predefined_formula_key = f.key;
     this.test.formula_expression = f.expression;
     const savedScr = (this.test.formula_variables || []).find((v:any)=>String(v.variable_key || '').trim().toUpperCase() === 'SCR');
@@ -2239,7 +2372,16 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
     this.profileMasterView = 'list'; this.profileFormMode = 'create'; this.resetProfile(); await this.reload(); this.changed.emit();
   }
   resetProfile(){ this.profile={active:true,billable:true,active_for_reporting:true,show_profile_name:true,ordering_mode:'MANUAL',price:0,running_cost:0,running_cost_mode:'AUTO',priority:0,billing_order:0,report_order:0,search_keywords:'',display_name:'',department_id:0,interpretation_enabled:false,interpretation_text:'',items:[]}; this.profileUpdateTargets = { master:true, linkedProfiles:true, billing:false, billingFromDate:this.todayIso(), billingToDate:this.todayIso() }; this.profileCodeTouched = false; this.profileDisplayNameTouched = false; this.profileMasterStep = 0; this.profileInterpretationEditorNeedsSync = true; this.closeProfileOrderHelper(); }
-  editDepartment(d:any){ this.department={...d}; }
+  editDepartment(d:any){
+    this.department = { ...d, page_break_after: !!d.page_break_after, active: this.isDepartmentActive(d) };
+    this.departmentOriginalName = String(d?.name || '').trim();
+    this.departmentRenameScope = {
+      update_scope: 'future',
+      apply_from: this.todayIso(),
+      update_billing: true,
+      update_reporting: true
+    };
+  }
   editUnit(u:any){ this.unit={...u}; }
   editTest(t:any){
     const refs = t.reference_ranges || [];

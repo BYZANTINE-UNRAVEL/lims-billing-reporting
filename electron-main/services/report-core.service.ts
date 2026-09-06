@@ -91,10 +91,25 @@ export class ReportCoreService {
     }
     const existingDefault = doc?.defaultStyle || {};
     const safeFont = this.reportFont(existingDefault.font || this.defaultReportFont || 'Roboto');
-    const docForPdf = {
+    let docForPdf: any = {
       ...doc,
+      // Never reuse a pdfmake images dictionary — leftover $$pdfmake$$N keys resolve as
+      // relative files under the install folder (e.g. Program Files\LIMS Professional).
+      images: undefined,
       defaultStyle: { ...existingDefault, font: safeFont }
     };
+
+    // "Continued on next page…" is possible only when it still fits under the table.
+    // If pdfmake pushes it alone onto the next page, drop that notice (never show an empty continue page).
+    // Never JSON.stringify the doc — page-break tables / layout callbacks can be circular and crash IPC.
+    if (this.contentHasContinuedNotice(docForPdf.content)) {
+      docForPdf = await this.pruneOrphanContinuedNotices(docForPdf);
+    }
+
+    // Final safety: drop any internal pdfmake image ids left on nodes (from a prior probe).
+    this.sanitizePdfImageNodes(docForPdf.content);
+    docForPdf.images = undefined;
+
     await new Promise<void>((resolve, reject) => {
       const pdfDoc = this.pdfPrinter.createPdfKitDocument(docForPdf);
       const stream = fs.createWriteStream(file);
@@ -104,6 +119,151 @@ export class ReportCoreService {
       pdfDoc.pipe(stream);
       pdfDoc.end();
     });
+  }
+
+  /**
+   * pdfmake rewrites image nodes to $$pdfmake$$N during layout. If those ids leak into
+   * a second createPdfKitDocument pass, Node tries to open them as files under cwd
+   * (Program Files when installed) → ENOENT Invalid image.
+   */
+  protected sanitizePdfImageNodes(nodes: any, seen?: Set<any>): void {
+    if (!nodes || typeof nodes !== 'object') return;
+    const visited = seen || new Set<any>();
+    if (visited.has(nodes)) return;
+    visited.add(nodes);
+    if (Array.isArray(nodes)) {
+      nodes.forEach((n: any) => this.sanitizePdfImageNodes(n, visited));
+      return;
+    }
+    const img = nodes.image;
+    if (typeof img === 'string') {
+      const raw = img.trim();
+      const ok = /^data:image\//i.test(raw)
+        || (path.isAbsolute(raw) && (() => { try { return fs.existsSync(raw); } catch { return false; } })());
+      if (!ok || /^\$\$pdfmake\$\$/i.test(raw)) {
+        delete nodes.image;
+        if (nodes.text == null) nodes.text = '';
+      }
+    }
+    if (nodes.stack) this.sanitizePdfImageNodes(nodes.stack, visited);
+    if (nodes.columns) this.sanitizePdfImageNodes(nodes.columns, visited);
+    if (nodes.table?.body) this.sanitizePdfImageNodes(nodes.table.body, visited);
+  }
+
+  /** Safe walk — avoids JSON.stringify circular crashes on page-break PDFs. */
+  protected contentHasContinuedNotice(nodes: any, seen?: Set<any>): boolean {
+    if (!nodes || typeof nodes !== 'object') return false;
+    const visited = seen || new Set<any>();
+    if (visited.has(nodes)) return false;
+    visited.add(nodes);
+    if (Array.isArray(nodes)) {
+      return nodes.some((n: any) => this.contentHasContinuedNotice(n, visited));
+    }
+    if (String(nodes.id || '').startsWith('lims-continued-')) return true;
+    if (nodes.stack && this.contentHasContinuedNotice(nodes.stack, visited)) return true;
+    if (nodes.columns && this.contentHasContinuedNotice(nodes.columns, visited)) return true;
+    if (nodes.table?.body && this.contentHasContinuedNotice(nodes.table.body, visited)) return true;
+    return false;
+  }
+
+  /** Deep-clone PDF content nodes so pdfmake layout cannot attach circular parent refs onto the live doc. */
+  protected clonePdfContentNodes(nodes: any, seen?: WeakMap<object, any>): any {
+    if (nodes == null || typeof nodes !== 'object') return nodes;
+    if (typeof nodes === 'function') return undefined;
+    const map = seen || new WeakMap<object, any>();
+    if (map.has(nodes)) return map.get(nodes);
+    if (Array.isArray(nodes)) {
+      const arr: any[] = [];
+      map.set(nodes, arr);
+      for (const item of nodes) arr.push(this.clonePdfContentNodes(item, map));
+      return arr;
+    }
+    const out: any = {};
+    map.set(nodes, out);
+    for (const key of Object.keys(nodes)) {
+      const value = (nodes as any)[key];
+      if (typeof value === 'function') continue;
+      out[key] = this.clonePdfContentNodes(value, map);
+    }
+    return out;
+  }
+
+  /** Layout probe: remove continued notices that landed alone on a page. */
+  protected async pruneOrphanContinuedNotices(doc: any): Promise<any> {
+    const orphanIds = new Set<string>();
+    const probePath = `${os.tmpdir()}${path.sep}lims-continued-probe-${Date.now()}.pdf`;
+    const isRealBodyNode = (n: any) => {
+      if (!n) return false;
+      if (String(n.id || '').startsWith('lims-continued-')) return false;
+      if (n.table) return true;
+      if (n.image || n.canvas || n.svg || n.columns || n.ul || n.ol) return true;
+      if (n.stack === true) return true;
+      const text = String(n.text || '').trim();
+      return !!text;
+    };
+    const previousNodesFromArgs = (followingOrHelpers: any, previousNodesOnPage: any): any[] => {
+      // pdfmake 0.2+: pageBreakBefore(nodeInfo, { getPreviousNodesOnPage, ... })
+      if (followingOrHelpers && typeof followingOrHelpers.getPreviousNodesOnPage === 'function') {
+        try { return followingOrHelpers.getPreviousNodesOnPage() || []; } catch { return []; }
+      }
+      // Older pdfmake: pageBreakBefore(node, following, next, previous)
+      if (Array.isArray(previousNodesOnPage)) return previousNodesOnPage;
+      return [];
+    };
+    // Fully isolate the probe doc. pdfmake rewrites image: dataURL → $$pdfmake$$N
+    // and must never touch the live content used for the real PDF write.
+    const probeDoc = {
+      ...doc,
+      images: {},
+      content: this.clonePdfContentNodes(doc.content),
+      pageBreakBefore: (nodeInfo: any, followingOrHelpers?: any, _nodesOnNextPage?: any, previousNodesOnPage?: any) => {
+        const id = String(nodeInfo?.id || '');
+        if (!id.startsWith('lims-continued-')) return false;
+        const previous = previousNodesFromArgs(followingOrHelpers, previousNodesOnPage);
+        const hasPriorContent = previous.some(isRealBodyNode);
+        // After layout, orphan continued text sits alone near the top of a new page.
+        const ratio = Number(nodeInfo?.startPosition?.verticalRatio);
+        const nearTop = Number.isFinite(ratio) && ratio < 0.1;
+        if (!hasPriorContent || (nearTop && !previous.some((n: any) => !!n?.table))) {
+          orphanIds.add(id);
+        }
+        return false;
+      }
+    };
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const pdfDoc = this.pdfPrinter.createPdfKitDocument(probeDoc);
+        const stream = fs.createWriteStream(probePath);
+        stream.on('finish', () => resolve());
+        stream.on('error', reject);
+        pdfDoc.on('error', reject);
+        pdfDoc.pipe(stream);
+        pdfDoc.end();
+      });
+    } catch {
+      return doc;
+    } finally {
+      try { fs.unlinkSync(probePath); } catch { /* ignore */ }
+    }
+    if (!orphanIds.size) return doc;
+    return {
+      ...doc,
+      images: undefined,
+      content: this.stripNodesByIds(doc.content, orphanIds)
+    };
+  }
+
+  protected stripNodesByIds(nodes: any, orphanIds: Set<string>): any {
+    if (!Array.isArray(nodes)) return nodes;
+    return nodes
+      .filter((node: any) => !orphanIds.has(String(node?.id || '')))
+      .map((node: any) => {
+        if (!node || typeof node !== 'object') return node;
+        const next = { ...node };
+        if (Array.isArray(next.stack)) next.stack = this.stripNodesByIds(next.stack, orphanIds);
+        if (Array.isArray(next.columns)) next.columns = this.stripNodesByIds(next.columns, orphanIds);
+        return next;
+      });
   }
 
   /**
@@ -290,6 +450,7 @@ export class ReportCoreService {
         'report.simple.patientDetailsMarginTopMm': '0',
         'report.simple.patientDetailsMarginBottomMm': '4',
         'report.simple.patientDetailsColonText': ':',
+        'report.simple.patientDetailsValueCase': 'as_entered',
         'report.simple.patientDetailsLabelsJson': '{"patient_name":"Patient Name","age_gender":"Age / Gender","consultant":"Referred By"}',
         'report.simple.patientDetailsOutsideBorder': 'false',
         'report.simple.patientDetailsTopBorder': 'true',
@@ -1114,20 +1275,26 @@ export class ReportCoreService {
     return mode === 'both' || mode === source;
   }
 
-  protected buildRemarksPdfNodes(text:any): any[] {
+  protected buildRemarksPdfNodes(text:any, kind: 'test' | 'profile' = 'test'): any[] {
     if (!this.hasPrintableHtml(text)) return [];
-    const baseStyle = this.reportStyle('remarksStyle', { fontSize:9, color:'#111111', alignment:'left' });
-    const label = String(this.reportSetting('report.simple.remarksLabel', 'Remarks') || '').trim();
-    const showLabel = this.reportBool('report.simple.remarksShowLabel', true) && label;
+    const styleKey = kind === 'profile' ? 'profileRemarksStyle' : 'remarksStyle';
+    const labelKey = kind === 'profile' ? 'report.simple.profileRemarksLabel' : 'report.simple.remarksLabel';
+    const showLabelKey = kind === 'profile' ? 'report.simple.profileRemarksShowLabel' : 'report.simple.remarksShowLabel';
+    const bgKey = kind === 'profile' ? 'report.simple.profileRemarksBgColor' : 'report.simple.remarksBgColor';
+    const borderKey = kind === 'profile' ? 'report.simple.profileRemarksShowBorder' : 'report.simple.remarksShowBorder';
+    const topKey = kind === 'profile' ? 'report.simple.profileRemarksMarginTopMm' : 'report.simple.remarksMarginTopMm';
+    const bottomKey = kind === 'profile' ? 'report.simple.profileRemarksMarginBottomMm' : 'report.simple.remarksMarginBottomMm';
+    const defaultLabel = kind === 'profile' ? 'Profile Remarks' : 'Remarks';
+    const baseStyle = this.reportStyle(styleKey, { fontSize:9, color:'#111111', alignment:'left' });
+    const label = String(this.reportSetting(labelKey, defaultLabel) || '').trim();
+    const showLabel = this.reportBool(showLabelKey, true) && label;
     const stack:any[] = [];
     if (showLabel) stack.push({ text: label, ...baseStyle, bold:true, margin:[0,0,0,2] });
     stack.push({ text: this.htmlToPlainText(text), ...baseStyle });
-    const bg = this.reportColor('report.simple.remarksBgColor', '#ffffff');
-    const showBorder = this.reportBool('report.simple.remarksShowBorder', false);
-    const top = this.mmToPt(this.reportNumber('report.simple.remarksMarginTopMm', 1.5, 0, 30));
-    const bottom = this.mmToPt(this.reportNumber('report.simple.remarksMarginBottomMm', 2, 0, 30));
-    // Keep parity with buildInterpretationPdfNodes: bg/showBorder are reserved
-    // for a future bordered-box treatment and are wired into settings now.
+    const bg = this.reportColor(bgKey, '#ffffff');
+    const showBorder = this.reportBool(borderKey, false);
+    const top = this.mmToPt(this.reportNumber(topKey, 1.5, 0, 30));
+    const bottom = this.mmToPt(this.reportNumber(bottomKey, 2, 0, 30));
     void bg; void showBorder;
     const blockMargin = (node:any, first:boolean, last:boolean) => {
       const existing = Array.isArray(node?.margin) ? node.margin : [0, 0, 0, 0];
@@ -1141,6 +1308,28 @@ export class ReportCoreService {
 
   protected remarksAllowed(): boolean {
     return this.reportBool('report.simple.remarksEnabled', true);
+  }
+
+  protected profileRemarksAllowed(): boolean {
+    return this.reportBool('report.simple.profileRemarksEnabled', true);
+  }
+
+  protected parseProfileRemarksMap(raw:any): Record<string, string> {
+    if (!raw) return {};
+    if (typeof raw === 'object' && !Array.isArray(raw)) {
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(raw)) {
+        const key = String(k || '').trim();
+        const text = String(v ?? '').trim();
+        if (key && text) out[key] = text;
+      }
+      return out;
+    }
+    try {
+      return this.parseProfileRemarksMap(JSON.parse(String(raw || '{}')));
+    } catch {
+      return {};
+    }
   }
 
   protected reportPageSize(): any {

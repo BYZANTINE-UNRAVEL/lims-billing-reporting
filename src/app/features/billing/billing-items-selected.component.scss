@@ -73,11 +73,18 @@
 }
 
 .billing-stepper.pro-billing .select-items-v44 .compact-rate-row .v54-drag-dots {
+  display: inline-block !important;
+  width: 10px !important;
+  height: 16px !important;
   flex: 0 0 auto !important;
-  font-size: 13px !important;
-  line-height: 1 !important;
-  letter-spacing: -2px !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  letter-spacing: 0 !important;
   opacity: 0.78 !important;
+  background-image: radial-gradient(circle, currentColor 1.15px, transparent 1.25px) !important;
+  background-size: 5px 5.5px !important;
+  background-position: 0 0.5px !important;
+  background-repeat: repeat !important;
 }
 
 .billing-stepper.pro-billing .select-items-v44 .rate-edit-box {

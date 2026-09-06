@@ -73,6 +73,7 @@ type PromptState = { patientName: string; billNo: string; error: string };
               <div class="preview-summary-row"><span>Bill</span><b>{{w.billNo || '-'}}</b></div>
               <div class="preview-summary-row"><span>Opens</span><b>WhatsApp chat</b></div>
               <div class="preview-summary-row"><span>Message</span><b>None (contact only)</b></div>
+              <div class="preview-summary-row"><span>PDF</span><b>Paste with Ctrl+V after open when available</b></div>
             </div>
           </aside>
         </div>
@@ -80,7 +81,7 @@ type PromptState = { patientName: string; billNo: string; error: string };
         <footer class="output-modal-footer">
           <div class="output-footer-summary">
             <b>Open WhatsApp contact</b>
-            <small>No report PDF is attached. This only opens the chat for the entered number.</small>
+            <small>Opens the chat. When a bill/report PDF was prepared, it is copied so you can Ctrl+V to attach in WhatsApp Desktop.</small>
           </div>
           <div class="output-footer-actions">
             <button class="btn ghost" type="button" (click)="cancel()">Cancel</button>
@@ -168,6 +169,15 @@ export class WhatsAppContactPromptComponent implements OnDestroy {
       if (!mobile) return { ok: false, cancelled: true };
     }
     return this.launch(mobile);
+  }
+
+  /** Prompt for a mobile number only (does not open WhatsApp). */
+  async promptMobile(request: WhatsAppContactRequest = {}): Promise<{ mobile?: string; cancelled?: boolean }> {
+    const existing = this.digits(request.mobile);
+    if (existing) return { mobile: existing };
+    const mobile = (await this.askForMobile(request)) || '';
+    if (!mobile) return { cancelled: true };
+    return { mobile };
   }
 
   cancel() {

@@ -18,13 +18,29 @@ type WorkspaceMode = 'ENTRY' | 'APPROVE' | 'APPROVED';
 type PdfPreviewState = { title: string; url: SafeResourceUrl } | null;
 type ReopenState = { report: ReportVm; reason: string; error: string } | null;
 type ResetConfirmState = { title: string; message: string; details: string; confirmText: string; cancelText: string } | null;
-type WhatsAppPromptState = { patientName: string; billNo: string; error: string } | null;
+type WhatsAppPromptState = { patientName: string; billNo: string; error: string; purpose?: 'contact' | 'report' } | null;
+type WhatsAppHandoffStep = { id: string; label: string; status: 'pending' | 'running' | 'done' | 'error' | 'skipped'; detail?: string };
+type WhatsAppHandoffState = {
+  title: string;
+  billNo: string;
+  progress: number;
+  steps: WhatsAppHandoffStep[];
+  summary: string;
+  clipboardCopied: boolean | null;
+  clipboardMode: string;
+  exportPath: string;
+  done: boolean;
+  cancelled: boolean;
+  error: string;
+} | null;
 type ApprovedAction = 'VIEW' | 'PDF' | 'PRINT' | 'EMAIL' | 'WHATSAPP' | 'SMS';
-type ApprovedActionState = { action: ApprovedAction; sourceReportId: number; reports: any[]; pending: any[]; showProfileName: boolean; showSubHeader: boolean; withBackground: boolean; signatures: any[]; mergeMode: 'MERGE' | 'SEPARATE'; printGrouping: 'BILL' | 'REPORT'; singleTestPlacement: 'TOP' | 'DEPARTMENT'; error: string } | null;
+type SingleTestPlacement = 'TOP' | 'DEPARTMENT' | 'CUSTOM';
+type ApprovedActionState = { action: ApprovedAction; sourceReportId: number; reports: any[]; pending: any[]; showProfileName: boolean; showSubHeader: boolean; withBackground: boolean; signatures: any[]; mergeMode: 'MERGE' | 'SEPARATE'; printGrouping: 'BILL' | 'REPORT'; singleTestPlacement: SingleTestPlacement; singleTestPlacementCustomAvailable: boolean; error: string } | null;
 type RejectState = { report: ReportVm; mode: 'ENTRY' | 'RECOLLECTION' | 'RECHECK'; reason: string; error: string } | null;
 type RecheckRequestState = { report: ReportVm; items: any[]; mode: 'INHOUSE' | 'OUTSOURCE' | 'BOTH'; vendor_id: number; reason: string; error: string } | null;
-type ReportSection = { key: string; name: string; items: any[]; entered: number; itemCount: number; order: number; kind: 'PROFILE' | 'SINGLE' | 'GROUP' };
-type ReportVm = any & { safeItems: any[]; safeSections: ReportSection[]; selectedCount: number; completionPercent: number; criticalList: any[]; abnormalList: any[] };
+type ReportSection = { key: string; name: string; items: any[]; entered: number; itemCount: number; order: number; kind: 'PROFILE' | 'SINGLE' | 'GROUP' | 'DEPARTMENT'; department?: string };
+type ReportDepartmentBlock = { key: string; name: string; order: number; sections: ReportSection[] };
+type ReportVm = any & { safeItems: any[]; safeSections: ReportSection[]; safeDepartmentBlocks: ReportDepartmentBlock[]; selectedCount: number; completionPercent: number; criticalList: any[]; abnormalList: any[] };
 
 type HistoryState = { item: any; rows: any[]; loading: boolean; error: string } | null;
 type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; selectedSpecimenKey:string; selectedCollectionKey:string; collectionDate:string; collectionTime:string; collectionType:string; manualCollectionType:string; selectedItemKeys:string[]; selectedItemSpecimenKeys:Record<string,string>; itemCollectionEvents?:Record<string,{collection_date:string; collection_time:string}>; error:string; loading?:boolean; step?:1|2|3; itemGroups?:any[]; collectionEventItems?:any[]; selectedCount?:number; pendingCount?:number; validationMessage?:string } | null;
@@ -54,7 +70,7 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
               <div class="head-actions"><button class="btn ghost small" type="button" (click)="reload()" [disabled]="busy()">↻ Refresh</button></div>
             </div>
             <div class="filter-row">
-              <input placeholder="Search bill / patient / mobile..." [formControl]="queueFilterForm.controls.search">
+              <input placeholder="Search bill / Patient ID / patient / mobile..." [formControl]="queueFilterForm.controls.search">
               <div class="date-range-filters" aria-label="Report date filters">
                 <label class="date-field"><input type="date" [formControl]="queueFilterForm.controls.fromDate" (click)="openDatePicker($event)" (keydown.enter)="openDatePicker($event)"></label>
                 <span class="range-arrow">→</span>
@@ -118,7 +134,7 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
                 </colgroup>
                 <thead><tr><th class="select-col"></th><th>Bill</th><th>Patient</th><th>Date</th><th>Action</th><th class="expand-head"></th></tr></thead>
                 <tbody>
-                  <ng-container *ngFor="let r of filteredReports(); trackBy: trackReport">
+                  <ng-container *ngFor="let r of pagedFilteredReports(); trackBy: trackReport">
                     <tr class="report-queue-row" [class.report-pending-colors]="reportStatus==='DRAFT'" [class.pending-selected]="isPendingSummarySelected(r)">
                       <td class="select-col pending-select-cell">
                         <input *ngIf="reportStatus==='DRAFT'" type="checkbox" [checked]="isPendingSummarySelected(r)" (click)="$event.stopPropagation()" (change)="togglePendingSummaryRow(r, $any($event.target).checked)">
@@ -188,7 +204,7 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
                                 <mat-menu #quickBillFinishedActions="matMenu" class="lims-action-mat-menu quick-output-actions-menu" xPosition="before" yPosition="below" [overlapTrigger]="false">
                                   <button mat-menu-item type="button" (click)="startApprovedAction(primaryApprovedReportId(r), 'PRINT')"><span>⎙</span>Print</button>
                                   <button mat-menu-item type="button" (click)="startApprovedAction(primaryApprovedReportId(r), 'PDF')"><span>⇩</span>Export</button>
-                                  <button mat-menu-item type="button" (click)="openPatientWhatsApp(r)" [disabled]="busy()"><span>☏</span>Open WhatsApp</button>
+                                  <button mat-menu-item type="button" (click)="startApprovedAction(primaryApprovedReportId(r), 'WHATSAPP')" [disabled]="busy()"><span>☏</span>WhatsApp</button>
                                   <button mat-menu-item type="button" class="danger-menu-item" (click)="quickDeleteFinishedGroup(r)"><span>🗑</span>Delete</button>
                                 </mat-menu>
                               </ng-container>
@@ -206,7 +222,7 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
                                   <button mat-menu-item type="button" (click)="openFinishedReportForEdit(primaryApprovedReportId(r))"><span>✎</span>Edit</button>
                                   <button mat-menu-item type="button" (click)="startApprovedAction(primaryApprovedReportId(r), 'PRINT')"><span>⎙</span>Print</button>
                                   <button mat-menu-item type="button" (click)="startApprovedAction(primaryApprovedReportId(r), 'PDF')"><span>⇩</span>Export</button>
-                                  <button mat-menu-item type="button" (click)="openPatientWhatsApp(r)" [disabled]="busy()"><span>☏</span>Open WhatsApp</button>
+                                  <button mat-menu-item type="button" (click)="startApprovedAction(primaryApprovedReportId(r), 'WHATSAPP')" [disabled]="busy()"><span>☏</span>WhatsApp</button>
                                   <button mat-menu-item type="button" class="danger-menu-item" (click)="quickDeleteFinishedGroup(r)"><span>🗑</span>Delete</button>
                                 </mat-menu>
                               </ng-template>
@@ -249,6 +265,22 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
                 </tbody>
               </table>
               </div>
+              <div class="queue-pager" *ngIf="quickReporting && filteredReports().length">
+                <span>Showing {{queuePageStart()}}–{{queuePageEnd()}} of {{filteredReports().length}}</span>
+                <div class="pager">
+                  <label>Rows
+                    <select [value]="queuePageSize" (change)="setQueuePageSize(+$any($event.target).value)">
+                      <option [value]="10">10</option>
+                      <option [value]="25">25</option>
+                      <option [value]="50">50</option>
+                      <option [value]="100">100</option>
+                    </select>
+                  </label>
+                  <button type="button" (click)="setQueuePage(queuePage - 1)" [disabled]="queuePage <= 1">‹</button>
+                  <b>{{queuePage}} / {{queueTotalPages()}}</b>
+                  <button type="button" (click)="setQueuePage(queuePage + 1)" [disabled]="queuePage >= queueTotalPages()">›</button>
+                </div>
+              </div>
               <div class="empty" *ngIf="!filteredReports().length">No {{activeQueueTitle().toLowerCase()}} found.</div>
             </ng-template>
           </div>
@@ -271,26 +303,58 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
               <ng-container *ngSwitchCase="'ENTRY'">
                 <div class="tool-row">
                   <label class="plain-check"><input type="checkbox" [checked]="allEntrySelected(r)" (change)="toggleEntrySelection(r, $any($event.target).checked)"><span>Select all tests for result entry</span></label>
-                  <span>{{r.selectedCount}} selected · deselect tests that will be typed later</span>
+                  <span>{{r.selectedCount}} selected · {{isQuickFinishedEdit(r) ? 'deselect to hide from finished PDF (values kept)' : 'deselect tests that will be typed later'}}</span>
+                </div>
+                <div class="tool-row" *ngIf="isQuickFinishedEdit(r)">
+                  <label class="plain-check" title="Only when checked: unchecked tests are removed from this finished report and return to Pending.">
+                    <input type="checkbox" [checked]="returnUncheckedToPending" (change)="returnUncheckedToPending = $any($event.target).checked">
+                    <span>Return unchecked tests to Pending</span>
+                  </label>
+                  <span class="field-help-inline">Off = keep values, exclude from print. On = remove from finished report.</span>
                 </div>
                 <div class="meta-row">
                   <label>Typed by<input [formControl]="fieldControl(r,'typed_by')" placeholder="Typed by"></label>
                   <label>Report remarks<input [formControl]="fieldControl(r,'remarks')" placeholder="Optional remarks"></label>
                 </div>
 
-                <div class="department-card profile-card" *ngFor="let section of r.safeSections; trackBy: trackSection" draggable="true" (dragstart)="startSectionDrag($event,section)" (dragover)="allowSectionDrop($event)" (drop)="dropSection(r, section)">
-                  <div class="department-head profile-head compact-report-head">
-                    <div class="profile-title"><span class="drag profile-drag" title="Drag profile/test card to change report order">⋮⋮</span><label class="compact-group-check"><input type="checkbox" [checked]="sectionAllSelected(section)" [indeterminate]="sectionPartiallySelected(section)" (change)="toggleSectionSelection(r, section, $any($event.target).checked)"><span></span></label><div><h4>{{section.name}}</h4><p>{{section.kind === 'SINGLE' ? 'Single tests' : 'Profile / group'}} · {{sectionSelectedCount(section)}}/{{section.itemCount}} selected · {{section.entered}}/{{section.itemCount}} entered</p></div></div>
-                    <div class="profile-actions"><button type="button" class="btn tiny ghost" (click)="toggleSectionSelection(r, section, true)" [disabled]="busy()">Select all</button><button type="button" class="btn tiny ghost" (click)="toggleSectionSelection(r, section, false)" [disabled]="busy()">Deselect</button><button type="button" class="icon-mini" title="Move profile/test card up" (click)="moveSection(r,section,-1)" [disabled]="busy()">↑</button><button type="button" class="icon-mini" title="Move profile/test card down" (click)="moveSection(r,section,1)" [disabled]="busy()">↓</button></div>
+                <ng-container *ngFor="let block of (quickReporting ? r.safeDepartmentBlocks : [{ key: '_all', name: '', order: 0, sections: r.safeSections }]); trackBy: trackDepartmentBlock">
+                <div class="department-block" [class.flat-block]="!quickReporting">
+                  <div class="department-block-head" *ngIf="quickReporting">
+                    <div class="department-block-title">
+                      <h3>{{block.name}}</h3>
+                      <p>{{block.sections.length}} card{{block.sections.length === 1 ? '' : 's'}} · dept order {{block.order}}</p>
+                    </div>
+                    <div class="profile-actions">
+                      <button type="button" class="icon-mini" title="Move department up" (click)="moveDepartment(r, block, -1)" [disabled]="busy()">↑</button>
+                      <button type="button" class="icon-mini" title="Move department down" (click)="moveDepartment(r, block, 1)" [disabled]="busy()">↓</button>
+                    </div>
                   </div>
-                  <div class="result-row compact-result-row" *ngFor="let x of section.items; trackBy: trackItem" [class.off]="x.selected_for_entry===false" [class.highlight]="truthy(x.highlight_parameter)" [class.result-picker-open]="isOptionPanelOpen(r,x) || isSearchPanelOpen(r,x)">
-                    <label class="compact-test-check" [title]="x.selected_for_entry===false ? 'Type later' : 'Selected for entry'"><input type="checkbox" [formControl]="itemFieldControl(r,x,'selected_for_entry','selection')"><span></span></label>
+                <div class="department-card profile-card" *ngFor="let section of block.sections; trackBy: trackSection" draggable="true" (dragstart)="startSectionDrag($event,section)" (dragover)="allowSectionDrop($event)" (drop)="dropSection(r, section)">
+                  <div class="department-head profile-head compact-report-head">
+                    <div class="profile-title"><span class="drag profile-drag" [title]="quickReporting ? 'Drag card to reorder within this department (profiles and singles)' : 'Drag profile/test card to change report order'">⋮⋮</span><label class="compact-group-check"><input type="checkbox" [checked]="sectionAllSelected(section)" [indeterminate]="sectionPartiallySelected(section)" (change)="toggleSectionSelection(r, section, $any($event.target).checked)"><span></span></label><div><h4>{{section.name}}</h4><p>{{sectionKindLabel(section)}} · {{sectionSelectedCount(section)}}/{{section.itemCount}} selected · {{section.entered}}/{{section.itemCount}} entered</p></div></div>
+                    <div class="profile-actions">
+                      <label class="dept-order-field" *ngIf="quickReporting" title="Card print order within this department (lower prints first). Singles and profiles in the same department can be repositioned.">
+                        <span>Order</span>
+                        <input type="number" [value]="section.order" (change)="onDepartmentOrderInput(r, section, $any($event.target).value)" (keydown.enter)="$any($event.target).blur()" [disabled]="busy()">
+                      </label>
+                      <button type="button" class="btn tiny ghost" (click)="toggleSectionSelection(r, section, true)" [disabled]="busy()">Select all</button>
+                      <button type="button" class="btn tiny ghost" (click)="toggleSectionSelection(r, section, false)" [disabled]="busy()">Deselect</button>
+                      <button type="button" class="icon-mini" [title]="quickReporting ? 'Move card up within department' : 'Move profile/test card up'" (click)="moveSection(r,section,-1)" [disabled]="busy()">↑</button>
+                      <button type="button" class="icon-mini" [title]="quickReporting ? 'Move card down within department' : 'Move profile/test card down'" (click)="moveSection(r,section,1)" [disabled]="busy()">↓</button>
+                    </div>
+                  </div>
+                  <ng-container *ngFor="let x of section.items; trackBy: trackItem">
+                  <div class="result-row compact-result-row inner-header-row" *ngIf="isInnerHeading(x)">
+                    <div class="inner-header-label"><b>{{x.test_name || x.side_header}}</b></div>
+                  </div>
+                  <div class="result-row compact-result-row" *ngIf="!isInnerHeading(x)" [class.off]="x.selected_for_entry===false" [class.highlight]="truthy(x.highlight_parameter)" [class.result-picker-open]="isOptionPanelOpen(r,x) || isSearchPanelOpen(r,x)">
+                    <label class="compact-test-check" [title]="x.selected_for_entry===false ? (isQuickFinishedEdit(r) ? 'Excluded from finished PDF (values kept unless Return to Pending is on)' : 'Type later') : (isQuickFinishedEdit(r) ? 'Included in finished PDF' : 'Selected for entry')"><input type="checkbox" [formControl]="itemFieldControl(r,x,'selected_for_entry','selection')"><span></span></label>
                     <div class="order-actions" title="Test position override inside this card">
                       <span class="drag">⋮⋮</span>
                       <button type="button" class="icon-mini" title="Move test up" (click)="moveItem(r,x,-1)" [disabled]="busy()">↑</button>
                       <button type="button" class="icon-mini" title="Move test down" (click)="moveItem(r,x,1)" [disabled]="busy()">↓</button>
                     </div>
-                    <div class="result-name"><b>{{x.test_name}}</b><small>{{x.department_name || section.name}}</small><small class="sample-id-line" *ngIf="sampleIdLabel(x)">Sample: {{sampleIdLabel(x)}}</small><div class="badges"><span *ngIf="truthy(x.highlight_parameter)">Highlight</span><span *ngIf="x.has_formula || x.formula_expression">Calculated</span><span *ngIf="isOutsourceItem(x)">Outsource</span><span *ngIf="x.internal_check_required">Internal check</span><span *ngIf="x.recheck_mode && x.recheck_mode !== 'NONE'">Recheck {{x.recheck_mode}}</span></div></div>
+                    <div class="result-name"><b>{{x.test_name}}</b><small *ngIf="!quickReporting">{{x.department_name || section.name}}</small><small *ngIf="quickReporting && section.kind === 'SINGLE'">{{section.department || x.department_name}}</small><small *ngIf="quickReporting && section.kind === 'PROFILE'">{{section.department || x.department_name}}</small><small class="sample-id-line" *ngIf="sampleIdLabel(x)">Sample: {{sampleIdLabel(x)}}</small><div class="badges"><span *ngIf="truthy(x.highlight_parameter)">Highlight</span><span *ngIf="x.has_formula || x.formula_expression">Calculated</span><span *ngIf="isOutsourceItem(x)">Outsource</span><span *ngIf="x.internal_check_required">Internal check</span><span *ngIf="x.recheck_mode && x.recheck_mode !== 'NONE'">Recheck {{x.recheck_mode}}</span></div></div>
                     <div class="result-editor">
                       <span class="calc-slot">
                         <button class="icon-mini calc left-calc" *ngIf="x.has_formula || x.formula_expression" type="button" title="Calculate result" (click)="calculateItem(r,x)" [disabled]="busy()">∑</button>
@@ -382,7 +446,7 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
                     </div>
                     <label class="small-field">Unit<input [formControl]="itemFieldControl(r,x,'unit')" placeholder="Unit"></label>
                     <label class="small-field">Range<input [formControl]="itemFieldControl(r,x,'normal_range')" placeholder="Reference"></label>
-                    <label class="small-field">Remarks<input [formControl]="itemFieldControl(r,x,'recheck_remarks')" placeholder="Recheck / test remarks"></label>
+                    <label class="small-field">Remarks<input [formControl]="itemFieldControl(r,x,'recheck_remarks')" placeholder="Test remarks"></label>
 
                     <div class="outsource-panel" *ngIf="isOutsourceItem(x)">
                       <div class="panel-title">Outsource result</div>
@@ -395,12 +459,20 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
                       <span class="notice-inline" *ngIf="outsourceMismatch(x)">Mismatch: outsource and internal check values differ.</span>
                     </div>
                   </div>
+                  </ng-container>
+                  <div class="meta-row profile-remarks-row" *ngIf="section.kind === 'PROFILE'">
+                    <label class="wide">Profile remarks
+                      <input [formControl]="profileRemarksControl(r, section)" placeholder="Remarks for this whole profile (prints after tests, before interpretation)">
+                    </label>
+                  </div>
                 </div>
+                </div>
+                </ng-container>
 
                 <div class="button-row">
                   <button class="btn ghost" *ngIf="!quickReporting" type="button" (click)="saveResultDraft()" [disabled]="busy() || !r.selectedCount">Save Draft</button>
                   <button class="btn primary" *ngIf="!quickReporting" type="button" (click)="submitForApproval()" [disabled]="busy() || !r.selectedCount">Submit for Approval</button>
-                  <button class="btn primary" *ngIf="quickReporting" type="button" (click)="quickFinishSelected()" [disabled]="busy() || !r.selectedCount">Save Finished Report</button>
+                  <button class="btn primary" *ngIf="quickReporting" type="button" (click)="quickFinishSelected()" [disabled]="busy() || !r.selectedCount">{{quickFinishButtonLabel(r)}}</button>
                 </div>
               </ng-container>
 
@@ -640,8 +712,11 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
         <div class="history-modal approved-action-modal rich-output-modal" (click)="$event.stopPropagation()">
           <header class="output-modal-header">
             <div class="output-modal-heading">
-              <span class="output-modal-icon">{{a.action==='PRINT' ? '⎙' : '⇩'}}</span>
-              <div><h3>{{a.action==='PRINT' ? 'Print reports' : a.action==='PDF' ? 'Export reports' : 'Report output'}}</h3><p>{{reportQueueView==='BILL' ? 'Bill-wise output settings' : 'Report-wise output settings'}} · configure the final document</p></div>
+              <span class="output-modal-icon" [class.whatsapp-output-icon]="a.action==='WHATSAPP'">{{a.action==='PRINT' ? '⎙' : a.action==='WHATSAPP' ? '☏' : a.action==='EMAIL' ? '✉' : a.action==='SMS' ? '☏' : '⇩'}}</span>
+              <div>
+                <h3>{{a.action==='PRINT' ? 'Print reports' : a.action==='PDF' ? 'Export reports' : a.action==='WHATSAPP' ? 'WhatsApp report' : a.action==='EMAIL' ? 'Email reports' : a.action==='SMS' ? 'SMS' : 'Report output'}}</h3>
+                <p>{{reportQueueView==='BILL' ? 'Bill-wise output settings' : 'Report-wise output settings'}} · same settings as Export / Print</p>
+              </div>
             </div>
             <button class="output-modal-close" type="button" (click)="approvedActionState.set(null)" aria-label="Close" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
           </header>
@@ -663,13 +738,13 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
               <div class="output-column-head"><div><h4>Output settings</h4><p>Choose how the final document should be prepared.</p></div></div>
               <div class="compact-setting-block" *ngIf="approvedSelectedCount(a)>1"><div class="setting-title"><b>Merge or separate</b></div><div class="choice-card-grid compact-choice-grid"><label [class.active]="a.mergeMode==='MERGE'"><input type="radio" value="MERGE" [formControl]="fieldControl(a,'mergeMode')"><span><b>Merge into one document</b></span></label><label [class.active]="a.mergeMode==='SEPARATE'"><input type="radio" value="SEPARATE" [formControl]="fieldControl(a,'mergeMode')"><span><b>Keep reports separate</b></span></label></div></div>
               <div class="compact-setting-block"><div class="setting-title"><b>Document appearance</b><small>Header is always included.</small></div><div class="choice-card-grid compact-choice-grid"><label [class.active]="a.withBackground"><input type="radio" name="documentAppearance" [value]="true" [formControl]="fieldControl(a,'withBackground')"><span><b>With background</b></span></label><label [class.active]="!a.withBackground"><input type="radio" name="documentAppearance" [value]="false" [formControl]="fieldControl(a,'withBackground')"><span><b>Without background</b></span></label></div></div>
-              <div class="compact-setting-block"><div class="setting-title"><b>Single tests position</b><small>Applied inside each category.</small></div><div class="choice-card-grid compact-choice-grid"><label [class.active]="a.singleTestPlacement==='TOP'"><input type="radio" name="singleTestPlacement" value="TOP" [formControl]="fieldControl(a,'singleTestPlacement')"><span><b>At the beginning</b></span></label><label [class.active]="a.singleTestPlacement==='DEPARTMENT'"><input type="radio" name="singleTestPlacement" value="DEPARTMENT" [formControl]="fieldControl(a,'singleTestPlacement')"><span><b>At the end</b></span></label></div></div>
+              <div class="compact-setting-block"><div class="setting-title"><b>Single tests position</b><small>{{a.singleTestPlacementCustomAvailable ? 'Typing order was customized. Choose Custom to keep it, or Beginning/End to override for this print.' : 'Applied inside each department.'}}</small></div><div class="choice-card-grid compact-choice-grid" [class.three]="a.singleTestPlacementCustomAvailable"><label [class.active]="a.singleTestPlacement==='TOP'"><input type="radio" name="singleTestPlacement" value="TOP" [formControl]="fieldControl(a,'singleTestPlacement')"><span><b>At the beginning</b></span></label><label [class.active]="a.singleTestPlacement==='DEPARTMENT'"><input type="radio" name="singleTestPlacement" value="DEPARTMENT" [formControl]="fieldControl(a,'singleTestPlacement')"><span><b>At the end</b></span></label><label *ngIf="a.singleTestPlacementCustomAvailable" [class.active]="a.singleTestPlacement==='CUSTOM'"><input type="radio" name="singleTestPlacement" value="CUSTOM" [formControl]="fieldControl(a,'singleTestPlacement')"><span><b>Custom</b><small>As arranged in report typing</small></span></label></div></div>
               <div class="compact-setting-block" *ngIf="a.signatures.length"><div class="setting-title"><b>Signatures</b><small>All Report Settings signs. Include each sign and choose image + text, image only, or text only.</small></div><div class="signature-rich-list"><article class="signature-rich-card" *ngFor="let sign of a.signatures" [class.active]="sign.selected" [class.off]="!sign.selected"><label class="signature-rich-include"><input type="checkbox" [formControl]="approvedSignatureControl(sign)"><span class="signature-row-copy"><b>{{sign.label}}</b><small>{{sign.hasImage ? 'Image available' : 'No image uploaded'}}</small></span><em>{{sign.selected ? (sign.contentMode==='TEXT_ONLY' ? 'Text only' : sign.contentMode==='IMAGE_ONLY' ? 'Image only' : 'Image + text') : 'Excluded'}}</em></label><div class="choice-card-grid compact-choice-grid signature-content-grid three" *ngIf="sign.selected"><label [class.active]="sign.contentMode==='IMAGE_TEXT'"><input type="radio" [name]="'signContent-' + sign.id" value="IMAGE_TEXT" [formControl]="fieldControl(sign,'contentMode')"><span><b>Image + text</b></span></label><label [class.active]="sign.contentMode==='IMAGE_ONLY'"><input type="radio" [name]="'signContent-' + sign.id" value="IMAGE_ONLY" [formControl]="fieldControl(sign,'contentMode')"><span><b>Image only</b></span></label><label [class.active]="sign.contentMode==='TEXT_ONLY'"><input type="radio" [name]="'signContent-' + sign.id" value="TEXT_ONLY" [formControl]="fieldControl(sign,'contentMode')"><span><b>Text only</b></span></label></div></article></div></div>
               <div class="notice danger" *ngIf="a.error">{{a.error}}</div>
             </section>
-            <aside class="output-column preview-column"><div class="preview-card"><div class="preview-document-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5M10 12h5M10 16h5"></path></svg></div><h4>Preview summary</h4><div class="preview-summary-row"><span>Reports</span><b>{{approvedSelectedCount(a)}} selected</b></div><div class="preview-summary-row"><span>Output</span><b>{{a.mergeMode==='MERGE' ? 'Merged document' : 'Separate reports'}}</b></div><div class="preview-summary-row"><span>Background</span><b>{{a.withBackground ? 'Enabled' : 'Plain'}}</b></div><div class="preview-summary-row"><span>Single tests</span><b>{{a.singleTestPlacement==='TOP' ? 'At beginning' : 'At end'}}</b></div><div class="preview-summary-row" *ngIf="a.signatures.length"><span>Signatures</span><b>{{approvedSelectedSignatures(a).length}} included</b></div><div class="preview-summary-row" *ngIf="approvedSelectedSignatures(a).length"><span>Sign content</span><b>{{signatureContentSummary(a)}}</b></div></div></aside>
+            <aside class="output-column preview-column"><div class="preview-card"><div class="preview-document-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5M10 12h5M10 16h5"></path></svg></div><h4>Preview summary</h4><div class="preview-summary-row"><span>Reports</span><b>{{approvedSelectedCount(a)}} selected</b></div><div class="preview-summary-row"><span>Output</span><b>{{a.mergeMode==='MERGE' ? 'Merged document' : 'Separate reports'}}</b></div><div class="preview-summary-row"><span>Background</span><b>{{a.withBackground ? 'Enabled' : 'Plain'}}</b></div><div class="preview-summary-row"><span>Single tests</span><b>{{singleTestPlacementLabel(a.singleTestPlacement)}}</b></div><div class="preview-summary-row" *ngIf="a.signatures.length"><span>Signatures</span><b>{{approvedSelectedSignatures(a).length}} included</b></div><div class="preview-summary-row" *ngIf="approvedSelectedSignatures(a).length"><span>Sign content</span><b>{{signatureContentSummary(a)}}</b></div></div></aside>
           </div>
-          <footer class="output-modal-footer"><div class="output-footer-summary"><b>{{approvedSelectedCount(a)}} report{{approvedSelectedCount(a)===1 ? '' : 's'}} selected</b><small>{{a.mergeMode==='MERGE' ? 'Will be merged into one document' : 'Will be generated separately'}}</small></div><div class="output-footer-actions"><button class="btn ghost" type="button" (click)="approvedActionState.set(null)">Cancel</button><button class="btn primary output-primary-action" type="button" (click)="confirmApprovedAction()" [disabled]="busy() || approvedSelectedCount(a)===0">{{a.action==='PRINT' ? 'Print selected reports' : 'Export selected reports'}}</button></div></footer>
+          <footer class="output-modal-footer"><div class="output-footer-summary"><b>{{approvedSelectedCount(a)}} report{{approvedSelectedCount(a)===1 ? '' : 's'}} selected</b><small>{{a.mergeMode==='MERGE' ? 'Will be merged into one document' : 'Will be generated separately'}}</small></div><div class="output-footer-actions"><button class="btn ghost" type="button" (click)="approvedActionState.set(null)">Cancel</button><button class="btn primary output-primary-action" type="button" [class.whatsapp-solid]="a.action==='WHATSAPP'" (click)="confirmApprovedAction()" [disabled]="busy() || approvedSelectedCount(a)===0">{{approvedActionButton(a.action)}}</button></div></footer>
         </div>
       </div>
 
@@ -689,6 +764,44 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
         </div>
       </div>
 
+      <div #whatsAppHandoffBackdrop class="modal-backdrop output-modal-backdrop whatsapp-output-backdrop" *ngIf="whatsAppHandoff() as h" (click)="h.done || h.cancelled ? closeWhatsAppHandoff() : null" (wheel)="$event.stopPropagation()" (touchmove)="$event.stopPropagation()">
+        <div class="history-modal approved-action-modal rich-output-modal whatsapp-output-modal whatsapp-handoff-modal" (click)="$event.stopPropagation()">
+          <header class="output-modal-header">
+            <div class="output-modal-heading">
+              <span class="output-modal-icon whatsapp-output-icon" aria-hidden="true">☏</span>
+              <div>
+                <h3>{{h.title}}</h3>
+                <p>Live status · bill {{h.billNo || '-'}}</p>
+              </div>
+            </div>
+            <button class="output-modal-close" type="button" *ngIf="h.done || h.cancelled" (click)="closeWhatsAppHandoff()" aria-label="Close">✕</button>
+          </header>
+          <div class="whatsapp-handoff-progress-bar"><span [style.width.%]="h.progress"></span></div>
+          <div class="output-modal-body whatsapp-handoff-body">
+            <ul class="whatsapp-handoff-steps">
+              <li *ngFor="let s of h.steps" [class.running]="s.status==='running'" [class.done]="s.status==='done'" [class.error]="s.status==='error'" [class.skipped]="s.status==='skipped'">
+                <b>{{s.status==='running' ? '…' : s.status==='done' ? '✓' : s.status==='error' ? '!' : s.status==='skipped' ? '–' : '○'}}</b>
+                <div>
+                  <strong>{{s.label}}</strong>
+                  <small *ngIf="s.detail">{{s.detail}}</small>
+                </div>
+              </li>
+            </ul>
+            <div class="whatsapp-handoff-clipboard" [class.ok]="h.clipboardCopied===true" [class.bad]="h.clipboardCopied===false" *ngIf="h.clipboardCopied!==null">
+              <span>Clipboard</span>
+              <b>{{h.clipboardCopied ? (h.clipboardMode==='file' ? 'Copied — press Ctrl+V in WhatsApp Desktop to attach' : 'Path copied (attach file manually if paste fails)') : 'Not copied — attach the saved PDF manually'}}</b>
+            </div>
+            <div class="notice" *ngIf="h.summary">{{h.summary}}</div>
+            <div class="notice danger" *ngIf="h.error">{{h.error}}</div>
+            <div class="whatsapp-handoff-path" *ngIf="h.exportPath"><span>PDF</span><code>{{h.exportPath}}</code></div>
+          </div>
+          <footer class="output-modal-footer" *ngIf="h.done || h.cancelled">
+            <div class="output-footer-summary"><b>{{h.cancelled ? 'Cancelled' : 'Handoff finished'}}</b><small>{{h.clipboardCopied ? 'You can paste the PDF in the open chat.' : 'Open the saved PDF if you need to attach it manually.'}}</small></div>
+            <div class="output-footer-actions"><button class="btn whatsapp-solid" type="button" (click)="closeWhatsAppHandoff()">Close</button></div>
+          </footer>
+        </div>
+      </div>
+
       <div #whatsAppPromptBackdrop class="modal-backdrop output-modal-backdrop whatsapp-output-backdrop" *ngIf="whatsAppPrompt() as w" (click)="closeWhatsAppPrompt()" (wheel)="$event.stopPropagation()" (touchmove)="$event.stopPropagation()">
         <div class="history-modal approved-action-modal rich-output-modal whatsapp-output-modal" (click)="$event.stopPropagation()">
           <header class="output-modal-header">
@@ -697,8 +810,8 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
                 <svg viewBox="0 0 24 24"><path d="M12.04 2a9.9 9.9 0 0 0-8.5 14.9L2 22l5.25-1.38A9.9 9.9 0 1 0 12.04 2Zm0 1.8a8.1 8.1 0 0 1 6.9 12.3l-.3.46.2.96-1.1.63-.93.22-.48.29a8.1 8.1 0 1 1-4.29-14.86Zm-2.8 3.4c-.22 0-.58.08-.88.4-.3.32-1.14 1.11-1.14 2.7 0 1.6 1.17 3.14 1.33 3.35.17.22 2.26 3.62 5.57 4.93 2.75 1.09 3.31.87 3.91.82.6-.05 1.94-.79 2.21-1.55.28-.76.28-1.41.2-1.55-.08-.14-.3-.22-.63-.38-.33-.17-1.94-.96-2.24-1.07-.3-.1-.52-.16-.74.16-.22.32-.85 1.07-1.04 1.29-.19.22-.38.25-.71.08-.33-.16-1.38-.51-2.63-1.62-1-.89-1.68-1.98-1.88-2.31-.2-.33-.02-.5.15-.67.15-.15.33-.38.5-.57.16-.19.22-.32.33-.54.11-.22.05-.41-.03-.57-.08-.16-.74-1.78-1.01-2.44-.26-.63-.53-.54-.74-.55Z"/></svg>
               </span>
               <div>
-                <h3>Open WhatsApp</h3>
-                <p>No mobile number is saved · enter a number to open the chat</p>
+                <h3>{{w.purpose==='report' ? 'WhatsApp number' : 'Open WhatsApp'}}</h3>
+                <p>{{w.purpose==='report' ? 'No mobile on file · enter a number to continue' : 'No mobile number is saved · enter a number to open the chat'}}</p>
               </div>
             </div>
             <button class="output-modal-close" type="button" (click)="closeWhatsAppPrompt()" aria-label="Close" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
@@ -707,7 +820,7 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
           <div class="output-modal-meta">
             <div><span>Patient</span><b>{{w.patientName || '-'}}</b></div>
             <div><span>Bill</span><b>{{w.billNo || '-'}}</b></div>
-            <div><span>Action</span><b>Open chat only</b></div>
+            <div><span>Action</span><b>{{w.purpose==='report' ? 'Send report PDF' : 'Open chat only'}}</b></div>
           </div>
 
           <div class="output-modal-body whatsapp-output-body">
@@ -738,19 +851,19 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
                 <div class="preview-summary-row"><span>Patient</span><b>{{w.patientName || '-'}}</b></div>
                 <div class="preview-summary-row"><span>Bill</span><b>{{w.billNo || '-'}}</b></div>
                 <div class="preview-summary-row"><span>Opens</span><b>WhatsApp chat</b></div>
-                <div class="preview-summary-row"><span>Message</span><b>None (contact only)</b></div>
+                <div class="preview-summary-row"><span>Next</span><b>{{w.purpose==='report' ? 'Export PDF · copy · open' : 'Contact only'}}</b></div>
               </div>
             </aside>
           </div>
 
           <footer class="output-modal-footer">
             <div class="output-footer-summary">
-              <b>Open WhatsApp contact</b>
-              <small>No report PDF is attached. This only opens the chat for the entered number.</small>
+              <b>{{w.purpose==='report' ? 'Continue to export' : 'Open WhatsApp contact'}}</b>
+              <small>{{w.purpose==='report' ? 'After this, live status shows export and clipboard copy.' : 'Contact only — no report PDF.'}}</small>
             </div>
             <div class="output-footer-actions">
               <button class="btn ghost" type="button" (click)="closeWhatsAppPrompt()">Cancel</button>
-              <button class="btn whatsapp-solid output-primary-action" type="button" (click)="confirmWhatsAppPrompt()" [disabled]="busy()">Open WhatsApp</button>
+              <button class="btn whatsapp-solid output-primary-action" type="button" (click)="confirmWhatsAppPrompt()" [disabled]="busy()">{{w.purpose==='report' ? 'Continue' : 'Open WhatsApp'}}</button>
             </div>
           </footer>
         </div>
@@ -794,6 +907,13 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
     .master-table td:last-child{border-right:1px solid var(--border);border-radius:0 14px 14px 0}
     .master-table small{display:block;color:var(--muted);font-size:11px;margin-top:3px}.progress-cell{display:grid;gap:3px;align-items:center}.progress-cell small{margin-top:0;white-space:nowrap}
     .count-pill{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:5px 9px;background:var(--accent-soft);color:var(--accent);font-weight:900;font-size:12px}
+    .queue-pager{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:10px;padding:10px 4px 2px;color:var(--muted);font-size:12px;font-weight:800}
+    .queue-pager .pager{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .queue-pager .pager label{display:inline-flex;align-items:center;gap:6px}
+    .queue-pager .pager select{width:78px;height:32px;padding:0 8px;font-weight:850}
+    .queue-pager .pager button{width:32px;height:32px;border:1px solid var(--border);border-radius:10px;background:var(--input);color:var(--text);font-weight:950;cursor:pointer}
+    .queue-pager .pager button:disabled{opacity:.45;cursor:not-allowed}
+    .queue-pager .pager b{min-width:64px;text-align:center;color:var(--text)}
 
     .report-queue-scroll{width:100%;overflow:visible;padding-bottom:0}
     .report-queue-table{width:100%;border-spacing:0 8px;table-layout:fixed}
@@ -810,7 +930,7 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
     .flag-pill{display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--border);background:var(--panel);border-radius:999px;padding:3px 8px;font-size:11px;font-weight:850}
     .flag-arrow{min-width:22px;width:22px;height:30px;padding:0;border:0;background:transparent;border-radius:0;font-size:18px;line-height:1;font-weight:950;letter-spacing:-1px;box-shadow:none}
     .flag-pill.low{color:#f59e0b}.flag-pill.high{color:#fb7185}.flag-pill.critical{color:#ef4444}.flag-pill.flag-arrow.low,.flag-pill.flag-arrow.high,.flag-pill.flag-arrow.critical{border:0;background:transparent}
-    .btn{height:36px;border:1px solid var(--border);border-radius:12px;padding:0 14px;font-size:12px;font-weight:900;cursor:pointer;background:var(--input);color:var(--text)}.btn.primary{background:var(--accent-gradient);color:#fff;border:0}.btn.secondary{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 35%,var(--border));color:var(--accent)}.btn.ghost{background:transparent}.btn.small{height:30px;padding:0 10px;font-size:12px}.btn.tiny{height:26px;padding:0 8px;font-size:11px}.btn:disabled,.mini:disabled{opacity:.55;cursor:not-allowed}.empty{color:var(--muted);text-align:center;padding:22px}.workspace-wrap{padding-top:0}.workspace-card{max-width:1220px;margin:0 auto}.section-title,.form-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.section-title h3{margin:0;font-size:18px}.section-title p{margin:4px 0 0;color:var(--muted);font-size:12px}.flow-status,.notice{border:1px solid var(--border);border-radius:15px;background:var(--row);padding:10px 12px;margin-bottom:12px}.flow-status b{font-size:13px}.flow-status span{display:block;color:var(--muted);font-size:12px;margin-top:3px}.notice.warning{border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.12)}.notice.danger{border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.12)}.notice-inline{align-self:center;color:#f59e0b;font-size:12px;font-weight:800}.tool-row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;color:var(--muted);font-size:13px}.plain-check{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:850;color:var(--text)}.plain-check input{width:auto}.meta-row{display:grid;grid-template-columns:180px 1fr;gap:10px;margin-bottom:12px}.meta-row label,.result-row label,.outsource-panel label{font-size:11px;color:var(--muted);display:grid;gap:5px}.department-card{border:1px solid var(--border);border-radius:17px;background:color-mix(in srgb,var(--panel) 86%,var(--row));padding:12px;margin-bottom:12px;overflow:visible;isolation:isolate}.department-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.profile-card{background:color-mix(in srgb,var(--panel) 92%,var(--accent));}.profile-head{cursor:grab;border-bottom:1px solid var(--border);padding-bottom:8px}.profile-title{display:flex;align-items:center;gap:8px}.profile-actions{display:flex;gap:6px}.profile-drag{font-size:18px;color:var(--accent)}.department-head h4{margin:0;font-size:14px}.department-head p{margin:2px 0 0;color:var(--muted);font-size:11px}.result-row{display:grid;grid-template-columns:28px 52px minmax(190px,1.05fr) minmax(250px,1.15fr) minmax(78px,.4fr) minmax(125px,.6fr) minmax(125px,.6fr);gap:8px;align-items:end;border-top:1px solid var(--border);padding:8px 0;position:relative;z-index:1}.result-row.result-picker-open{z-index:1000}.compact-group-check,.compact-test-check{display:inline-grid!important;place-items:center!important;width:24px;height:24px;min-width:24px;border-radius:8px;background:var(--input);border:1px solid var(--border);position:relative;cursor:pointer}.compact-group-check input,.compact-test-check input{position:absolute;opacity:0;inset:0;cursor:pointer}.compact-group-check span,.compact-test-check span{width:14px;height:14px;border-radius:5px;border:1px solid color-mix(in srgb,var(--muted) 70%,transparent);display:block}.compact-group-check input:checked + span,.compact-test-check input:checked + span{background:var(--accent-gradient);border-color:transparent;box-shadow:var(--glow)}.compact-group-check input:checked + span:after,.compact-test-check input:checked + span:after{content:'✓';display:block;text-align:center;line-height:14px;color:#fff;font-size:11px;font-weight:900}.compact-report-head .profile-title{align-items:center}.compact-report-head .profile-actions{align-items:center}.compact-result-row.off{opacity:.48}.compact-result-row.off .result-editor,.compact-result-row.off .small-field{pointer-events:none}.result-row.off{opacity:.6}.result-row.highlight{background:rgba(99,102,241,.07);margin-left:-8px;margin-right:-8px;padding-left:8px;padding-right:8px;border-radius:12px}.order-actions{display:flex;align-items:center;gap:4px}.drag{color:var(--muted);letter-spacing:-2px}.mini,.icon-mini{width:26px;height:26px;border:1px solid var(--border);border-radius:9px;background:var(--panel);color:var(--text);cursor:pointer;display:inline-grid;place-items:center;font-size:13px;font-weight:900}.icon-mini.calc{color:var(--accent);border-color:rgba(99,102,241,.38);background:rgba(99,102,241,.12)}.result-name b{font-size:13px}.result-name small,.review-table small{display:block;color:var(--muted);font-size:11px;margin-top:3px}.badges{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}.badges span{border:1px solid var(--border);background:var(--panel);border-radius:999px;padding:2px 6px;font-size:10px;color:var(--muted)}.result-editor{display:grid;grid-template-columns:30px minmax(150px,1fr) 24px 30px;gap:6px;align-items:end}.rt-result-label{position:relative;min-width:0;display:grid;gap:5px}.rt-label-text{font-size:11px;color:var(--muted)}.rt-control{position:relative;min-width:0}.rt-field{width:100%;height:38px;border:1px solid color-mix(in srgb,var(--border) 86%,var(--accent));border-radius:15px;background:color-mix(in srgb,var(--input) 94%,var(--panel));color:var(--text);padding:0 13px;font-size:14px;font-weight:850;outline:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.04);transition:border-color .16s ease,box-shadow .16s ease,background .16s ease}.rt-field:focus,.rt-control.open .rt-field,.rt-control.open .rt-select-trigger{border-color:color-mix(in srgb,var(--accent) 70%,var(--border));box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 18%,transparent)}.rt-field:disabled,.rt-control.disabled .rt-field,.rt-control.disabled .rt-select-trigger{opacity:.64;cursor:not-allowed}.rt-select-trigger{display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;cursor:pointer}.rt-select-trigger span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rt-select-trigger .placeholder{color:var(--muted);font-weight:750}.rt-select-trigger b{font-size:18px;line-height:1;color:var(--muted);font-weight:900}.rt-options-panel{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:20;max-height:210px;overflow:auto;border:1px solid color-mix(in srgb,var(--border) 82%,var(--accent));border-radius:15px;background:#111827;color:#f8fafc;box-shadow:0 18px 42px rgba(0,0,0,.48);padding:6px;opacity:1;isolation:isolate;contain:paint}.rt-option{width:100%;border:0;background:transparent;color:var(--text);text-align:left;border-radius:11px;min-height:34px;padding:7px 10px;font-size:13px;font-weight:850;cursor:pointer}.rt-option:hover,.rt-option.selected{background:color-mix(in srgb,var(--accent) 16%,var(--input));color:var(--text)}.rt-option.muted{color:var(--muted);font-weight:750}.rt-option-empty{padding:10px;color:var(--muted);font-size:12px;font-weight:800;text-align:center}.calc-slot{width:30px;height:30px;display:grid;place-items:end center;align-self:end}.result-input-label{min-width:0}.left-calc{align-self:end}.outsource-panel{grid-column:3/-1;display:grid;grid-template-columns:130px 130px 130px 1fr auto;gap:8px;align-items:end;border:1px dashed var(--border);border-radius:14px;padding:9px;background:var(--row)}.outsource-panel .panel-title{align-self:center;font-size:12px;font-weight:900;color:var(--accent)}.outsource-panel .wide{min-width:180px}.summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}.summary-grid div{border:1px solid var(--border);border-radius:16px;background:var(--row);padding:12px}.summary-grid span{display:block;color:var(--muted);font-size:11px;text-transform:uppercase}.summary-grid b{display:block;margin-top:4px;font-size:18px}.review-table{width:100%;border-collapse:collapse}.review-table td{border-top:1px solid var(--border);padding:9px;font-size:13px}.button-row,.export-row{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:12px}.modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.58);display:grid;place-items:center;z-index:2147483000}.history-modal{width:min(720px,92vw);max-height:82vh;overflow:auto;border:1px solid var(--border);background:var(--panel);border-radius:20px;padding:16px;box-shadow:var(--shadow)}.approved-action-modal{width:min(860px,94vw)}.report-select-list{display:grid;gap:8px;margin:10px 0}.report-select-row{display:grid;grid-template-columns:26px 1fr auto;gap:10px;align-items:center;border:1px solid var(--border);background:var(--row);border-radius:14px;padding:10px}.report-select-row b{display:block}.report-select-row small{display:block;color:var(--muted);font-size:11px;margin-top:2px}.report-select-row em{font-style:normal;color:var(--accent);font-size:12px;font-weight:900}.report-options-row{grid-template-columns:1fr 1fr}
+    .btn{height:36px;border:1px solid var(--border);border-radius:12px;padding:0 14px;font-size:12px;font-weight:900;cursor:pointer;background:var(--input);color:var(--text)}.btn.primary{background:var(--accent-gradient);color:#fff;border:0}.btn.secondary{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 35%,var(--border));color:var(--accent)}.btn.ghost{background:transparent}.btn.small{height:30px;padding:0 10px;font-size:12px}.btn.tiny{height:26px;padding:0 8px;font-size:11px}.dept-order-field{display:inline-flex;align-items:center;gap:6px;margin-right:4px;font-size:11px;font-weight:800;color:var(--muted)}.dept-order-field input{width:72px;height:26px;border:1px solid var(--border);border-radius:8px;padding:0 8px;background:var(--input);color:var(--text);font-weight:800}.btn:disabled,.mini:disabled{opacity:.55;cursor:not-allowed}.empty{color:var(--muted);text-align:center;padding:22px}.workspace-wrap{padding-top:0}.workspace-card{max-width:1220px;margin:0 auto}.section-title,.form-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.section-title h3{margin:0;font-size:18px}.section-title p{margin:4px 0 0;color:var(--muted);font-size:12px}.flow-status,.notice{border:1px solid var(--border);border-radius:15px;background:var(--row);padding:10px 12px;margin-bottom:12px}.flow-status b{font-size:13px}.flow-status span{display:block;color:var(--muted);font-size:12px;margin-top:3px}.notice.warning{border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.12)}.notice.danger{border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.12)}.notice-inline{align-self:center;color:#f59e0b;font-size:12px;font-weight:800}.tool-row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;color:var(--muted);font-size:13px}.plain-check{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:850;color:var(--text)}.plain-check input{width:auto}.meta-row{display:grid;grid-template-columns:180px 1fr;gap:10px;margin-bottom:12px}.meta-row label,.result-row label,.outsource-panel label{font-size:11px;color:var(--muted);display:grid;gap:5px}.department-card{border:1px solid var(--border);border-radius:17px;background:color-mix(in srgb,var(--panel) 86%,var(--row));padding:12px;margin-bottom:12px;overflow:visible;isolation:isolate}.department-block{border:1px solid color-mix(in srgb,var(--border) 88%,var(--accent));border-radius:20px;background:color-mix(in srgb,var(--row) 55%,transparent);padding:12px;margin-bottom:14px}.department-block.flat-block{border:0;background:transparent;padding:0;margin:0;border-radius:0}.department-block-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;padding:2px 2px 8px;border-bottom:1px solid var(--border)}.department-block-title h3{margin:0;font-size:15px;font-weight:950}.department-block-title p{margin:2px 0 0;color:var(--muted);font-size:11px;font-weight:800}.department-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.profile-card{background:color-mix(in srgb,var(--panel) 92%,var(--accent));}.profile-head{cursor:grab;border-bottom:1px solid var(--border);padding-bottom:8px}.profile-title{display:flex;align-items:center;gap:8px}.profile-actions{display:flex;gap:6px}.profile-drag{font-size:18px;color:var(--accent)}.department-head h4{margin:0;font-size:14px}.department-head p{margin:2px 0 0;color:var(--muted);font-size:11px}.result-row{display:grid;grid-template-columns:28px 52px minmax(190px,1.05fr) minmax(250px,1.15fr) minmax(78px,.4fr) minmax(125px,.6fr) minmax(125px,.6fr);gap:8px;align-items:end;border-top:1px solid var(--border);padding:8px 0;position:relative;z-index:1}.result-row.result-picker-open{z-index:1000}.compact-group-check,.compact-test-check{display:inline-grid!important;place-items:center!important;width:24px;height:24px;min-width:24px;border-radius:8px;background:var(--input);border:1px solid var(--border);position:relative;cursor:pointer}.compact-group-check input,.compact-test-check input{position:absolute;opacity:0;inset:0;cursor:pointer}.compact-group-check span,.compact-test-check span{width:14px;height:14px;border-radius:5px;border:1px solid color-mix(in srgb,var(--muted) 70%,transparent);display:block}.compact-group-check input:checked + span,.compact-test-check input:checked + span{background:var(--accent-gradient);border-color:transparent;box-shadow:var(--glow)}.compact-group-check input:checked + span:after,.compact-test-check input:checked + span:after{content:'✓';display:block;text-align:center;line-height:14px;color:#fff;font-size:11px;font-weight:900}.compact-report-head .profile-title{align-items:center}.compact-report-head .profile-actions{align-items:center}.compact-result-row.off{opacity:.48}.compact-result-row.off .result-editor,.compact-result-row.off .small-field{pointer-events:none}.result-row.off{opacity:.6}.result-row.highlight{background:rgba(99,102,241,.07);margin-left:-8px;margin-right:-8px;padding-left:8px;padding-right:8px;border-radius:12px}.order-actions{display:flex;align-items:center;gap:4px}.drag{color:var(--muted);letter-spacing:-2px}.mini,.icon-mini{width:26px;height:26px;border:1px solid var(--border);border-radius:9px;background:var(--panel);color:var(--text);cursor:pointer;display:inline-grid;place-items:center;font-size:13px;font-weight:900}.icon-mini.calc{color:var(--accent);border-color:rgba(99,102,241,.38);background:rgba(99,102,241,.12)}.result-name b{font-size:13px}.result-name small,.review-table small{display:block;color:var(--muted);font-size:11px;margin-top:3px}.badges{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}.badges span{border:1px solid var(--border);background:var(--panel);border-radius:999px;padding:2px 6px;font-size:10px;color:var(--muted)}.result-editor{display:grid;grid-template-columns:30px minmax(150px,1fr) 24px 30px;gap:6px;align-items:end}.rt-result-label{position:relative;min-width:0;display:grid;gap:5px}.rt-label-text{font-size:11px;color:var(--muted)}.rt-control{position:relative;min-width:0}.rt-field{width:100%;height:38px;border:1px solid color-mix(in srgb,var(--border) 86%,var(--accent));border-radius:15px;background:color-mix(in srgb,var(--input) 94%,var(--panel));color:var(--text);padding:0 13px;font-size:14px;font-weight:850;outline:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.04);transition:border-color .16s ease,box-shadow .16s ease,background .16s ease}.rt-field:focus,.rt-control.open .rt-field,.rt-control.open .rt-select-trigger{border-color:color-mix(in srgb,var(--accent) 70%,var(--border));box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 18%,transparent)}.rt-field:disabled,.rt-control.disabled .rt-field,.rt-control.disabled .rt-select-trigger{opacity:.64;cursor:not-allowed}.rt-select-trigger{display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;cursor:pointer}.rt-select-trigger span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rt-select-trigger .placeholder{color:var(--muted);font-weight:750}.rt-select-trigger b{font-size:18px;line-height:1;color:var(--muted);font-weight:900}.rt-options-panel{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:20;max-height:210px;overflow:auto;border:1px solid color-mix(in srgb,var(--border) 82%,var(--accent));border-radius:15px;background:#111827;color:#f8fafc;box-shadow:0 18px 42px rgba(0,0,0,.48);padding:6px;opacity:1;isolation:isolate;contain:paint}.rt-option{width:100%;border:0;background:transparent;color:var(--text);text-align:left;border-radius:11px;min-height:34px;padding:7px 10px;font-size:13px;font-weight:850;cursor:pointer}.rt-option:hover,.rt-option.selected{background:color-mix(in srgb,var(--accent) 16%,var(--input));color:var(--text)}.rt-option.muted{color:var(--muted);font-weight:750}.rt-option-empty{padding:10px;color:var(--muted);font-size:12px;font-weight:800;text-align:center}.calc-slot{width:30px;height:30px;display:grid;place-items:end center;align-self:end}.result-input-label{min-width:0}.left-calc{align-self:end}.outsource-panel{grid-column:3/-1;display:grid;grid-template-columns:130px 130px 130px 1fr auto;gap:8px;align-items:end;border:1px dashed var(--border);border-radius:14px;padding:9px;background:var(--row)}.outsource-panel .panel-title{align-self:center;font-size:12px;font-weight:900;color:var(--accent)}.outsource-panel .wide{min-width:180px}.summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}.summary-grid div{border:1px solid var(--border);border-radius:16px;background:var(--row);padding:12px}.summary-grid span{display:block;color:var(--muted);font-size:11px;text-transform:uppercase}.summary-grid b{display:block;margin-top:4px;font-size:18px}.review-table{width:100%;border-collapse:collapse}.review-table td{border-top:1px solid var(--border);padding:9px;font-size:13px}.button-row,.export-row{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:12px}.modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.58);display:grid;place-items:center;z-index:2147483000}.history-modal{width:min(720px,92vw);max-height:82vh;overflow:auto;border:1px solid var(--border);background:var(--panel);border-radius:20px;padding:16px;box-shadow:var(--shadow)}.approved-action-modal{width:min(860px,94vw)}.report-select-list{display:grid;gap:8px;margin:10px 0}.report-select-row{display:grid;grid-template-columns:26px 1fr auto;gap:10px;align-items:center;border:1px solid var(--border);background:var(--row);border-radius:14px;padding:10px}.report-select-row b{display:block}.report-select-row small{display:block;color:var(--muted);font-size:11px;margin-top:2px}.report-select-row em{font-style:normal;color:var(--accent);font-size:12px;font-weight:900}.report-options-row{grid-template-columns:1fr 1fr}
 
     .rt-native-option-select{display:block;width:100%;max-width:100%;min-width:0;appearance:auto;cursor:pointer;text-overflow:ellipsis;white-space:nowrap}.rt-native-option-select option{background:var(--panel);color:var(--text);font-weight:750}
     .rt-chevron{position:absolute;right:10px;top:50%;transform:translateY(-54%);color:var(--muted);font-size:18px;font-weight:900;pointer-events:none}.rt-picker .rt-field{padding-right:30px!important}
@@ -820,6 +940,16 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
     .confirm-card h3{margin:0 0 8px;font-size:20px;letter-spacing:-.02em}.confirm-card p{margin:0;color:var(--muted);font-size:14px;line-height:1.45}.confirm-details{margin-top:14px;border:1px solid var(--border);background:var(--row);border-radius:16px;padding:12px;color:var(--text);font-size:13px;line-height:1.45}.confirm-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}.btn.danger-solid{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;border:0;box-shadow:0 14px 28px rgba(239,68,68,.20)}
     .whatsapp-prompt-card{border-color:color-mix(in srgb,#25D366 34%,var(--border))!important}.confirm-icon.whatsapp{background:rgba(37,211,102,.14);color:#25D366;border:1px solid rgba(37,211,102,.34)}.confirm-icon.whatsapp svg{width:24px;height:24px;fill:currentColor}.whatsapp-prompt-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:14px}.whatsapp-prompt-meta div{border:1px solid var(--border);border-radius:14px;background:var(--row);padding:10px 12px;min-width:0}.whatsapp-prompt-meta span,.whatsapp-prompt-meta b{display:block}.whatsapp-prompt-meta span{color:var(--muted);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.04em}.whatsapp-prompt-meta b{margin-top:4px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.whatsapp-output-modal .output-modal-header{background:linear-gradient(135deg,color-mix(in srgb,var(--panel) 88%,#25D366),var(--panel))}.whatsapp-output-icon{background:rgba(37,211,102,.16)!important;color:#25D366!important}.whatsapp-output-icon svg{width:22px;height:22px;fill:currentColor}.whatsapp-output-body{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(260px,.75fr);gap:16px;padding:18px 20px;min-height:0;overflow:auto;flex:1}.whatsapp-main-column{min-width:0}.whatsapp-preview-icon{background:rgba(37,211,102,.14)!important;color:#25D366!important}.whatsapp-preview-icon svg{width:28px;height:28px;fill:currentColor}.whatsapp-output-body .whatsapp-phone-field{margin-top:4px}.whatsapp-output-body .whatsapp-phone-input{min-height:48px}.whatsapp-output-body .whatsapp-phone-input input{height:48px;font-size:16px}@media(max-width:900px){.whatsapp-output-body{grid-template-columns:1fr}}
 .whatsapp-phone-field{display:grid;gap:7px;margin-top:14px}.whatsapp-phone-field>span{font-size:11px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}.whatsapp-phone-input{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:0;border:1px solid var(--border);border-radius:14px;background:var(--input);overflow:hidden;transition:border-color .15s ease,box-shadow .15s ease}.whatsapp-phone-input:focus-within{border-color:color-mix(in srgb,#25D366 55%,var(--border));box-shadow:0 0 0 4px rgba(37,211,102,.14)}.whatsapp-phone-input em{font-style:normal;font-weight:950;padding:0 12px;color:#25D366;border-right:1px solid var(--border);background:color-mix(in srgb,#25D366 10%,transparent);height:100%;display:grid;place-items:center;font-size:13px}.whatsapp-phone-input input{border:0;outline:0;background:transparent;color:var(--text);height:44px;padding:0 12px;font-size:15px;font-weight:850;letter-spacing:.02em;width:100%;min-width:0}.whatsapp-phone-field small{color:var(--muted);font-size:11px;font-weight:750;line-height:1.35}.whatsapp-prompt-error{margin-top:10px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.1);color:#ef4444;border-radius:12px;padding:9px 11px;font-size:12px;font-weight:850}.btn.whatsapp-solid{background:linear-gradient(135deg,#25D366,#128C7E);color:#fff;border:0;box-shadow:0 14px 28px rgba(37,211,102,.22)}.btn.whatsapp-solid:disabled{opacity:.55;box-shadow:none}
+    .whatsapp-handoff-modal{width:min(560px,94vw);max-height:86vh;display:flex;flex-direction:column;padding:0;overflow:hidden}
+    .whatsapp-handoff-progress-bar{height:4px;background:color-mix(in srgb,#25D366 18%,var(--border));flex:0 0 auto}.whatsapp-handoff-progress-bar>span{display:block;height:100%;width:0;background:linear-gradient(90deg,#25D366,#128C7E);transition:width .25s ease}
+    .whatsapp-handoff-body{display:grid!important;grid-template-columns:1fr!important;gap:14px;padding:18px 20px;overflow:auto}
+    .whatsapp-handoff-steps{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+    .whatsapp-handoff-steps li{display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:start;border:1px solid var(--border);border-radius:14px;background:var(--row);padding:10px 12px}
+    .whatsapp-handoff-steps li b{width:28px;height:28px;border-radius:999px;display:grid;place-items:center;font-size:12px;background:var(--input);color:var(--muted)}
+    .whatsapp-handoff-steps li.running b{background:rgba(37,211,102,.16);color:#25D366}.whatsapp-handoff-steps li.done b{background:rgba(37,211,102,.22);color:#128C7E}.whatsapp-handoff-steps li.error b{background:rgba(239,68,68,.16);color:#ef4444}.whatsapp-handoff-steps li.skipped b{opacity:.7}
+    .whatsapp-handoff-steps li strong{display:block;font-size:13px}.whatsapp-handoff-steps li small{display:block;margin-top:3px;color:var(--muted);font-size:11px;word-break:break-word}
+    .whatsapp-handoff-clipboard{display:flex;justify-content:space-between;gap:12px;align-items:center;border:1px solid var(--border);border-radius:14px;padding:10px 12px;background:var(--row)}.whatsapp-handoff-clipboard span{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}.whatsapp-handoff-clipboard b{font-size:12px;text-align:right;line-height:1.35}.whatsapp-handoff-clipboard.ok{border-color:rgba(37,211,102,.4);background:rgba(37,211,102,.1)}.whatsapp-handoff-clipboard.bad{border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.1)}
+    .whatsapp-handoff-path{display:grid;gap:4px;border:1px dashed var(--border);border-radius:12px;padding:10px 12px}.whatsapp-handoff-path span{font-size:10px;font-weight:900;text-transform:uppercase;color:var(--muted)}.whatsapp-handoff-path code{font-size:11px;word-break:break-all;color:var(--text)}
     :host-context(.light-mode) .whatsapp-prompt-meta div,:host-context(body.light-mode) .whatsapp-prompt-meta div,:host-context(body:not(.dark-theme)) .whatsapp-prompt-meta div{background:#f8fafc!important;border-color:#e2e8f0!important}
     @keyframes confirmPop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
     :host-context(.light-mode) .confirm-card,:host-context(body.light-mode) .confirm-card,:host-context(body:not(.dark-theme)) .confirm-card{background:#ffffff!important;color:#0f172a!important;border-color:#fecaca!important;box-shadow:0 30px 80px rgba(15,23,42,.22)!important}.light-mode .confirm-details{}
@@ -921,6 +1051,8 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
     .rt-native-select option[value=""]{color:var(--muted)!important;font-weight:800!important}
     .rt-dropdown-input{cursor:text!important}
     .rt-result-label{gap:2px!important}.rt-label-text{font-size:10px!important;line-height:1!important}.result-editor{gap:4px!important}.compact-result-row{padding-top:5px!important;padding-bottom:5px!important}
+    .inner-header-row{display:flex;align-items:center;padding:7px 12px!important;margin:6px 2px 2px;background:color-mix(in srgb,var(--accent) 9%,var(--row));border:1px dashed color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:10px}
+    .inner-header-label{font-size:12px;font-weight:900;letter-spacing:.03em;color:var(--accent);text-transform:uppercase}
 
     .pending-summary-toolbar{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid var(--border);border-radius:14px;background:linear-gradient(145deg,var(--row),var(--panel));padding:7px 10px;margin:6px 0 10px;box-shadow:0 6px 14px rgba(15,23,42,.07);max-width:100%}
     .pending-master-check{margin-right:2px}.pending-selected-count{font-size:12px;font-weight:900;color:var(--muted)}
@@ -940,6 +1072,7 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
 export class ReportTypingPageComponent implements OnInit, OnDestroy {
   private outputModalBackdropElement: HTMLElement | null = null;
   private whatsAppPromptBackdropElement: HTMLElement | null = null;
+  private whatsAppHandoffBackdropElement: HTMLElement | null = null;
   private previousBodyOverflow = '';
 
   @ViewChild('outputModalBackdrop')
@@ -955,7 +1088,9 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
 
     if (!element && this.outputModalBackdropElement) {
       this.outputModalBackdropElement = null;
-      if (!this.whatsAppPromptBackdropElement) document.body.style.overflow = this.previousBodyOverflow;
+      if (!this.whatsAppPromptBackdropElement && !this.whatsAppHandoffBackdropElement) {
+        document.body.style.overflow = this.previousBodyOverflow;
+      }
     }
   }
 
@@ -972,24 +1107,55 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
 
     if (!element && this.whatsAppPromptBackdropElement) {
       this.whatsAppPromptBackdropElement = null;
-      if (!this.outputModalBackdropElement) document.body.style.overflow = this.previousBodyOverflow;
+      if (!this.outputModalBackdropElement && !this.whatsAppHandoffBackdropElement) {
+        document.body.style.overflow = this.previousBodyOverflow;
+      }
+    }
+  }
+
+  @ViewChild('whatsAppHandoffBackdrop')
+  set whatsAppHandoffBackdrop(ref: ElementRef<HTMLElement> | undefined) {
+    const element = ref?.nativeElement ?? null;
+    if (element && element !== this.whatsAppHandoffBackdropElement) {
+      this.whatsAppHandoffBackdropElement = element;
+      this.previousBodyOverflow = document.body.style.overflow || this.previousBodyOverflow;
+      document.body.style.overflow = 'hidden';
+      document.body.appendChild(element);
+      return;
+    }
+
+    if (!element && this.whatsAppHandoffBackdropElement) {
+      this.whatsAppHandoffBackdropElement = null;
+      if (!this.outputModalBackdropElement && !this.whatsAppPromptBackdropElement) {
+        document.body.style.overflow = this.previousBodyOverflow;
+      }
     }
   }
 
   constructor(private sanitizer: DomSanitizer, private snackBar: MatSnackBar, private overlay: Overlay) {
     this.resultOverlayScrollStrategy = this.overlay.scrollStrategies.reposition();
-    this.queueFilterForm.controls.search.valueChanges.subscribe(value => { this.reportSearch = value; });
+    this.queueFilterForm.controls.search.valueChanges.subscribe(value => {
+      this.reportSearch = value;
+      this.ensureQueuePageInRange();
+    });
     this.queueFilterForm.controls.fromDate.valueChanges.subscribe(value => { this.fromDate = value; this.onDateFilterChanged(); });
     this.queueFilterForm.controls.toDate.valueChanges.subscribe(value => { this.toDate = value; this.onDateFilterChanged(); });
   }
   private dateRangeRestored = false;
   private dateReloadTimer: any = null;
+  /** In-memory page per Quick queue (Pending / Finished × bill|report view). Survives open/edit/back. */
+  private queuePageMemory: Record<string, number> = {};
+  queuePage = 1;
+  queuePageSize = 25;
   @Output() changed = new EventEmitter<void>();
   reports = signal<any[]>([]);
   quickReporting = false;
+  departmentPriorityByName = new Map<string, number>();
+  quickSingleTestPlacement: 'TOP' | 'DEPARTMENT' = 'DEPARTMENT';
   reportLogs = signal<any[]>([]);
   selectedReport = signal<ReportVm | null>(null);
   workspaceMode = signal<WorkspaceMode>('ENTRY');
+  returnUncheckedToPending = false;
   busy = signal(false);
   errorMessage = signal('');
   successMessage = signal('');
@@ -1001,7 +1167,9 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   recheckRequestState = signal<RecheckRequestState>(null);
   resetConfirm = signal<ResetConfirmState>(null);
   whatsAppPrompt = signal<WhatsAppPromptState>(null);
+  whatsAppHandoff = signal<WhatsAppHandoffState>(null);
   readonly whatsAppMobileControl = new FormControl('', { nonNullable: true });
+  private whatsAppHandoffUnsub: (() => void) | null = null;
   approvedActionState = signal<ApprovedActionState>(null);
   quickBarcodeState = signal<QuickBarcodeModalState>(null);
   approvedQueueMenu = signal<{row:any; style:Record<string,string>}|null>(null);
@@ -1080,6 +1248,9 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     document.body.style.overflow = this.previousBodyOverflow;
     this.outputModalBackdropElement = null;
     this.whatsAppPromptBackdropElement = null;
+    this.whatsAppHandoffBackdropElement = null;
+    this.whatsAppHandoffUnsub?.();
+    this.whatsAppHandoffUnsub = null;
     window.removeEventListener('error', this.errorListener);
     window.removeEventListener('unhandledrejection', this.rejectionListener);
     if (this.dateReloadTimer) window.clearTimeout(this.dateReloadTimer);
@@ -1797,15 +1968,14 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   openDatePicker(event: Event) { openNativeDatePicker(event); }
 
   setQueueDatePreset(key: keyof ReturnType<typeof dateRangePresets>) {
-    const range = this.queueDatePresets()[key];
+    const range = dateRangePresets()[key];
     this.fromDate = range.from;
     this.toDate = range.to;
     this.queueFilterForm.patchValue({ fromDate: this.fromDate, toDate: this.toDate }, { emitEvent: false });
     this.onDateFilterChanged();
   }
-  private queueDatePresets() { return dateRangePresets(DateTimeSettingsService.nowInputValue()); }
   private queueMatches(key: keyof ReturnType<typeof dateRangePresets>) {
-    return matchesDateRange(this.fromDate, this.toDate, this.queueDatePresets()[key]);
+    return matchesDateRange(this.fromDate, this.toDate, dateRangePresets()[key]);
   }
   get isQueueTodayRange(){ return this.queueMatches('today'); }
   get isQueuePreviousDayRange(){ return this.queueMatches('previousDay'); }
@@ -1818,8 +1988,63 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   onDateFilterChanged() {
     this.saveDateRangeForStatus(this.reportStatus);
     this.pendingSummarySelected.clear();
+    this.resetQueuePage();
     if (this.dateReloadTimer) window.clearTimeout(this.dateReloadTimer);
     this.dateReloadTimer = window.setTimeout(() => { void this.loadReports(); }, 120);
+  }
+
+  private queuePageMemoryKey(status: ReportQueueStatus = this.reportStatus, view: 'BILL' | 'REPORT' = this.reportQueueView): string {
+    return `quick:${String(status || 'DRAFT').toUpperCase()}:${view}`;
+  }
+  private rememberQueuePage() {
+    if (!this.quickReporting) return;
+    this.queuePageMemory[this.queuePageMemoryKey()] = Math.max(1, this.queuePage || 1);
+  }
+  private restoreQueuePage() {
+    if (!this.quickReporting) { this.queuePage = 1; return; }
+    this.queuePage = Math.max(1, +this.queuePageMemory[this.queuePageMemoryKey()] || 1);
+  }
+  private resetQueuePage() {
+    this.queuePage = 1;
+    this.rememberQueuePage();
+  }
+  ensureQueuePageInRange() {
+    if (!this.quickReporting) return;
+    const total = this.queueTotalPages();
+    if (this.queuePage > total) this.queuePage = total;
+    if (this.queuePage < 1) this.queuePage = 1;
+    this.rememberQueuePage();
+  }
+  setQueuePage(page: number) {
+    this.queuePage = Math.max(1, Math.min(this.queueTotalPages(), Math.floor(+page || 1)));
+    this.rememberQueuePage();
+  }
+  setQueuePageSize(size: number) {
+    const next = [10, 25, 50, 100].includes(+size) ? +size : 25;
+    this.queuePageSize = next;
+    this.resetQueuePage();
+  }
+  queueTotalPages(): number {
+    return Math.max(1, Math.ceil(this.filteredReports().length / Math.max(1, this.queuePageSize || 25)));
+  }
+  queuePageStart(): number {
+    const total = this.filteredReports().length;
+    return total ? (this.queuePage - 1) * this.queuePageSize + 1 : 0;
+  }
+  queuePageEnd(): number {
+    return Math.min(this.queuePage * this.queuePageSize, this.filteredReports().length);
+  }
+  pagedFilteredReports(): any[] {
+    const rows = this.filteredReports();
+    if (!this.quickReporting) return rows;
+    const start = (Math.max(1, this.queuePage) - 1) * Math.max(1, this.queuePageSize);
+    return rows.slice(start, start + Math.max(1, this.queuePageSize));
+  }
+  isQuickFinishedEdit(report: any): boolean {
+    return !!this.quickReporting && +report?.id > 0 && this.normalizeStatus(report?.status) === 'APPROVED';
+  }
+  quickFinishButtonLabel(report: any): string {
+    return this.isQuickFinishedEdit(report) ? 'Edit Report' : 'Save Reports';
   }
 
   async loadReports() {
@@ -1833,11 +2058,24 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
         this.restoreDateRangeForStatus(this.reportStatus);
         this.dateRangeRestored = true;
       }
+      try {
+        const depts = await window.limsApi.listDepartments();
+        this.departmentPriorityByName = new Map((Array.isArray(depts) ? depts : []).map((d:any) => [String(d?.name || '').trim().toLowerCase(), +(d?.priority ?? 9999)]));
+      } catch {
+        this.departmentPriorityByName = new Map();
+      }
+      try {
+        const parsed = JSON.parse(String(settings?.['report.printDefaults.json'] || '{}'));
+        this.quickSingleTestPlacement = String(parsed?.singleTestPlacement || 'DEPARTMENT').toUpperCase() === 'TOP' ? 'TOP' : 'DEPARTMENT';
+      } catch {
+        this.quickSingleTestPlacement = 'DEPARTMENT';
+      }
       const rows = await window.limsApi.listReports('');
       this.reports.set((Array.isArray(rows) ? rows : []).map(r => ({...r, status: this.normalizeStatus(r.status)})));
       const api:any = window.limsApi as any;
       const logs = api.listReportLogs ? await api.listReportLogs({ from: this.fromDate || '1900-01-01', to: this.toDate || '2999-12-31' }) : [];
       this.reportLogs.set(Array.isArray(logs) ? logs : []);
+      this.ensureQueuePageInRange();
     }, 'Unable to load reports.');
   }
 
@@ -1845,17 +2083,26 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     if (status === 'RECHECK') status = 'DRAFT';
     if (this.quickReporting && !['DRAFT','APPROVED'].includes(status)) status = 'DRAFT';
     this.saveDateRangeForStatus(this.reportStatus);
+    this.rememberQueuePage();
     this.reportStatus = status;
-    this.restoreDateRangeForStatus(this.reportStatus);
-    this.pendingSummarySelected.clear();
     if (status === 'TYPED' || status === 'APPROVED') this.reportQueueView = 'BILL';
+    this.restoreDateRangeForStatus(this.reportStatus);
+    this.restoreQueuePage();
+    this.pendingSummarySelected.clear();
     void this.loadReports();
   }
   canGroupReportQueue(): boolean {
     if (this.quickReporting) return this.reportStatus === 'APPROVED';
     return this.reportStatus === 'TYPED' || this.reportStatus === 'APPROVED';
   }
-  setReportQueueView(mode: 'BILL' | 'REPORT') { this.reportQueueView = mode; this.queueExpanded.clear(); this.pendingSummarySelected.clear(); }
+  setReportQueueView(mode: 'BILL' | 'REPORT') {
+    this.rememberQueuePage();
+    this.reportQueueView = mode;
+    this.restoreQueuePage();
+    this.queueExpanded.clear();
+    this.pendingSummarySelected.clear();
+    this.ensureQueuePageInRange();
+  }
   isBillGroupedQueueRow(r:any): boolean { return !!(r?._bill_group || r?._approved_bill_group); }
   isRecheckEntryLocked(r:any): boolean { return (+r?.recheck_count || 0) > 0 && (+r?.ready_for_entry_count || 0) === 0; }
 
@@ -1864,6 +2111,7 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     const id = +(source?.id ?? ref ?? 0);
     const groupKey = source?.queue_group_key || '';
     if (!id) return;
+    this.rememberQueuePage();
     if (!this.quickReporting && String(status || this.reportStatus || '').toUpperCase() === 'DRAFT' && this.isEntryLocked(source)) { this.showError('Result entry is locked until Collection receives the outsource result.'); return; }
     if (String(status || this.reportStatus || '').toUpperCase() === 'RECHECK' && this.isRecheckEntryLocked(source)) { this.showError('Outsource recheck entry is locked until Collection dispatch is completed and vendor result is received.'); return; }
 
@@ -1933,35 +2181,95 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     this.workspaceMode.set('ENTRY');
   }
 
-  closeReport() { this.recheckEntryMode = false; this.selectedReport.set(null); this.criticalNotice.set(''); this.errorMessage.set(''); this.historyState.set(null); this.pdfPreview.set(null); this.reopenState.set(null); this.rejectState.set(null); void this.loadReports(); }
-  editResults() { const r = this.selectedReport(); if (r) { this.prepareEntrySelection(r); this.refreshSelectedState(r); } this.workspaceMode.set('ENTRY'); }
+  closeReport() {
+    this.recheckEntryMode = false;
+    this.selectedReport.set(null);
+    this.criticalNotice.set('');
+    this.errorMessage.set('');
+    this.historyState.set(null);
+    this.pdfPreview.set(null);
+    this.reopenState.set(null);
+    this.rejectState.set(null);
+    this.restoreQueuePage();
+    void this.loadReports();
+  }
+  editResults() {
+    const r = this.selectedReport();
+    this.returnUncheckedToPending = false;
+    if (r) { this.prepareEntrySelection(r); this.refreshSelectedState(r); }
+    this.workspaceMode.set('ENTRY');
+  }
 
   async quickFinishSelected() {
     const report = this.selectedReport(); if (!report) return;
     this.refreshSelectedState(report);
     if (!report.selectedCount) { this.showError('Select at least one test before saving finished report.'); return; }
+    const selected = this.selectedEntryItems(report);
+    if (!selected.some((x:any)=>this.hasRealResultValue(x))) {
+      this.showError('Enter at least one result value before saving the finished report. Empty-only reports are not allowed.');
+      return;
+    }
     const groupError = this.validateSelectedReportGroup(report); if (groupError) { this.showError(groupError); return; }
-    const saved = await this.saveReportWithStatus(report, 'APPROVED', 'Unable to save finished report.');
+    const wasEdit = this.isQuickFinishedEdit(report);
+    const uncheckedCount = wasEdit
+      ? this.reportableItems(report).filter((x:any) => x.selected_for_entry === false).length
+      : 0;
+    let returnUnchecked = false;
+    if (wasEdit && uncheckedCount > 0 && this.returnUncheckedToPending) {
+      const ok = await this.askInlineConfirm({
+        title: 'Return unchecked tests to Pending?',
+        message: `${uncheckedCount} unchecked test(s) will be removed from this finished report and return to Pending.`,
+        details: 'Their finished values on this report will be deleted. Cancel to keep values and only hide them from the PDF instead.',
+        confirmText: 'Return to Pending',
+        cancelText: 'Cancel'
+      });
+      if (!ok) return;
+      returnUnchecked = true;
+    }
+    const saved = await this.saveReportWithStatus(report, 'APPROVED', 'Unable to save finished report.', {
+      return_unchecked_to_pending: returnUnchecked
+    });
     if (!saved) return;
+    this.returnUncheckedToPending = false;
+    this.rememberQueuePage();
     this.selectedReport.set(null);
     this.workspaceMode.set('ENTRY');
     this.reportStatus = 'APPROVED';
+    this.reportQueueView = 'BILL';
+    this.restoreQueuePage();
     await this.loadReports();
     this.changed.emit();
-    this.showSuccess('Finished report saved. Remaining tests stay pending.');
+    const msg = !wasEdit
+      ? 'Finished report saved. Remaining tests stay pending.'
+      : (returnUnchecked
+        ? 'Finished report updated. Unchecked tests returned to Pending.'
+        : (uncheckedCount
+          ? 'Finished report updated. Unchecked tests kept but hidden from PDF.'
+          : 'Finished report updated.'));
+    this.showSuccess(msg);
   }
 
-  async quickSingleTestPlacementOption(id:number): Promise<'TOP' | 'DEPARTMENT'> {
+  async quickSingleTestPlacementOption(id:number): Promise<SingleTestPlacement> {
     try {
       const raw = await window.limsApi.getReport(id);
       const items = Array.isArray(raw?.items) ? raw.items : [];
-      const tests = items.filter((x:any)=>x?.test_id);
-      const hasProfileTests = tests.some((x:any)=>String(x?.source_profile_name || '').trim() || +(x?.source_profile_id || 0));
-      const hasSingleTests = tests.some((x:any)=>!String(x?.source_profile_name || '').trim() && !(+(x?.source_profile_id || 0)));
-      if (hasProfileTests && hasSingleTests) {
-        const below = window.confirm('This report has profile tests and single tests.\n\nPress OK to print single tests BELOW the profiles.\nPress Cancel to print single tests ABOVE the profiles.');
-        return below ? 'DEPARTMENT' : 'TOP';
+      const printDefaults = await this.loadPrintDefaults();
+      const info = this.analyzeSingleTestPlacement(items, printDefaults.singleTestPlacement);
+      if (!info.hasBoth) return printDefaults.singleTestPlacement;
+      if (info.customAvailable) {
+        const keepCustom = window.confirm(
+          'Single-test order was customized in report typing.\n\n' +
+          'Press OK to print with Custom typing order.\n' +
+          'Press Cancel to choose Beginning or End for this print.'
+        );
+        if (keepCustom) return 'CUSTOM';
       }
+      const below = window.confirm(
+        'Single tests position inside each department.\n\n' +
+        'Press OK to print single tests at the END.\n' +
+        'Press Cancel to print single tests at the BEGINNING.'
+      );
+      return below ? 'DEPARTMENT' : 'TOP';
     } catch {}
     return 'DEPARTMENT';
   }
@@ -2065,8 +2373,22 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
       // A physical sample can contain in-house, outsource and recheck tests together;
       // approving selected in-house tests must never approve the remaining tests in the
       // same sample/specimen/profile. Unselected rows stay in their current queue.
+      for (const section of report.safeSections || []) {
+        if (section?.kind === 'PROFILE' && (section as any)._profileRemarks !== undefined) {
+          this.writeProfileRemarks(report, section, String((section as any)._profileRemarks ?? ''));
+        }
+      }
+      const profileRemarks = this.parseProfileRemarksMap(report.profile_remarks);
       const selectedItems = this.reportableItems(report).filter((x:any) => x.selected_for_entry === true);
-      const payload = {...report, ...extra, recheck_entry_mode: this.recheckEntryMode, items: selectedItems, status};
+      const payload = {
+        ...report,
+        ...extra,
+        recheck_entry_mode: this.recheckEntryMode,
+        items: selectedItems,
+        status,
+        profile_remarks: profileRemarks,
+        profile_remarks_json: JSON.stringify(profileRemarks)
+      };
       const raw = await window.limsApi.saveReport(payload);
       return this.toReportVm(raw);
     }, fallback);
@@ -2284,7 +2606,7 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     return (items || []).filter((x:any)=>x?.test_id && this.isPendingResultItem(x)).map((x:any)=>({label:`${x.source_profile_name ? x.source_profile_name + ': ' : ''}${x.test_name || 'Pending test'}`}));
   }
   approvedActionTitle(action: ApprovedAction): string { return action==='PDF' ? 'Export PDF' : action==='PRINT' ? 'Print' : action==='EMAIL' ? 'Email' : action==='WHATSAPP' ? 'WhatsApp' : action==='SMS' ? 'SMS' : 'View'; }
-  approvedActionButton(action: ApprovedAction): string { return action==='PDF' ? 'Export selected' : action==='PRINT' ? 'Print selected' : action==='EMAIL' ? 'Email selected' : action==='WHATSAPP' ? 'WhatsApp selected' : action==='SMS' ? 'Send SMS' : 'View selected'; }
+  approvedActionButton(action: ApprovedAction): string { return action==='PDF' ? 'Export selected reports' : action==='PRINT' ? 'Print selected reports' : action==='EMAIL' ? 'Email selected' : action==='WHATSAPP' ? 'Send via WhatsApp' : action==='SMS' ? 'Send SMS' : 'View selected'; }
   async startApprovedAction(id:number, action: ApprovedAction) {
     const source = await this.runAction(async()=>this.toReportVm(await window.limsApi.getReport(id)), 'Unable to prepare approved report action.');
     if (!source) return;
@@ -2294,6 +2616,7 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     if (!approved.some((r:any)=>+r.id === +source.id) && (this.normalizeStatus(source.status)==='APPROVED' || this.reportableItems(source).some((x:any)=>this.isApprovedResultItem(x)))) approved.unshift({ ...source, selected:true, status:'APPROVED', report_no:`RPT${String(source.id).padStart(4,'0')}`, item_count:this.reportableItems(source).filter((x:any)=>this.isApprovedResultItem(x)).length || this.reportableItems(source).length });
     const pending = this.reportableItems(source).filter((x:any)=>this.isPendingResultItem(x)).map((x:any)=>({label:`${x.source_profile_name ? x.source_profile_name + ': ' : ''}${x.test_name}`}));
     const printDefaults = await this.loadPrintDefaults();
+    const placementInfo = this.analyzeSingleTestPlacement(source?.safeItems || source?.items || [], printDefaults.singleTestPlacement);
     let signatures:any[] = [];
     try {
       const settings:any = await window.limsApi.getSettings();
@@ -2323,9 +2646,57 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
       signatures,
       mergeMode: printDefaults.mergeMode || (defaultPrintGrouping === 'BILL' ? 'MERGE' : 'SEPARATE'),
       printGrouping: defaultPrintGrouping,
-      singleTestPlacement: printDefaults.singleTestPlacement,
+      singleTestPlacement: placementInfo.customAvailable ? 'CUSTOM' : printDefaults.singleTestPlacement,
+      singleTestPlacementCustomAvailable: placementInfo.customAvailable,
       error: ''
     });
+  }
+  singleTestPlacementLabel(value: SingleTestPlacement | string): string {
+    const mode = String(value || '').toUpperCase();
+    if (mode === 'TOP') return 'At beginning';
+    if (mode === 'CUSTOM') return 'Custom (typing order)';
+    return 'At end';
+  }
+  private isSingleTestItem(row:any): boolean {
+    return !!row?.test_id && !String(row?.source_profile_name || '').trim() && !(+(row?.source_profile_id || 0));
+  }
+  private analyzeSingleTestPlacement(items:any[], settingsDefault: SingleTestPlacement = 'DEPARTMENT'): { hasBoth: boolean; inferred: SingleTestPlacement; customAvailable: boolean } {
+    const tests = (Array.isArray(items) ? items : []).filter((x:any)=>x?.test_id);
+    const hasProfileTests = tests.some((x:any)=>!this.isSingleTestItem(x));
+    const hasSingleTests = tests.some((x:any)=>this.isSingleTestItem(x));
+    if (!hasProfileTests || !hasSingleTests) {
+      return { hasBoth: false, inferred: settingsDefault === 'TOP' ? 'TOP' : 'DEPARTMENT', customAvailable: false };
+    }
+    const byDept = new Map<string, { singles: number[]; profiles: number[] }>();
+    for (const row of tests) {
+      const dept = String(row.department_name || '').trim().toLowerCase() || 'general';
+      if (!byDept.has(dept)) byDept.set(dept, { singles: [], profiles: [] });
+      const bucket = byDept.get(dept)!;
+      const order = +(row.group_order_override ?? row.priority ?? 0);
+      const within = this.cardWithinOrder(order);
+      if (this.isSingleTestItem(row)) bucket.singles.push(within);
+      else bucket.profiles.push(within);
+    }
+    let sawTop = false;
+    let sawEnd = false;
+    let sawCustom = false;
+    for (const bucket of byDept.values()) {
+      if (!bucket.singles.length || !bucket.profiles.length) continue;
+      const sMin = Math.min(...bucket.singles);
+      const sMax = Math.max(...bucket.singles);
+      const pMin = Math.min(...bucket.profiles);
+      const pMax = Math.max(...bucket.profiles);
+      if (sMax < pMin) sawTop = true;
+      else if (sMin > pMax) sawEnd = true;
+      else sawCustom = true; // interleaved inside the department
+    }
+    let inferred: SingleTestPlacement = 'DEPARTMENT';
+    if (sawCustom || (sawTop && sawEnd)) inferred = 'CUSTOM';
+    else if (sawTop) inferred = 'TOP';
+    else if (sawEnd) inferred = 'DEPARTMENT';
+    const settingsNorm: SingleTestPlacement = settingsDefault === 'TOP' ? 'TOP' : 'DEPARTMENT';
+    const customAvailable = inferred === 'CUSTOM' || inferred !== settingsNorm;
+    return { hasBoth: true, inferred, customAvailable };
   }
   private normalizeSignContentMode(value: any): 'IMAGE_TEXT' | 'IMAGE_ONLY' | 'TEXT_ONLY' {
     const mode = String(value || 'IMAGE_TEXT').toUpperCase();
@@ -2429,12 +2800,13 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     window.setTimeout(focus, 80);
   }
 
-  private openWhatsAppPrompt(row: any): Promise<string | null> {
+  private openWhatsAppPrompt(row: any, purpose: 'contact' | 'report' = 'contact'): Promise<string | null> {
     this.whatsAppMobileControl.setValue('');
     this.whatsAppPrompt.set({
       patientName: String(row?.patient_name || '').trim(),
       billNo: String(row?.bill_no || '').trim(),
-      error: ''
+      error: '',
+      purpose
     });
     this.focusWhatsAppMobileInput();
     return new Promise(resolve => {
@@ -2528,8 +2900,177 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
       return;
     }
     if (state.action === 'EMAIL') { this.approvedActionState.set(null); await this.runDeliveryAction(async()=> (window.limsApi as any).approvedReportEmail(+selected[0].id, opts), 'Email handoff opened. Report email status updated.'); return; }
-    if (state.action === 'WHATSAPP') { this.approvedActionState.set(null); await this.runDeliveryAction(async()=> (window.limsApi as any).approvedReportWhatsapp(+selected[0].id, opts), 'WhatsApp handoff opened. Report WhatsApp status updated.'); return; }
+    if (state.action === 'WHATSAPP') {
+      this.approvedActionState.set(null);
+      const report = selected[0];
+      let mobile = this.patientMobileDigits(report?.patient_mobile || report?.mobile);
+      if (!mobile) {
+        const fresh = await this.runAction(async () => window.limsApi.getReport(+report.id), 'Unable to load patient mobile.');
+        mobile = this.patientMobileDigits((fresh as any)?.patient_mobile || (fresh as any)?.mobile);
+      }
+      if (!mobile) {
+        mobile = (await this.openWhatsAppPrompt(report, 'report')) || '';
+        if (!mobile) return;
+      }
+      await this.runWhatsAppHandoff(+report.id, { ...opts, mobile }, String(report?.bill_no || ''));
+      return;
+    }
     if (state.action === 'SMS') { this.approvedActionState.set(null); await this.runDeliveryAction(async()=> (window.limsApi as any).approvedReportSms(+selected[0].id, opts), 'SMS handoff opened. Report SMS status updated.'); return; }
+  }
+
+  private beginWhatsAppHandoff(billNo: string, options?: { subscribe?: boolean }) {
+    const subscribe = options?.subscribe !== false;
+    if (subscribe) {
+      this.whatsAppHandoffUnsub?.();
+      this.whatsAppHandoffUnsub = null;
+    }
+    this.whatsAppHandoff.set({
+      title: 'Sending via WhatsApp',
+      billNo: billNo || '-',
+      progress: 5,
+      steps: [
+        { id: 'clipboard', label: 'Copying PDF to clipboard', status: 'pending' },
+        { id: 'whatsapp', label: 'Opening WhatsApp', status: 'pending' }
+      ],
+      summary: '',
+      clipboardCopied: null,
+      clipboardMode: '',
+      exportPath: '',
+      done: false,
+      cancelled: false,
+      error: ''
+    });
+    if (subscribe) {
+      const api: any = window.limsApi as any;
+      if (typeof api.onWhatsAppHandoffProgress === 'function') {
+        this.whatsAppHandoffUnsub = api.onWhatsAppHandoffProgress((payload: any) => this.applyWhatsAppHandoffProgress(payload));
+      }
+    }
+  }
+
+  private ensureWhatsAppHandoffVisible(billNo: string) {
+    if (!this.whatsAppHandoff()) this.beginWhatsAppHandoff(billNo, { subscribe: false });
+  }
+
+  private applyWhatsAppHandoffProgress(payload: any) {
+    const sid = String(payload?.id || '');
+    // PDF export uses the global Report Generation overlay first; open WhatsApp status only after that phase.
+    if (!payload || sid === 'generate') return;
+    this.ensureWhatsAppHandoffVisible(String(payload?.billNo || ''));
+    const cur = this.whatsAppHandoff();
+    if (!cur) return;
+    const nextSteps = [...cur.steps];
+    if (sid && sid !== 'done') {
+      const idx = nextSteps.findIndex(s => s.id === sid);
+      const step: WhatsAppHandoffStep = {
+        id: sid,
+        label: String(payload.label || sid),
+        status: (payload.status || 'running') as WhatsAppHandoffStep['status'],
+        detail: String(payload.detail || '')
+      };
+      if (idx >= 0) nextSteps[idx] = step;
+      else nextSteps.push(step);
+    }
+    let clipboardCopied = cur.clipboardCopied;
+    let clipboardMode = cur.clipboardMode;
+    if (payload.clipboardCopied != null) {
+      clipboardCopied = !!payload.clipboardCopied;
+      clipboardMode = String(payload.clipboardMode || clipboardMode || '');
+    } else if (sid === 'clipboard') {
+      if (payload.status === 'done') {
+        clipboardCopied = true;
+        clipboardMode = /path copied/i.test(String(payload.label || '')) ? 'path' : 'file';
+      } else if (payload.status === 'error') {
+        clipboardCopied = false;
+        clipboardMode = '';
+      }
+    }
+    const exportPath = (sid === 'clipboard' || sid === 'done') && payload.detail
+      ? String(payload.detail)
+      : cur.exportPath;
+    const done = sid === 'done' || payload.cancelled === true;
+    this.whatsAppHandoff.set({
+      ...cur,
+      billNo: String(payload.billNo || cur.billNo || '-'),
+      progress: Math.max(cur.progress, Number(payload.progress || 0) || cur.progress),
+      steps: nextSteps,
+      summary: sid === 'done' ? String(payload.label || cur.summary || '') : cur.summary,
+      clipboardCopied,
+      clipboardMode,
+      exportPath,
+      done,
+      cancelled: !!payload.cancelled,
+      error: payload.status === 'error' && sid !== 'clipboard' ? String(payload.detail || cur.error || '') : cur.error
+    });
+  }
+
+  closeWhatsAppHandoff() {
+    this.whatsAppHandoffUnsub?.();
+    this.whatsAppHandoffUnsub = null;
+    this.whatsAppHandoff.set(null);
+  }
+
+  private async runWhatsAppHandoff(reportId: number, opts: any, billNo: string) {
+    // Subscribe early, but do not open WhatsApp status until PDF Report Generation finishes.
+    this.whatsAppHandoffUnsub?.();
+    this.whatsAppHandoffUnsub = null;
+    this.whatsAppHandoff.set(null);
+    const api: any = window.limsApi as any;
+    if (typeof api.onWhatsAppHandoffProgress === 'function') {
+      this.whatsAppHandoffUnsub = api.onWhatsAppHandoffProgress((payload: any) => this.applyWhatsAppHandoffProgress(payload));
+    }
+    try {
+      const result = await this.runAction(
+        async () => (window.limsApi as any).approvedReportWhatsapp(reportId, opts),
+        'Unable to complete WhatsApp handoff.'
+      );
+      if (!result) {
+        this.ensureWhatsAppHandoffVisible(billNo);
+        const cur = this.whatsAppHandoff();
+        if (cur && !cur.done) {
+          this.whatsAppHandoff.set({ ...cur, done: true, error: cur.error || 'WhatsApp handoff failed.', progress: 100 });
+        }
+        return;
+      }
+      if (result.cancelled) {
+        this.ensureWhatsAppHandoffVisible(billNo);
+        const cur = this.whatsAppHandoff();
+        if (cur) this.whatsAppHandoff.set({ ...cur, done: true, cancelled: true, progress: 100, summary: 'Cancelled' });
+        return;
+      }
+      this.ensureWhatsAppHandoffVisible(billNo);
+      const cur = this.whatsAppHandoff();
+      if (cur) {
+        this.whatsAppHandoff.set({
+          ...cur,
+          done: true,
+          progress: 100,
+          exportPath: String(result.file || cur.exportPath || ''),
+          clipboardCopied: result.clipboardCopied != null ? !!result.clipboardCopied : cur.clipboardCopied,
+          clipboardMode: String(result.clipboardMode || cur.clipboardMode || ''),
+          summary: String(result.summary || cur.summary || 'WhatsApp handoff finished.'),
+          error: result.clipboardCopied === false ? String(result.clipboardError || '') : cur.error
+        });
+      }
+      await this.afterDeliveryAction(
+        result?.clipboardCopied && result?.clipboardMode === 'file'
+          ? 'WhatsApp opened. Report PDF is on the clipboard — press Ctrl+V in the chat to attach.'
+          : result?.clipboardCopied
+            ? 'WhatsApp opened. PDF path copied — attach manually if paste does not work.'
+            : 'WhatsApp opened. Attach the report PDF manually from the reports folder.'
+      );
+    } catch (err: any) {
+      this.ensureWhatsAppHandoffVisible(billNo);
+      const cur = this.whatsAppHandoff();
+      if (cur) {
+        this.whatsAppHandoff.set({
+          ...cur,
+          done: true,
+          progress: 100,
+          error: this.cleanErrorMessage(err?.message || err || 'WhatsApp handoff failed.')
+        });
+      }
+    }
   }
 
   async reportPdf(id:number,bg:boolean){ await this.safeOpenPath(() => window.limsApi.reportPdf(id,bg)); }
@@ -2539,24 +3080,172 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   async approvedPrint(id:number){ await this.safeOpenPath(() => (window.limsApi as any).approvedReportPrint(id)); await this.afterDeliveryAction('Print opened. Report print status updated.'); }
   async approvedEmail(id:number){ await this.runDeliveryAction(async()=> (window.limsApi as any).approvedReportEmail(id), 'Email handoff opened. Report email status updated.'); }
   async approvedSms(id:number){ await this.runDeliveryAction(async()=> (window.limsApi as any).approvedReportSms(id), 'SMS handoff opened. Report SMS status updated.'); }
-  async runDeliveryAction(action:()=>Promise<any>, message:string){ await this.runAction(async()=>{ const result=await action(); if(result?.file) await window.limsApi.openPath(result.file); return result; }, 'Unable to complete approved report delivery action.'); await this.afterDeliveryAction(message); }
+  async runDeliveryAction(action:()=>Promise<any>, message:string){ await this.runAction(async()=>{ const result=await action(); if(result?.file && result?.openFile !== false) await window.limsApi.openPath(result.file); return result; }, 'Unable to complete approved report delivery action.'); await this.afterDeliveryAction(message); }
   async afterDeliveryAction(message:string){ await this.loadReports(); const current=this.selectedReport(); if(current?.id){ const raw=await this.runAction(async()=>window.limsApi.getReport(current.id),'Unable to refresh report delivery status.'); if(raw) this.selectedReport.set(this.toReportVm(raw)); } this.changed.emit(); window.setTimeout(()=>this.showSuccess(message), 0); }
   async safeOpenPath(action:()=>Promise<string>){ await this.runAction(async()=>{ const filePath=await action(); if(!filePath) throw new Error('No file was generated.'); await window.limsApi.openPath(filePath); }, 'Unable to open generated file.'); }
   async safeExportPath(action:()=>Promise<string>){ await this.runAction(async()=>{ const filePath=await action(); if(!filePath) throw new Error('No file was generated.'); const folder = String(filePath).replace(/[\\/][^\\/]*$/, ''); await window.limsApi.openPath(folder || filePath); }, 'Unable to export report PDF.'); }
 
-  toReportVm(raw:any): ReportVm { const report: ReportVm = {...(raw || {})} as ReportVm; report.status = this.normalizeStatus(report.status); report.safeItems = this.cleanItems(raw?.items || []); this.prepareEntrySelection(report); this.refreshSelectedState(report); return report; }
-  cleanItems(items:any[]): any[] {
+  toReportVm(raw:any): ReportVm {
+    const report: ReportVm = {...(raw || {})} as ReportVm;
+    report.status = this.normalizeStatus(report.status);
+    report.profile_remarks = this.parseProfileRemarksMap(raw?.profile_remarks ?? raw?.profile_remarks_json);
+    report.safeItems = this.cleanItems(raw?.items || [], report);
+    this.prepareEntrySelection(report);
+    this.refreshSelectedState(report);
+    return report;
+  }
+  private parseProfileRemarksMap(raw: any): Record<string, string> {
+    if (!raw) return {};
+    if (typeof raw === 'object' && !Array.isArray(raw)) {
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(raw)) {
+        const key = String(k || '').trim();
+        const text = String(v ?? '').trim();
+        if (key) out[key] = text;
+      }
+      return out;
+    }
+    try { return this.parseProfileRemarksMap(JSON.parse(String(raw || '{}'))); } catch { return {}; }
+  }
+  private profileRemarksKeys(section: ReportSection): string[] {
+    const seed = (section.items || []).find((x: any) => +(x?.source_profile_id || 0) || String(x?.source_profile_name || '').trim()) || section.items?.[0];
+    const id = +(seed?.source_profile_id || 0) || 0;
+    const name = String(section.name || seed?.source_profile_name || '').trim();
+    const keys: string[] = [];
+    if (id > 0) { keys.push(String(id), `id:${id}`); }
+    if (name) { keys.push(name, `name:${name}`); }
+    if (section.key) keys.push(String(section.key));
+    return [...new Set(keys.filter(Boolean))];
+  }
+  private lookupProfileRemarks(map: Record<string, string>, section: ReportSection): string {
+    for (const key of this.profileRemarksKeys(section)) {
+      const text = String(map?.[key] || '').trim();
+      if (text) return text;
+    }
+    return '';
+  }
+  private writeProfileRemarks(report: ReportVm, section: ReportSection, value: string) {
+    const map = this.parseProfileRemarksMap(report.profile_remarks);
+    const text = String(value || '').trim();
+    const keys = this.profileRemarksKeys(section);
+    for (const key of keys) {
+      if (text) map[key] = text;
+      else delete map[key];
+    }
+    report.profile_remarks = map;
+  }
+  profileRemarksControl(report: ReportVm, section: ReportSection): FormControl<any> {
+    if (!report.profile_remarks || typeof report.profile_remarks !== 'object') {
+      report.profile_remarks = this.parseProfileRemarksMap(report.profile_remarks_json);
+    }
+    const sectionAny = section as any;
+    if (sectionAny._profileRemarks === undefined) {
+      sectionAny._profileRemarks = this.lookupProfileRemarks(report.profile_remarks, section);
+    }
+    return this.reactiveControl(sectionAny, '_profileRemarks', (value) => {
+      this.writeProfileRemarks(report, section, String(value ?? ''));
+    });
+  }
+  cleanItems(items:any[], report?: any): any[] {
+    const keepExcluded = !!this.quickReporting || String(report?.report_scope || '').toUpperCase() === 'QUICK';
     const seen = new Set<string>();
-    return (Array.isArray(items) ? items : [])
-      .filter(x => x && x.selected_for_reporting !== false && +x.selected_for_reporting !== 0)
+    const cleaned = (Array.isArray(items) ? items : [])
+      .filter(x => {
+        if (!x) return false;
+        // Finished Quick edit must still show excluded rows (unchecked) so values can be re-included.
+        if (keepExcluded) return true;
+        return x.selected_for_reporting !== false && +x.selected_for_reporting !== 0;
+      })
       .map((x,i) => {
         const heading = !x.test_id;
-        const item:any = {...x, _key:`${x.id || 'row'}-${x.test_id || 'head'}-${i}`, _isHeading: heading, test_name:x.test_name || x.name || (heading ? 'Profile' : 'Test'), department_name:x.department_name || '', selected_for_entry:x.selected_for_entry, recheck_mode:x.recheck_mode || 'NONE'};
+        const excluded = x.selected_for_reporting === false || +x.selected_for_reporting === 0;
+        const item:any = {
+          ...x,
+          _key:`${x.id || 'row'}-${x.test_id || 'head'}-${i}`,
+          _isHeading: heading,
+          test_name:x.test_name || x.name || (heading ? 'Profile' : 'Test'),
+          department_name:x.department_name || '',
+          selected_for_entry: x.selected_for_entry === false ? false : (excluded ? false : (x.selected_for_entry ?? true)),
+          selected_for_reporting: excluded ? 0 : (x.selected_for_reporting ?? 1),
+          recheck_mode:x.recheck_mode || 'NONE'
+        };
         if (!heading && this.optionEngine.accepts(item)) item.optionsValue = this.optionEngine.options(item);
         return item;
       })
-      .filter(x => { const key = String(x.id || x._key); if (seen.has(key)) return false; seen.add(key); return true; })
-      .sort((a,b) => (+a.group_order_override || +a.priority || 0) - (+b.group_order_override || +b.priority || 0) || (+a.report_order_override || +a.priority || 0) - (+b.report_order_override || +b.priority || 0) || (+a.id || 0) - (+b.id || 0));
+      .filter(x => { const key = String(x.id || x._key); if (seen.has(key)) return false; seen.add(key); return true; });
+    if (this.quickReporting) this.ensureQuickOrderDefaults(cleaned);
+    return cleaned.sort((a,b) => this.itemSortKey(a, b));
+  }
+  /** Card-within-department order. Legacy dept*10000+within → within only. */
+  private cardWithinOrder(value:any): number {
+    const n = +value;
+    if (!Number.isFinite(n)) return 0;
+    return Math.abs(n) >= 10000 ? Math.round((Math.abs(n) % 10000) * 1000) / 1000 : n;
+  }
+  /** Effective department print order (typing override wins over Masters). */
+  private effectiveDepartmentOrder(item:any): number {
+    const override = +(item?.department_order_override ?? Number.NaN);
+    if (Number.isFinite(override)) return override;
+    if ((+item?.department_order_overridden === 1 || item?._departmentOrderOverridden)
+      && item?.department_priority != null && item?.department_priority !== '') {
+      return +item.department_priority;
+    }
+    return +(item?.department_priority ?? 9999) || 9999;
+  }
+  private itemSortKey(a:any, b:any): number {
+    // Always department first, then card-within (profiles + singles). Never cross-dept via card ranks.
+    return this.effectiveDepartmentOrder(a) - this.effectiveDepartmentOrder(b) ||
+      this.cardWithinOrder(a.group_order_override ?? a.priority) - this.cardWithinOrder(b.group_order_override ?? b.priority) ||
+      (+(a.report_order_override ?? a.priority ?? 0)) - (+(b.report_order_override ?? b.priority ?? 0)) ||
+      (+a.id || 0) - (+b.id || 0);
+  }
+  ensureQuickOrderDefaults(items:any[]) {
+    for (const x of items || []) {
+      if (!x || !x.test_id) continue;
+      const deptKey = String(x.department_name || '').trim().toLowerCase();
+      const mastersDept = this.departmentPriorityByName.get(deptKey) ?? 9999;
+      const deptOverridden = !!(+x.department_order_overridden === 1 || x._departmentOrderOverridden
+        || (x.department_order_override !== null && x.department_order_override !== undefined && x.department_order_override !== ''));
+      if (deptOverridden) {
+        const override = +(x.department_order_override ?? x.department_priority ?? mastersDept);
+        x.department_order_override = override;
+        x.department_priority = override;
+        x._departmentOrderOverridden = true;
+        x.department_order_overridden = 1;
+      } else {
+        const deptPriority = x.department_priority != null && x.department_priority !== ''
+          ? +x.department_priority
+          : mastersDept;
+        x.department_priority = deptPriority;
+      }
+      const isSingle = !(+(x.source_profile_id || 0)) && !String(x.source_profile_name || '').trim();
+      if (+x.report_order_overridden === 1 || x._reportOrderOverridden) {
+        x._reportOrderOverridden = true;
+        x.report_order_overridden = 1;
+      }
+      if (+x.group_order_overridden === 1 || x._groupOrderOverridden) {
+        x._groupOrderOverridden = true;
+        x.group_order_overridden = 1;
+      }
+      const masterRo = +(x.master_report_order ?? 0) || 0;
+      const hasSaved = x.report_order_override !== null
+        && x.report_order_override !== undefined
+        && x.report_order_override !== '';
+      // Singles: keep whatever was saved (Masters number or typing ↑↓). Fill only if empty.
+      if (isSingle && !hasSaved && masterRo) {
+        x.report_order_override = masterRo;
+      }
+      if (x.group_order_override === null || x.group_order_override === undefined || x.group_order_override === '') {
+        // Card-within-department only. Singles default after profiles (5000).
+        x.group_order_override = isSingle ? 5000 : (+(x.report_order_override ?? masterRo ?? x.priority ?? 0) || 0);
+      } else {
+        // Normalize legacy dept*10000 encoding down to within-card value.
+        x.group_order_override = this.cardWithinOrder(x.group_order_override);
+      }
+      if (x.report_order_override === null || x.report_order_override === undefined || x.report_order_override === '') {
+        x.report_order_override = masterRo || +x.priority || 0;
+      }
+    }
   }
   isMovedToRecheckOriginal(x:any): boolean {
     return !!x && +x.is_recheck_item !== 1 && (
@@ -2566,12 +3255,19 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     );
   }
   reportableItems(report: ReportVm): any[] { return (report.safeItems || []).filter((x:any)=>x && x.test_id && !x._isHeading && !this.isMovedToRecheckOriginal(x)); }
+  isInnerHeading(x:any): boolean {
+    if (!x || x.test_id) return false;
+    return String(x.heading_kind || '').toUpperCase() === 'INNER';
+  }
   prepareEntrySelection(report: ReportVm) {
-    // In edit/result-entry mode, keep all reportable rows selected by default.
-    // Users can still deselect tests that must be typed later. Previously entered
-    // rows should not appear disabled/unselected when the user clicks Edit Results.
+    // Pending: select all by default. Finished edit: restore include/exclude from selected_for_reporting.
+    const finishedEdit = this.isQuickFinishedEdit(report);
     this.reportableItems(report).forEach((x:any)=>{
-      x.selected_for_entry = true;
+      if (finishedEdit) {
+        x.selected_for_entry = !(x.selected_for_reporting === false || +x.selected_for_reporting === 0);
+      } else {
+        x.selected_for_entry = true;
+      }
       if (!x.final_result_source) x.final_result_source = this.isOutsourceItem(x) ? 'OUTSOURCE' : 'MANUAL';
       if (!x.recheck_mode) x.recheck_mode = 'NONE';
       if (!x.vendor_result_method) x.vendor_result_method = x.vendor_report_file ? 'ATTACH_REPORT_ONLY' : 'ENTER_VALUES';
@@ -2594,8 +3290,35 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
       || ['CANCELLED','APPROVED','FINALIZED'].includes(resultStatus);
     return isRecheckRow && !inactive;
   }
-  refreshSelectedState(report: ReportVm) { const items = this.reportableItems(report); report.selectedCount = items.filter((x:any)=>x.selected_for_entry === true).length; report.safeSections = this.buildSections(report.safeItems); report.completionPercent = this.calcCompletion(items); report.criticalList = items.filter((x:any)=>this.truthy(x.is_critical)); report.abnormalList = items.filter((x:any)=>!!this.flagText(x) && !this.truthy(x.is_critical)); }
+  refreshSelectedState(report: ReportVm) {
+    const items = this.reportableItems(report);
+    report.selectedCount = items.filter((x:any)=>x.selected_for_entry === true).length;
+    report.safeSections = this.buildSections(report.safeItems);
+    report.safeDepartmentBlocks = this.quickReporting
+      ? this.buildDepartmentBlocks(report.safeSections)
+      : [{ key: '_all', name: '', order: 0, sections: report.safeSections || [] }];
+    report.completionPercent = this.calcCompletion(items);
+    report.criticalList = items.filter((x:any)=>this.truthy(x.is_critical));
+    report.abnormalList = items.filter((x:any)=>!!this.flagText(x) && !this.truthy(x.is_critical));
+  }
+  buildDepartmentBlocks(sections: ReportSection[]): ReportDepartmentBlock[] {
+    const map = new Map<string, ReportDepartmentBlock>();
+    for (const section of sections || []) {
+      const name = String(section.department || '').trim() || 'General';
+      const key = name.toLowerCase();
+      if (!map.has(key)) {
+        const seed = (section.items || []).find((x:any) => x?.test_id) || section.items?.[0];
+        const order = this.effectiveDepartmentOrder(seed || { department_priority: this.departmentPriorityByName.get(key) ?? 9999 });
+        map.set(key, { key, name, order, sections: [] });
+      }
+      map.get(key)!.sections.push(section);
+    }
+    return Array.from(map.values()).sort((a, b) =>
+      (a.order || 0) - (b.order || 0) || String(a.name || '').localeCompare(String(b.name || ''))
+    );
+  }
   buildSections(rows:any[]): ReportSection[] {
+    if (this.quickReporting) return this.buildDepartmentSections(rows);
     // Group cards by billed profile/group source. Parameter headings like Proteins/Enzymes
     // are inner headings and never define the outer draggable card.
     const sections: ReportSection[] = [];
@@ -2635,16 +3358,25 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     };
 
     for (const row of rows || []) {
-      if (!row || !row.test_id || row._isHeading) continue;
-      const sec = ensureProfile(row);
-      sec.items.push(row);
+      if (!row || this.isMovedToRecheckOriginal(row)) continue;
+      if (row.test_id && !row._isHeading) {
+        const sec = ensureProfile(row);
+        sec.items.push(row);
+        continue;
+      }
+      // Keep profile-layout HEADER (INNER) rows inside the profile card.
+      if (this.isInnerHeading(row)) {
+        const sec = ensureProfile(row);
+        sec.items.push(row);
+      }
     }
 
     return sections
       .filter((s: ReportSection) => s.items.length)
       .map((s: ReportSection) => {
-        const tests = s.items.filter((x:any)=>x && x.test_id && !x._isHeading);
-        return {...s, itemCount: tests.length, entered: tests.filter((x:any)=>!!String(x.result_value || '').trim()).length};
+        const tests = s.items.filter((x:any)=>x && x.test_id && !x._isHeading && !this.isInnerHeading(x));
+        const sorted = [...s.items].sort((a:any,b:any) => (+a.report_order_override || +a.priority || 0) - (+b.report_order_override || +b.priority || 0) || (+a.id || 0) - (+b.id || 0));
+        return {...s, items: sorted, itemCount: tests.length, entered: tests.filter((x:any)=>!!String(x.result_value || '').trim()).length};
       })
       .sort((a: ReportSection,b: ReportSection)=>{
         // Respect the billing/report configured order. Do not force "Single tests"
@@ -2657,10 +3389,309 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
         return String(a.name || '').localeCompare(String(b.name || ''));
       });
   }
+  buildDepartmentSections(rows:any[]): ReportSection[] {
+    // Quick Reporting cards: profiles + singles, ordered by department priority.
+    // INNER side-headers must stay inside the same profile card as their tests —
+    // never become a separate card because of empty department / key mismatch.
+    const singlesAtStart = this.quickSingleTestPlacement === 'TOP';
+    const cardOrderOverridden = (rows || []).some((x:any) =>
+      +x?.group_order_overridden === 1 || !!x?._groupOrderOverridden
+    );
+    const isInner = (row:any) => this.isInnerHeading(row);
+    const isSingleTest = (row:any) => !isInner(row) && !String(row?.source_profile_name || '').trim() && !(+(row?.source_profile_id || 0));
+    const deptNameOf = (row:any) => String(row?.department_name || '').trim() || 'General';
+    const deptPriorityOf = (dept:string, row?:any) => {
+      if (row && (row.department_order_override !== null && row.department_order_override !== undefined && row.department_order_override !== ''
+        || +row.department_order_overridden === 1 || row._departmentOrderOverridden)) {
+        return this.effectiveDepartmentOrder(row);
+      }
+      // Masters department list wins (e.g. Hematology 1000 before Biochemistry 2000).
+      const fromMasters = this.departmentPriorityByName.get(String(dept || '').trim().toLowerCase());
+      if (fromMasters != null) return fromMasters;
+      if (row?.department_priority != null && row?.department_priority !== '') return +row.department_priority;
+      return 9999;
+    };
+    const profileKeyOf = (row:any) => {
+      const id = +(row?.source_profile_id || 0);
+      const name = String(row?.source_profile_name || row?.profile_name || row?.group_name || '').trim();
+      if (id > 0) return `id:${id}`;
+      if (name) return `name:${name.toLowerCase()}`;
+      return '';
+    };
+    // Mixed packages can put one source profile into multiple departments (e.g. Master healt
+    // sugars → Biochemistry, blood grouping → Hematology). Key must include department so
+    // hide-name does not collapse everything under the first test's department.
+    const profileDeptKeyOf = (row:any) => {
+      const base = profileKeyOf(row);
+      if (!base) return '';
+      return `${base}|dept:${deptNameOf(row).toLowerCase()}`;
+    };
+
+    const usable = (rows || []).filter((row:any) => row && ((row.test_id && !row._isHeading) || isInner(row)));
+    const testRows = usable.filter((row:any) => row.test_id && !isInner(row));
+    const innerRows = usable.filter((row:any) => isInner(row));
+
+    // Build profile groups from tests first (department comes from each test row).
+    type ProfGroup = { key: string; name: string; dept: string; items: any[]; seed: any };
+    const profileGroups = new Map<string, ProfGroup>();
+    const profileByAlias = new Map<string, ProfGroup>();
+    const registerAliases = (g: ProfGroup) => {
+      profileByAlias.set(g.key, g);
+      const dk = g.dept.toLowerCase();
+      const nameAlias = g.name ? `name:${g.name.trim().toLowerCase()}|dept:${dk}` : '';
+      if (nameAlias) profileByAlias.set(nameAlias, g);
+      const id = +(g.seed?.source_profile_id || 0);
+      if (id > 0) profileByAlias.set(`id:${id}|dept:${dk}`, g);
+    };
+
+    const singlesByDept = new Map<string, any[]>();
+
+    for (const row of testRows) {
+      if (isSingleTest(row)) {
+        const dept = deptNameOf(row);
+        const dk = dept.toLowerCase();
+        if (!singlesByDept.has(dk)) singlesByDept.set(dk, []);
+        singlesByDept.get(dk)!.push(row);
+        continue;
+      }
+      const key = profileDeptKeyOf(row);
+      if (!key) continue;
+      const dept = deptNameOf(row);
+      const dk = dept.toLowerCase();
+      let g = profileGroups.get(key) || profileByAlias.get(key) || null;
+      if (!g) {
+        // Same profile + same department under name: vs id: — merge only within that dept.
+        const base = profileKeyOf(row);
+        if (base.startsWith('id:')) {
+          const name = String(row.source_profile_name || '').trim().toLowerCase();
+          g = name ? profileByAlias.get(`name:${name}|dept:${dk}`) || null : null;
+        } else if (base.startsWith('name:')) {
+          // Prefer id-keyed group in this department when both exist.
+          const id = +(row.source_profile_id || 0);
+          g = id > 0 ? profileByAlias.get(`id:${id}|dept:${dk}`) || null : null;
+        }
+      }
+      if (!g) {
+        g = {
+          key,
+          name: String(row.source_profile_name || row.profile_name || row.group_name || 'Profile').trim() || 'Profile',
+          dept,
+          items: [],
+          seed: row
+        };
+        profileGroups.set(key, g);
+        registerAliases(g);
+      } else if (!profileGroups.has(g.key)) {
+        profileGroups.set(g.key, g);
+        registerAliases(g);
+      }
+      g.items.push(row);
+    }
+
+    // Attach INNER headers into the matching profile group (by id/name + department).
+    // Use the group's department so headers never form an orphan "General" card.
+    for (const h of innerRows) {
+      const id = +(h.source_profile_id || 0);
+      const name = String(h.source_profile_name || '').trim().toLowerCase();
+      const headerDept = deptNameOf(h).toLowerCase();
+      let g: ProfGroup | null = null;
+      if (headerDept && headerDept !== 'general') {
+        g = (id > 0 ? profileByAlias.get(`id:${id}|dept:${headerDept}`) : null)
+          || (name ? profileByAlias.get(`name:${name}|dept:${headerDept}`) : null)
+          || null;
+      }
+      if (!g) {
+        // Header missing/blank dept (common under Mixed): attach to the profile group that
+        // already holds tests for this source — prefer Clinical Pathology-style matches by id.
+        const candidates = Array.from(profileGroups.values()).filter((x) => {
+          const sid = +(x.seed?.source_profile_id || 0);
+          const sn = String(x.name || '').trim().toLowerCase();
+          return (id > 0 && sid === id) || (!!name && sn === name);
+        });
+        g = candidates.length === 1 ? candidates[0]
+          : candidates.find((x) => x.items.some((t:any) => t?.test_id)) || candidates[0] || null;
+      }
+      if (g) {
+        h.department_name = g.dept;
+        h.department_priority = deptPriorityOf(g.dept, g.seed);
+        if (+(h.source_profile_id || 0) <= 0 && +(g.seed?.source_profile_id || 0) > 0) {
+          h.source_profile_id = g.seed.source_profile_id;
+        }
+        if (!String(h.source_profile_name || '').trim()) h.source_profile_name = g.name;
+        g.items.push(h);
+      }
+      // Orphan INNER with no matching tests: drop (do not create a header-only card).
+    }
+
+    const preferStoredForDept = (singles:any[], profiles:any[]) => {
+      if (!singles.length || !profiles.length) return true;
+      const orderOf = (r:any) => {
+        if (r.group_order_override === null || r.group_order_override === undefined || r.group_order_override === '') return null;
+        return this.cardWithinOrder(r.group_order_override);
+      };
+      const sOrders = singles.map(orderOf).filter((n:number|null): n is number => n !== null);
+      const pOrders = profiles.map(orderOf).filter((n:number|null): n is number => n !== null);
+      if (!sOrders.length || !pOrders.length) return false;
+      return Math.min(...sOrders) !== Math.min(...pOrders);
+    };
+
+    const sections: ReportSection[] = [];
+    const allDepts = new Set<string>([
+      ...Array.from(singlesByDept.keys()),
+      ...Array.from(profileGroups.values()).map(g => g.dept.toLowerCase())
+    ]);
+
+    for (const dk of allDepts) {
+      const singles = singlesByDept.get(dk) || [];
+      const groups = Array.from(profileGroups.values()).filter(g => g.dept.toLowerCase() === dk);
+      if (!singles.length && !groups.length) continue;
+      const dept = singles[0] ? deptNameOf(singles[0]) : groups[0].dept;
+      const profileSeeds = groups.map(g => g.seed);
+      const useStored = preferStoredForDept(singles, profileSeeds);
+
+      if (singles.length) {
+        const stored = Math.min(...singles.map((r:any) => this.cardWithinOrder(r.group_order_override)).filter((n) => Number.isFinite(n)));
+        // Card-within only (not dept*10000). Department sort uses department_priority
+        // unless the user overrode card order (then keep exchanged values).
+        const within = cardOrderOverridden && Number.isFinite(stored)
+          ? stored
+          : (useStored && Number.isFinite(stored) ? stored : (singlesAtStart ? 0 : 5000));
+        if (!cardOrderOverridden) {
+          singles.forEach((x:any) => { x.group_order_override = within; });
+        } else {
+          singles.forEach((x:any) => {
+            if (x.group_order_override == null || x.group_order_override === '') x.group_order_override = within;
+            x._groupOrderOverridden = true;
+            x.group_order_overridden = 1;
+          });
+        }
+        sections.push({
+          key: `single-${dk}`,
+          name: `Single tests · ${dept}`,
+          department: dept,
+          items: [...singles].sort((a:any,b:any) => (+a.report_order_override || +a.priority || 0) - (+b.report_order_override || +b.priority || 0) || (+a.id || 0) - (+b.id || 0)),
+          entered: 0,
+          itemCount: 0,
+          order: within,
+          kind: 'SINGLE'
+        });
+      }
+
+      // Within a department: respect distinct stored card orders (user drag), otherwise
+      // fall back to layout report_order so nested own-cards (e.g. Microscopic under
+      // Urine Complete) stay below their parent instead of colliding on dept priority.
+      const minReportOf = (g: ProfGroup) => {
+        const vals = g.items.filter((x:any) => x?.test_id).map((r:any) => +(r.report_order_override ?? r.priority ?? 0));
+        return vals.length ? Math.min(...vals) : Number.POSITIVE_INFINITY;
+      };
+      const storedOf = (g: ProfGroup) => {
+        const vals = g.items.filter((x:any) => x?.test_id).map((r:any) => {
+          if (r.group_order_override === null || r.group_order_override === undefined || r.group_order_override === '') return null;
+          return this.cardWithinOrder(r.group_order_override);
+        }).filter((n:number|null): n is number => n !== null && Number.isFinite(n));
+        return vals.length ? Math.min(...vals) : Number.POSITIVE_INFINITY;
+      };
+      const activeGroups = groups.filter((g) => g.items.some((x:any) => x.test_id));
+      const storedKeys = activeGroups.map((g) => storedOf(g)).filter((n) => Number.isFinite(n) && n !== Number.POSITIVE_INFINITY);
+      const storedCollide = storedKeys.length > 1 && new Set(storedKeys).size < storedKeys.length;
+
+      groups.sort((a, b) => {
+        const ao = storedOf(a);
+        const bo = storedOf(b);
+        if (!storedCollide && Number.isFinite(ao) && Number.isFinite(bo) && ao !== bo) return ao - bo;
+        const ar = minReportOf(a);
+        const br = minReportOf(b);
+        if (ar !== br) return ar - br;
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      });
+
+      let profileIndex = 0;
+      for (const g of groups) {
+        const hasTests = g.items.some((x:any) => x.test_id);
+        if (!hasTests) continue; // never show header-only cards
+        const stored = storedOf(g);
+        // Distinct stored withins → keep them. Colliding / missing → sequential by layout sort.
+        const within = cardOrderOverridden && Number.isFinite(stored) && stored !== Number.POSITIVE_INFINITY
+          ? stored
+          : ((!storedCollide && Number.isFinite(stored) && stored !== Number.POSITIVE_INFINITY)
+            ? stored
+            : ((singlesAtStart ? 1000 : 0) + (profileIndex * 10)));
+        if (!cardOrderOverridden) {
+          g.items.forEach((x:any) => { x.group_order_override = within; });
+        } else {
+          g.items.forEach((x:any) => {
+            if (x.group_order_override == null || x.group_order_override === '') x.group_order_override = within;
+            x._groupOrderOverridden = true;
+            x.group_order_overridden = 1;
+          });
+        }
+        sections.push({
+          key: `profile-${dk}-${g.key}`,
+          name: g.name,
+          department: dept,
+          items: [...g.items].sort((a:any,b:any) => (+a.report_order_override || +a.priority || 0) - (+b.report_order_override || +b.priority || 0) || (+a.id || 0) - (+b.id || 0)),
+          entered: 0,
+          itemCount: 0,
+          order: within,
+          kind: 'PROFILE'
+        });
+        profileIndex += 1;
+      }
+    }
+
+    return sections
+      .map((s: ReportSection) => {
+        const testsOnly = s.items.filter((x:any)=>x && x.test_id && !x._isHeading && !this.isInnerHeading(x));
+        return {
+          ...s,
+          itemCount: testsOnly.length,
+          entered: testsOnly.filter((x:any)=>!!String(x.result_value || '').trim()).length
+        };
+      })
+      .filter((s: ReportSection) => s.itemCount > 0)
+      .sort((a: ReportSection, b: ReportSection) => {
+        // Always department first. Card ranks (incl. singles customization) stay within dept only.
+        const da = deptPriorityOf(a.department || '', a.items?.[0]);
+        const db = deptPriorityOf(b.department || '', b.items?.[0]);
+        if (da !== db) return da - db;
+        const d = (a.order || 0) - (b.order || 0);
+        if (d) return d;
+        const ad = String(a.department || '').localeCompare(String(b.department || ''));
+        if (ad) return ad;
+        if (a.kind === 'SINGLE' && b.kind !== 'SINGLE') return singlesAtStart ? -1 : 1;
+        if (a.kind !== 'SINGLE' && b.kind === 'SINGLE') return singlesAtStart ? 1 : -1;
+        const minRO = (s: ReportSection) => {
+          const vals = (s.items || []).filter((x:any) => x?.test_id).map((r:any) => +(r.report_order_override ?? r.priority ?? 0));
+          return vals.length ? Math.min(...vals) : Number.POSITIVE_INFINITY;
+        };
+        const rd = minRO(a) - minRO(b);
+        if (rd) return rd;
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      });
+  }
+  sectionKindLabel(section: ReportSection): string {
+    if (section.kind === 'DEPARTMENT') return 'Department';
+    if (section.kind === 'SINGLE') return section.department ? `Single tests · ${section.department}` : 'Single tests';
+    if (section.kind === 'PROFILE' && section.department) return `Profile · ${section.department}`;
+    return 'Profile / group';
+  }
   calcCompletion(items:any[]): number { if(!items.length) return 0; return Math.round((items.filter(x=>!!String(x.result_value || '').trim()).length / items.length) * 100); }
   setCriticalNotice(report: ReportVm) { const critical = report.criticalList || []; this.criticalNotice.set(critical.length ? 'Critical value alert: ' + critical.map((x:any)=>(x.test_name + ': ' + (x.critical_message || 'Review immediately'))).join(' | ') : ''); }
 
-  onResultValueChange(report: ReportVm, item:any, value:any) { item.result_value = this.normalizeInput(item, value); this.applyClientFlag(item); this.applyFinalSource(report,item); this.recalculateDependentItems(report, item); this.refreshSelectedState(report); this.setCriticalNotice(report); }
+  onResultValueChange(report: ReportVm, item:any, value:any) {
+    item.result_value = this.normalizeInput(item, value);
+    // Manual edit after instrument transfer — keep typed value on next reload.
+    if (String(item.final_result_source || '').toUpperCase() === 'ANALYZER') {
+      item.final_result_source = 'MANUAL';
+    } else if (!item.final_result_source) {
+      item.final_result_source = 'MANUAL';
+    }
+    this.applyClientFlag(item);
+    this.applyFinalSource(report,item);
+    this.recalculateDependentItems(report, item);
+    this.refreshSelectedState(report);
+    this.setCriticalNotice(report);
+  }
   onOutsourceValueChange(report: ReportVm,item:any,value:any){ item.outsource_result_value=this.normalizeInput(item,value); if ((item.final_result_source || 'OUTSOURCE') === 'OUTSOURCE') item.result_value = item.outsource_result_value; this.applyClientFlag(item); this.refreshSelectedState(report); }
   onInternalCheckValueChange(report: ReportVm,item:any,value:any){ item.internal_check_value=this.normalizeInput(item,value); if (item.final_result_source === 'INTERNAL_CHECK') item.result_value = item.internal_check_value; this.applyClientFlag(item); this.refreshSelectedState(report); }
   applyFinalSource(report: ReportVm,item:any){ const src = item.final_result_source || (this.isOutsourceItem(item) ? 'OUTSOURCE' : 'MANUAL'); if (src === 'OUTSOURCE') item.result_value = item.outsource_result_value || item.result_value || ''; else if (src === 'INTERNAL_CHECK') item.result_value = item.internal_check_value || item.result_value || ''; this.applyClientFlag(item); this.refreshSelectedState(report); }
@@ -2944,15 +3975,16 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     item.result_value=value;
     if(rememberDisplayLabel) item._selected_result_label=value;
     else delete item._selected_result_label;
-    if(!item.final_result_source) item.final_result_source='MANUAL';
+    if (String(item.final_result_source || '').toUpperCase() === 'ANALYZER') item.final_result_source = 'MANUAL';
+    else if (!item.final_result_source) item.final_result_source = 'MANUAL';
     this.applyClientFlag(item);
     this.refreshSelectedState(report);
     this.setCriticalNotice(report);
   }
   resultLabel(item:any): string { return this.isOutsourceItem(item) ? 'Final result' : 'Result'; }
   isResultLocked(item:any): boolean {
-    // Calculated fields must always remain editable. Automatic recalculation may
-    // populate the value, but the operator can still correct/override it.
+    // Calculated fields stay editable (∑ may fill them; operator can still override).
+    // Only outsource-recheck awaiting states lock the result input.
     return this.isOutsourceRecheckAwaitingResult(item);
   }
   isOutsourceRecheckAwaitingResult(item:any): boolean { const mode=String(item?.recheck_mode || 'NONE').toUpperCase(); const status=String(item?.recheck_status || '').toUpperCase(); return (mode==='OUTSOURCE' || mode==='BOTH') && !!status && !['OUTSOURCE_RESULT_RECEIVED','WAITING_RECHECK_ENTRY','DONE','NONE'].includes(status); }
@@ -3168,7 +4200,20 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     });
   }
   safeEval(expr:string): number|null { const s = String(expr || '').replace(/\^/g,'**'); if (!/^[0-9+\-*/().\s]*$/.test(s)) return null; try { const v = Function(`"use strict"; return (${s})`)(); return Number.isFinite(Number(v)) ? Number(v) : null; } catch { return null; } }
-  formatNumberForItem(item:any,value:number): string { const places = Number.isFinite(+item.decimal_places) ? Math.max(0,+item.decimal_places) : 2; let n = Number(value); const mode = String(item.rounding_mode || 'NEAREST').toUpperCase(); const f = Math.pow(10, places); if (mode.includes('CEIL')) n = Math.ceil(n*f)/f; else if (mode.includes('FLOOR')) n = Math.floor(n*f)/f; else n = Math.round(n*f)/f; return n.toFixed(places); }
+  formatNumberForItem(item:any,value:number): string {
+    const places = Number.isFinite(+item.decimal_places) ? Math.max(0,+item.decimal_places) : 2;
+    let n = Number(value);
+    const mode = String(item.rounding_mode || 'NEAREST').toUpperCase().replace(/[\s-]+/g, '_');
+    if (mode === 'NO_TRANSFORM' || mode === 'NOTRANSFORM') {
+      if (!Number.isFinite(n)) return String(value ?? '');
+      return String(n);
+    }
+    const f = Math.pow(10, places);
+    if (mode.includes('CEIL') || mode === 'UP') n = Math.ceil(n*f)/f;
+    else if (mode.includes('FLOOR') || mode === 'DOWN') n = Math.floor(n*f)/f;
+    else n = Math.round(n*f)/f;
+    return n.toFixed(places);
+  }
   escapeRegExp(s:string): string { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
   draggedSectionName = '';
@@ -3181,16 +4226,228 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   dropSection(report: ReportVm, target: ReportSection) {
     if (!this.draggedSectionName || this.draggedSectionName === target.key) return;
     const sections: ReportSection[] = report.safeSections || [];
-    const from = sections.findIndex((s: ReportSection) => s.key === this.draggedSectionName);
-    const to = sections.findIndex((s: ReportSection) => s.key === target.key);
-    if (from < 0 || to < 0) return;
-    const [moved] = sections.splice(from, 1); sections.splice(to, 0, moved);
+    const from = sections.find((s: ReportSection) => s.key === this.draggedSectionName);
+    if (!from) return;
+    // Quick Reporting: profiles/singles may only swap inside the same department.
+    if (this.quickReporting) {
+      const fromDept = String(from.department || '').trim().toLowerCase();
+      const toDept = String(target.department || '').trim().toLowerCase();
+      if (fromDept !== toDept) { this.draggedSectionName = ''; return; }
+      const peers = sections.filter((s: ReportSection) => String(s.department || '').trim().toLowerCase() === fromDept);
+      const i = peers.findIndex((s: ReportSection) => s.key === from.key);
+      const j = peers.findIndex((s: ReportSection) => s.key === target.key);
+      if (i < 0 || j < 0 || i === j) { this.draggedSectionName = ''; return; }
+      const [moved] = peers.splice(i, 1);
+      peers.splice(j, 0, moved);
+      this.applySectionOrder(report, peers);
+      this.draggedSectionName = '';
+      return;
+    }
+    const fromIdx = sections.findIndex((s: ReportSection) => s.key === this.draggedSectionName);
+    const toIdx = sections.findIndex((s: ReportSection) => s.key === target.key);
+    if (fromIdx < 0 || toIdx < 0) return;
+    const [moved] = sections.splice(fromIdx, 1); sections.splice(toIdx, 0, moved);
     this.applySectionOrder(report, sections); this.draggedSectionName = '';
   }
-  moveSection(report: ReportVm, section: ReportSection, delta:number) { const sections: ReportSection[] = [...(report.safeSections||[])]; const i=sections.findIndex((s: ReportSection)=>s.key===section.key); const j=i+delta; if(i<0||j<0||j>=sections.length) return; [sections[i],sections[j]]=[sections[j],sections[i]]; this.applySectionOrder(report,sections); }
-  applySectionOrder(report: ReportVm, sections: ReportSection[]) { sections.forEach((section, index)=>{ const order=(index+1)*1000; section.order=order; section.items.forEach((x:any)=>x.group_order_override=order); }); this.refreshSelectedState(report); }
-
-  moveItem(report: ReportVm, item:any, delta:number) { const arr = report.safeItems; const i = arr.indexOf(item); const j = i + delta; if (i < 0 || j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; arr.forEach((x:any, idx:number) => x.report_order_override = (idx + 1) * 10); this.refreshSelectedState(report); }
+  moveDepartment(report: ReportVm, block: ReportDepartmentBlock, delta: number) {
+    if (!this.quickReporting) return;
+    const blocks = [...(report.safeDepartmentBlocks || [])];
+    const i = blocks.findIndex((b) => b.key === block.key);
+    const j = i + delta;
+    if (i < 0 || j < 0 || j >= blocks.length) return;
+    const a = blocks[i];
+    const b = blocks[j];
+    const orderA = +(a.order ?? 0);
+    const orderB = +(b.order ?? 0);
+    const applyDeptOrder = (deptKey: string, order: number) => {
+      for (const x of report.safeItems || []) {
+        if (String(x.department_name || '').trim().toLowerCase() !== deptKey) continue;
+        x.department_priority = order;
+        x.department_order_override = order;
+        x._departmentOrderOverridden = true;
+        x.department_order_overridden = 1;
+      }
+    };
+    applyDeptOrder(a.key, orderB);
+    applyDeptOrder(b.key, orderA);
+    this.syncSafeItemsOrder(report);
+    this.refreshSelectedState(report);
+  }
+  moveSection(report: ReportVm, section: ReportSection, delta:number) {
+    if (this.quickReporting) {
+      const dept = String(section.department || '').trim().toLowerCase();
+      const peers = (report.safeSections || []).filter((s: ReportSection) => String(s.department || '').trim().toLowerCase() === dept);
+      const i = peers.findIndex((s: ReportSection) => s.key === section.key);
+      const j = i + delta;
+      if (i < 0 || j < 0 || j >= peers.length) return;
+      [peers[i], peers[j]] = [peers[j], peers[i]];
+      this.applySectionOrder(report, peers);
+      return;
+    }
+    const sections: ReportSection[] = [...(report.safeSections||[])];
+    const i=sections.findIndex((s: ReportSection)=>s.key===section.key);
+    const j=i+delta;
+    if(i<0||j<0||j>=sections.length) return;
+    [sections[i],sections[j]]=[sections[j],sections[i]];
+    this.applySectionOrder(report,sections);
+  }
+  applySectionOrder(report: ReportVm, sections: ReportSection[]) {
+    // Exchange card orders among the given sections only (same department in Quick Reporting).
+    // Keeps singles card position customization within the department.
+    const rankValues = sections
+      .map((section: ReportSection) => {
+        const fromSection = +(section.order ?? Number.NaN);
+        if (Number.isFinite(fromSection)) return this.cardWithinOrder(fromSection);
+        const vals = (section.items || [])
+          .map((x:any) => this.cardWithinOrder(x.group_order_override))
+          .filter((n:number) => Number.isFinite(n));
+        return vals.length ? Math.min(...vals) : 0;
+      })
+      .sort((a:number, b:number) => a - b);
+    sections.forEach((section, index)=>{
+      const order = rankValues[index] ?? ((index + 1) * 10);
+      section.order = order;
+      section.items.forEach((x:any) => {
+        x.group_order_override = order;
+        x._groupOrderOverridden = true;
+        x.group_order_overridden = 1;
+      });
+      this.applyGroupOrderToRelatedHeadings(report, section, order);
+    });
+    (report as any)._cardOrderOverridden = true;
+    this.syncSafeItemsOrder(report);
+    this.refreshSelectedState(report);
+  }
+  onDepartmentOrderInput(report: ReportVm, section: ReportSection, raw:any) {
+    const order = Number(raw);
+    if (!Number.isFinite(order)) return;
+    section.order = order;
+    (section.items || []).forEach((x:any) => {
+      x.group_order_override = order;
+      x._groupOrderOverridden = true;
+      x.group_order_overridden = 1;
+    });
+    (report as any)._cardOrderOverridden = true;
+    this.applyGroupOrderToRelatedHeadings(report, section, order);
+    this.syncSafeItemsOrder(report);
+    this.refreshSelectedState(report);
+  }
+  applyGroupOrderToRelatedHeadings(report: ReportVm, section: ReportSection, order:number) {
+    const dept = String(section.department || (section.kind === 'DEPARTMENT' ? section.name : '') || '').trim().toLowerCase();
+    const profileNames = new Set((section.items || []).map((x:any)=>String(x.source_profile_name || '').trim()).filter(Boolean));
+    (report.safeItems || []).forEach((x:any) => {
+      if (x?.test_id) return;
+      const sameDept = dept && String(x.department_name || '').trim().toLowerCase() === dept;
+      const sameProfile = section.kind === 'PROFILE' && profileNames.has(String(x.source_profile_name || x.test_name || '').trim());
+      const singleHeading = section.kind === 'SINGLE' && !String(x.source_profile_name || '').trim();
+      if (sameProfile || (section.kind === 'SINGLE' && sameDept && singleHeading) || (section.kind === 'DEPARTMENT' && sameDept)) {
+        x.group_order_override = order;
+        x._groupOrderOverridden = true;
+        x.group_order_overridden = 1;
+      }
+    });
+  }
+  syncSafeItemsOrder(report: ReportVm) {
+    const items = [...(report.safeItems || [])];
+    items.sort((a:any,b:any) => this.itemSortKey(a, b));
+    report.safeItems = items;
+  }
+  moveItem(report: ReportVm, item:any, delta:number) {
+    if (this.quickReporting) {
+      const section = (report.safeSections || []).find((s: ReportSection) => (s.items || []).includes(item));
+      if (!section || !item?.test_id) return;
+      const arr = section.items;
+      // Only move among real tests — never swap with / rewrite INNER side-headers.
+      const testIndexes = arr
+        .map((x:any, idx:number) => (x?.test_id && !this.isInnerHeading(x) ? idx : -1))
+        .filter((idx:number) => idx >= 0);
+      const ti = testIndexes.findIndex((idx:number) => arr[idx] === item);
+      const tj = ti + delta;
+      if (ti < 0 || tj < 0 || tj >= testIndexes.length) return;
+      const i = testIndexes[ti];
+      const j = testIndexes[tj];
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+      const sharedGroup = section.order != null && section.order !== ''
+        ? this.cardWithinOrder(section.order)
+        : this.cardWithinOrder(arr[0]?.group_order_override ?? 0);
+      const isProfileSection = section.kind === 'PROFILE';
+      const tests = testIndexes.map((idx:number) => arr[idx]);
+      // Singles: exchange Masters report_order. Profile tests: exchange layout priorities.
+      const rankValues = tests
+        .map((x:any) => {
+          if (isProfileSection || (+(x.source_profile_id || 0) || String(x.source_profile_name || '').trim())) {
+            const layout = +(x.master_profile_order ?? 0) || 0;
+            const cur = +(x.report_order_override ?? x.priority ?? 0) || 0;
+            return layout > 0 ? layout : cur;
+          }
+          const master = +(x.master_report_order ?? 0) || 0;
+          const cur = +(x.report_order_override ?? x.priority ?? 0) || 0;
+          return master > 0 ? master : cur;
+        })
+        .sort((a:number, b:number) => a - b);
+      tests.forEach((x:any, idx:number) => {
+        const next = rankValues[idx] ?? ((idx + 1) * 10);
+        x.report_order_override = next;
+        x.priority = next;
+        x._reportOrderOverridden = true;
+        x.report_order_overridden = 1;
+        x.group_order_override = sharedGroup;
+      });
+      // Keep INNER headers seated just before the next test (do not mark them overridden).
+      for (let k = 0; k < arr.length; k++) {
+        const row = arr[k];
+        if (!this.isInnerHeading(row)) continue;
+        row.group_order_override = sharedGroup;
+        let followOrder: number | null = null;
+        for (let n = k + 1; n < arr.length; n++) {
+          if (arr[n]?.test_id) {
+            followOrder = +(arr[n].report_order_override ?? arr[n].priority ?? 0);
+            break;
+          }
+        }
+        if (followOrder != null && Number.isFinite(followOrder)) {
+          row.report_order_override = followOrder - 0.0001;
+          row.priority = row.report_order_override;
+        }
+      }
+      this.syncSafeItemsOrder(report);
+      this.refreshSelectedState(report);
+      return;
+    }
+    if (!item?.test_id) return;
+    const arr = report.safeItems;
+    const testIndexes = arr
+      .map((x:any, idx:number) => (x?.test_id && !this.isInnerHeading(x) ? idx : -1))
+      .filter((idx:number) => idx >= 0);
+    const ti = testIndexes.findIndex((idx:number) => arr[idx] === item);
+    const tj = ti + delta;
+    if (ti < 0 || tj < 0 || tj >= testIndexes.length) return;
+    const i = testIndexes[ti];
+    const j = testIndexes[tj];
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+    const tests = testIndexes.map((idx:number) => arr[idx]);
+    const rankValues = tests
+      .map((x:any) => {
+        const inProfile = !!(+(x.source_profile_id || 0) || String(x.source_profile_name || '').trim());
+        if (inProfile) {
+          const layout = +(x.master_profile_order ?? 0) || 0;
+          const cur = +(x.report_order_override ?? x.priority ?? 0) || 0;
+          return layout > 0 ? layout : cur;
+        }
+        const master = +(x.master_report_order ?? 0) || 0;
+        const cur = +(x.report_order_override ?? x.priority ?? 0) || 0;
+        return master > 0 ? master : cur;
+      })
+      .sort((a:number, b:number) => a - b);
+    tests.forEach((x:any, idx:number) => {
+      const next = rankValues[idx] ?? ((idx + 1) * 10);
+      x.report_order_override = next;
+      x.priority = next;
+      x._reportOrderOverridden = true;
+      x.report_order_overridden = 1;
+    });
+    this.refreshSelectedState(report);
+  }
   async openHistory(report: ReportVm, item:any) {
     this.historyState.set({item, rows:[], loading:true, error:''});
     const currentReportId = +report.id || 0;
@@ -3282,7 +4539,10 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   filterReportItemsForQueue(report: ReportVm, status:any, groupKey:any = '', queueRow:any = null) {
     const queue = String(status || this.reportStatus || '').toUpperCase();
     const group = String(groupKey || '').trim();
-    let items = (report.safeItems || []).filter((x:any)=>x && x.test_id && !this.isMovedToRecheckOriginal(x));
+    const allRows = (report.safeItems || []).filter((x:any)=>x && !this.isMovedToRecheckOriginal(x));
+    // Profile-layout HEADER rows (INNER) must survive queue filtering or they never appear in typing.
+    const innerHeadings = allRows.filter((x:any)=>this.isInnerHeading(x));
+    let items = allRows.filter((x:any)=>!!x.test_id);
 
     // Strict Reporting scope:
     // A report-entry row must represent the exact physical collection + workflow.
@@ -3312,11 +4572,29 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     const vendorId = +(queueRow?.queue_vendor_id || queueRow?.outsource_vendor_id || 0);
     if (vendorId) items = items.filter((x:any)=>+(x.outsource_vendor_id || x.vendor_id || 0) === vendorId);
 
-    if (queue === 'DRAFT' || queue === 'PENDING') report.safeItems = items.filter((x:any)=>this.isPendingResultItem(x));
-    else if (queue === 'TYPED' || queue === 'ENTERED' || queue === 'WAITING_APPROVAL') report.safeItems = items.filter((x:any)=>this.isEnteredResultItem(x));
-    else if (queue === 'APPROVED') report.safeItems = items.filter((x:any)=>this.isApprovedResultItem(x));
-    else if (queue === 'RECHECK') report.safeItems = items.filter((x:any)=>this.isPendingRecheckItem(x));
-    else report.safeItems = items;
+    if (queue === 'DRAFT' || queue === 'PENDING') items = items.filter((x:any)=>this.isPendingResultItem(x));
+    else if (queue === 'TYPED' || queue === 'ENTERED' || queue === 'WAITING_APPROVAL') items = items.filter((x:any)=>this.isEnteredResultItem(x));
+    else if (queue === 'APPROVED') {
+      // Quick finished reports can include empty values (user may fill later on Edit).
+      // Keep every saved test row; do not require hasRealResultValue.
+      if (!(this.quickReporting || String(report?.report_scope || '').toUpperCase() === 'QUICK')) {
+        items = items.filter((x:any)=>this.isApprovedResultItem(x));
+      }
+    }
+    else if (queue === 'RECHECK') items = items.filter((x:any)=>this.isPendingRecheckItem(x));
+
+    const profileKeys = new Set(
+      items.map((x:any) => `${+(x.source_profile_id || 0)}|${String(x.source_profile_name || '').trim()}`)
+        .filter((k:string) => k !== '0|')
+    );
+    const profileNames = new Set(items.map((x:any) => String(x.source_profile_name || '').trim()).filter(Boolean));
+    const keptInners = innerHeadings.filter((h:any) => {
+      const key = `${+(h.source_profile_id || 0)}|${String(h.source_profile_name || '').trim()}`;
+      const name = String(h.source_profile_name || '').trim();
+      return profileKeys.has(key) || (!!name && profileNames.has(name));
+    });
+
+    report.safeItems = [...items, ...keptInners].sort((a:any, b:any) => this.itemSortKey(a, b));
 
     this.prepareEntrySelection(report); this.refreshSelectedState(report);
   }
@@ -3337,7 +4615,10 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     const detail=this.queueDetailReport(r); const items=detail ? this.reportableItems(detail).filter((x:any)=>this.queueGroupMatches(x, r?.queue_group_key)) : [];
     if(this.reportStatus==='DRAFT') return items.filter((x:any)=>this.isPendingResultItem(x));
     if(this.reportStatus==='TYPED') return items.filter((x:any)=>this.isEnteredResultItem(x));
-    if(this.reportStatus==='APPROVED') return items.filter((x:any)=>this.isApprovedResultItem(x));
+    if(this.reportStatus==='APPROVED') {
+      if (this.quickReporting || String(r?.report_scope || '').toUpperCase() === 'QUICK') return items;
+      return items.filter((x:any)=>this.isApprovedResultItem(x));
+    }
     if(this.reportStatus==='RECHECK') return items.filter((x:any)=>this.isPendingRecheckItem(x));
     return items;
   }
@@ -3428,14 +4709,23 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     return Array.from(groups.values());
   }
   pendingSummaryRowKey(r:any): string { return String(r?.id || r?.bill_id || r?.bill_no || ''); }
-  visiblePendingRows(): any[] { return this.reportStatus === 'DRAFT' ? this.filteredReports().filter((r:any)=>(+r?.id || 0) !== 0) : []; }
+  visiblePendingRows(): any[] {
+    const source = this.quickReporting ? this.pagedFilteredReports() : this.filteredReports();
+    return this.reportStatus === 'DRAFT' ? source.filter((r:any)=>(+r?.id || 0) !== 0) : [];
+  }
+  private allPendingRowsForSummary(): any[] {
+    return this.reportStatus === 'DRAFT' ? this.filteredReports().filter((r:any)=>(+r?.id || 0) !== 0) : [];
+  }
   isPendingSummarySelected(r:any): boolean { return this.pendingSummarySelected.has(this.pendingSummaryRowKey(r)); }
-  pendingSummarySelectedCount(): number { const visible = new Set(this.visiblePendingRows().map((r:any)=>this.pendingSummaryRowKey(r))); return Array.from(this.pendingSummarySelected).filter(k=>visible.has(k)).length; }
-  someVisiblePendingSelected(): boolean { return this.pendingSummarySelectedCount() > 0; }
+  pendingSummarySelectedCount(): number {
+    const visible = new Set(this.allPendingRowsForSummary().map((r:any)=>this.pendingSummaryRowKey(r)));
+    return Array.from(this.pendingSummarySelected).filter(k=>visible.has(k)).length;
+  }
+  someVisiblePendingSelected(): boolean { return this.visiblePendingRows().some((r:any)=>this.isPendingSummarySelected(r)); }
   allVisiblePendingSelected(): boolean { const rows=this.visiblePendingRows(); return rows.length > 0 && rows.every((r:any)=>this.isPendingSummarySelected(r)); }
   togglePendingSummaryRow(r:any, checked:boolean){ const key=this.pendingSummaryRowKey(r); checked ? this.pendingSummarySelected.add(key) : this.pendingSummarySelected.delete(key); }
   toggleAllVisiblePending(checked:boolean){ for(const r of this.visiblePendingRows()){ const key=this.pendingSummaryRowKey(r); checked ? this.pendingSummarySelected.add(key) : this.pendingSummarySelected.delete(key); } }
-  private pendingSummarySelectedRows(): any[] { return this.visiblePendingRows().filter((r:any)=>this.isPendingSummarySelected(r)); }
+  private pendingSummarySelectedRows(): any[] { return this.allPendingRowsForSummary().filter((r:any)=>this.isPendingSummarySelected(r)); }
   private pendingSummaryGroups(items:any[]): any[] {
     const map = new Map<string, any>();
     for (const item of (items || []).filter((x:any)=>x?.test_id)) {
@@ -3498,7 +4788,7 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
           ? (this.reportQueueView === 'REPORT' ? this.waitingApprovalRows() : this.waitingApprovalGroupedRows())
           : (this.reports()||[]).filter((r:any)=>this.matchesReportTab(r) && this.inDateRange(r))));
     if(!q) return rows;
-    return rows.filter((r:any)=>((r.bill_no||'')+' '+(r.report_no||'')+' '+(r.report_title||'')+' '+(r.patient_name||'')+' '+(r.status||'')+' '+(r.mobile||'')+' '+(r.patient_mobile||'')+' '+this.queueGroupLabel(r)+' '+((r._approved_group_labels||[]).join(' '))).toLowerCase().includes(q));
+    return rows.filter((r:any)=>((r.bill_no||'')+' '+(r.report_no||'')+' '+(r.report_title||'')+' '+(r.patient_name||'')+' '+(r.patient_no||'')+' '+(r.status||'')+' '+(r.mobile||'')+' '+(r.patient_mobile||'')+' '+this.queueGroupLabel(r)+' '+((r._approved_group_labels||[]).join(' '))).toLowerCase().includes(q));
   }
   isRecheckReportRow(r:any): boolean {
     const scope = String(r?.report_scope || '').toUpperCase();
@@ -3521,7 +4811,7 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     const q=(this.reportSearch||'').trim().toLowerCase();
     const rows=(this.reportLogs()||[]).filter((l:any)=>this.inDateRange(l) && this.matchesLogFilter(l));
     if(!q) return rows;
-    return rows.filter((l:any)=>((l.bill_no||'')+' '+(l.patient_name||'')+' '+(l.patient_mobile||'')+' '+(l.action_label||'')+' '+(l.details_label||'')+' '+(l.action||'')).toLowerCase().includes(q));
+    return rows.filter((l:any)=>((l.bill_no||'')+' '+(l.patient_name||'')+' '+(l.patient_no||'')+' '+(l.patient_mobile||'')+' '+(l.action_label||'')+' '+(l.details_label||'')+' '+(l.action||'')).toLowerCase().includes(q));
   }
   matchesLogFilter(l:any): boolean {
     const a=String(l?.action||'').toLowerCase(); const f=this.logFilter;
@@ -3561,7 +4851,54 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   reportProgressPercent(r:any): number { const total=this.reportTotalCount(r); if(!total) return 0; const pending=this.reportPendingCount(r); const completed=Math.max(0,total-pending); return Math.max(0, Math.min(100, Math.round((completed/total)*100))); }
   queueStatusIcon(r:any): string { if(this.normalizeStatus(r.status)==='CANCELLED') return '⚠'; return this.progressTone(r)==='complete' ? '✓' : '⏳'; }
   queueStatusFraction(r:any): string { const total=this.reportTotalCount(r); const pending=this.reportPendingCount(r); const done=this.reportCompletedCount(r); if(!total) return '0 / 0'; return this.progressTone(r)==='complete' ? `${total} / ${total}` : `${Math.max(0, pending)} / ${total}`; }
-  patientAgeGender(r:any): string { const age=String(r?.age || r?.patient_age || '').trim(); const gender=String(r?.gender || r?.patient_gender || '').trim(); const agePart=age ? age.replace(/years?/i,'Y') : '-'; const genderPart=gender || '-'; return `${agePart} / ${genderPart}`; }
+  patientAgeGender(r:any): string {
+    const stored = String(r?.age || r?.patient_age || '').trim();
+    const split = r?.age_split === true || r?.age_split === 1 || r?.age_split === '1' || r?.age_split === 'true';
+    let age = '';
+    if (stored && /month|day|week/i.test(stored)) {
+      age = stored;
+    } else if (split || (Number(r?.age_value) === 0 && stored && !/^0\s*years?$/i.test(stored))) {
+      age = stored && !/^0\s*years?$/i.test(stored) ? stored : '';
+      if (!age && r?.dob) {
+        const dob = new Date(String(r.dob).slice(0, 10) + 'T00:00:00');
+        const today = new Date();
+        if (!Number.isNaN(dob.getTime()) && dob <= today) {
+          let y = today.getFullYear() - dob.getFullYear();
+          let m = today.getMonth() - dob.getMonth();
+          let d = today.getDate() - dob.getDate();
+          if (d < 0) { m--; d += new Date(today.getFullYear(), today.getMonth(), 0).getDate(); }
+          if (m < 0) { y--; m += 12; }
+          const bits: string[] = [];
+          if (y > 0) bits.push(`${y} ${y === 1 ? 'year' : 'years'}`);
+          if (m > 0) bits.push(`${m} ${m === 1 ? 'month' : 'months'}`);
+          if (d > 0) bits.push(`${d} ${d === 1 ? 'day' : 'days'}`);
+          age = bits.join(' ') || '0 years';
+        }
+      }
+    }
+    if (!age) {
+      const value = r?.age_value;
+      const unit = String(r?.age_unit || '').toUpperCase();
+      if (value !== '' && value !== undefined && value !== null && Number.isFinite(+value)) {
+        const n = +value;
+        if (!(n === 0 && stored && !/^0\s*years?$/i.test(stored))) {
+          const label = unit === 'MONTHS' ? (n === 1 ? 'month' : 'months')
+            : unit === 'WEEKS' ? (n === 1 ? 'week' : 'weeks')
+            : unit === 'DAYS' ? (n === 1 ? 'day' : 'days')
+            : (n === 1 ? 'year' : 'years');
+          age = `${n} ${label}`;
+        } else {
+          age = stored;
+        }
+      } else {
+        age = stored;
+      }
+    }
+    const gender = String(r?.gender || r?.patient_gender || '').trim();
+    const agePart = age ? age.replace(/years?/i, 'Y').replace(/weeks?/i, 'W').replace(/months?/i, 'M').replace(/days?/i, 'D') : '-';
+    const genderPart = gender || '-';
+    return `${agePart} / ${genderPart}`;
+  }
 
   sampleIdLabel(item:any): string {
     return String(item?.specimen_id || item?.sample_id || item?.barcode || '').trim();
@@ -3569,7 +4906,24 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   isEntryLocked(r:any): boolean { if (this.quickReporting) return false; return !!r?.entry_locked || (+r?.ready_for_entry_count || 0) <= 0; }
   itemCountForQueue(r:any): number { const total=+r.item_count || 0; if(this.reportStatus==='DRAFT') return (+r.pending_count || 0); if(this.reportStatus==='TYPED') return (+r.entered_count || 0); if(this.reportStatus==='RECHECK') return (+r.recheck_count || 0); if(this.reportStatus==='APPROVED') return (+r.approved_count || 0) || total; return total; }
   queueItemLabel(r:any): string { const n=this.itemCountForQueue(r); if(this.reportStatus==='DRAFT') return n === 1 ? 'pending test' : 'pending tests'; if(this.reportStatus==='TYPED') return n === 1 ? 'waiting item' : 'waiting items'; return n === 1 ? 'item' : 'items'; }
-  reportCountByStatus(status:ReportQueueStatus): number { if (status === 'LOG') return this.reportLogCount(); if (this.quickReporting) return (this.reports() || []).filter((r:any)=>this.normalizeStatus(r.status)===status && (status !== 'DRAFT' || (+r.pending_count || 0) > 0) && (status !== 'APPROVED' || (+r.approved_count || +r.item_count || 0) > 0)).length; if (status === 'RECHECK') return (this.reports() || []).filter((r:any)=>(+r.recheck_count || 0) > 0).length; if (status === 'CANCELLED') return (this.reports() || []).filter((r:any)=>!this.isRecheckReportRow(r) && this.normalizeStatus(r.status)==='CANCELLED').length; if (status === 'DRAFT') return (this.reports() || []).filter((r:any)=>!this.isRecheckReportRow(r) && (+r.pending_count || 0) > 0 && (+r.recheck_count || 0) === 0).length; if (status === 'TYPED') return this.waitingApprovalGroupedRows().length; if (status === 'APPROVED') return this.approvedGroupedRows().length; return (this.reports() || []).filter((r:any)=>!this.isRecheckReportRow(r) && this.normalizeStatus(r.status)===status && (+r.recheck_count || 0) === 0).length; }
+  reportCountByStatus(status:ReportQueueStatus): number {
+    if (status === 'LOG') return this.reportLogCount();
+    if (this.quickReporting) {
+      if (status === 'DRAFT') {
+        return (this.reports() || []).filter((r:any)=>this.normalizeStatus(r.status)==='DRAFT' && (+r.pending_count || 0) > 0 && this.inDateRange(r)).length;
+      }
+      if (status === 'APPROVED') {
+        return this.reportQueueView === 'REPORT' ? this.approvedRows().length : this.approvedGroupedRows().length;
+      }
+      return 0;
+    }
+    if (status === 'RECHECK') return (this.reports() || []).filter((r:any)=>(+r.recheck_count || 0) > 0 && this.inDateRange(r)).length;
+    if (status === 'CANCELLED') return (this.reports() || []).filter((r:any)=>!this.isRecheckReportRow(r) && this.normalizeStatus(r.status)==='CANCELLED' && this.inDateRange(r)).length;
+    if (status === 'DRAFT') return (this.reports() || []).filter((r:any)=>!this.isRecheckReportRow(r) && (+r.pending_count || 0) > 0 && (+r.recheck_count || 0) === 0 && this.inDateRange(r)).length;
+    if (status === 'TYPED') return this.waitingApprovalGroupedRows().length;
+    if (status === 'APPROVED') return this.approvedGroupedRows().length;
+    return (this.reports() || []).filter((r:any)=>!this.isRecheckReportRow(r) && this.normalizeStatus(r.status)===status && (+r.recheck_count || 0) === 0 && this.inDateRange(r)).length;
+  }
   reportLogCount(): number { return (this.reportLogs() || []).length; }
   activeQueueTitle(): string { if (this.quickReporting) return this.reportStatus === 'APPROVED' ? 'Finished Reports' : 'Pending Reports'; return this.reportStatus === 'LOG' ? 'Reporting log' : this.reportStatus === 'RECHECK' ? 'Pending Rechecks' : this.reportStatus === 'CANCELLED' ? 'Cancelled Reports' : this.reportStatus === 'TYPED' ? 'Results Entered / Waiting Approval' : this.reportStatus === 'APPROVED' ? 'Approved' : 'Pending Results'; }
   normalizeStatus(status:any): ReportQueueStatus { const s=String(status || 'DRAFT').toUpperCase(); return s.includes('CANCEL') ? 'CANCELLED' : s==='APPROVED' ? 'APPROVED' : s==='TYPED' || s==='ENTERED' || s==='WAITING_APPROVAL' ? 'TYPED' : 'DRAFT'; }
@@ -3578,16 +4932,27 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   workspaceTitle(): string { return this.recheckEntryMode ? 'Enter recheck result' : this.workspaceMode()==='APPROVED' ? 'Approved report' : this.workspaceMode()==='APPROVE' ? 'Verify / Approve' : 'Enter results'; }
   workspaceStatusTitle(): string { return this.recheckEntryMode ? 'Pending recheck' : this.workspaceMode()==='APPROVED' ? 'Approved report' : this.workspaceMode()==='APPROVE' ? 'Verify / Approve' : 'Result entry'; }
   workspaceStatusText(report:ReportVm): string { if (this.quickReporting && this.workspaceMode()==='ENTRY') return `${report.selectedCount} selected · save as one finished report`; if (this.quickReporting && this.workspaceMode()==='APPROVED') return 'Finished · print/export with or without background, edit, or delete.'; if(this.recheckEntryMode) return `${report.selectedCount} recheck item(s) selected · enter recheck values and submit back for approval`; if(this.workspaceMode()==='ENTRY') return `${report.selectedCount} selected · save draft or submit for approval`; if(this.workspaceMode()==='APPROVE') return `${report.completionPercent}% completed · view PDF, edit, or verify & approve`; return 'Approved · view, PDF export, print, email, SMS, or use correction flow for changes.'; }
-  deliverySummary(r:any): string { const parts:string[]=[]; if(r?.pdf_exported_at) parts.push('PDF exported'); if(r?.printed_at) parts.push('Printed'); if(r?.emailed_at) parts.push('Email sent/opened'); if(r?.whatsapped_at) parts.push('WhatsApp sent/opened'); if(r?.smsed_at) parts.push('SMS sent/opened'); return parts.length ? 'Delivery status: ' + parts.join(' · ') : 'Delivery status: not exported, printed, emailed, WhatsApp, or SMS shared yet.'; }
-  sectionSelectedCount(section: ReportSection): number { return (section.items || []).filter((x:any)=>x.selected_for_entry !== false).length; }
-  sectionAllSelected(section: ReportSection): boolean { return !!(section.items || []).length && (section.items || []).every((x:any)=>x.selected_for_entry !== false); }
-  sectionPartiallySelected(section: ReportSection): boolean { const items=section.items || []; const selected=this.sectionSelectedCount(section); return selected > 0 && selected < items.length; }
-  toggleSectionSelection(report:ReportVm, section:ReportSection, checked:boolean) { (section.items || []).forEach((x:any)=>x.selected_for_entry=checked); this.refreshSelectedState(report); }
+  deliverySummary(r:any): string { const parts:string[]=[]; if(r?.pdf_exported_at) parts.push('PDF exported'); if(r?.printed_at) parts.push('Printed'); if(r?.emailed_at) parts.push('Email sent/opened'); if(r?.smsed_at) parts.push('SMS sent/opened'); return parts.length ? 'Delivery status: ' + parts.join(' · ') : 'Delivery status: not exported, printed, emailed, or SMS shared yet.'; }
+  sectionSelectedCount(section: ReportSection): number { return (section.items || []).filter((x:any)=>!this.isInnerHeading(x) && x.selected_for_entry !== false).length; }
+  sectionAllSelected(section: ReportSection): boolean {
+    const items = (section.items || []).filter((x:any)=>!this.isInnerHeading(x));
+    return !!items.length && items.every((x:any)=>x.selected_for_entry !== false);
+  }
+  sectionPartiallySelected(section: ReportSection): boolean {
+    const items = (section.items || []).filter((x:any)=>!this.isInnerHeading(x));
+    const selected = items.filter((x:any)=>x.selected_for_entry !== false).length;
+    return selected > 0 && selected < items.length;
+  }
+  toggleSectionSelection(report:ReportVm, section:ReportSection, checked:boolean) {
+    (section.items || []).forEach((x:any)=>{ if (!this.isInnerHeading(x)) x.selected_for_entry = checked; });
+    this.refreshSelectedState(report);
+  }
   allEntrySelected(report:ReportVm): boolean { return !!report.safeItems.length && report.safeItems.every((x:any)=>x.selected_for_entry !== false); }
   toggleEntrySelection(report:ReportVm, checked:boolean) { report.safeItems.forEach((x:any)=>x.selected_for_entry=checked); this.refreshSelectedState(report); }
   truthy(v:any): boolean { return v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true'; }
   trackReport = (_i:number,r:any) => { if (this.quickReporting) return r?._approved_group_key ? `quick-approved:${r._approved_group_key}` : `quick:${r?.id}:${r?.status || ''}`; return r?._bill_group_key ? `waiting:${r._bill_group_key}` : (r?._approved_group_key ? `approved:${r._approved_group_key}` : `${r.id}:${r.queue_group_key || 'all'}:${r.status || ''}`); };
   trackLog(_i:number,l:any){ return l.id || _i; }
   trackSection(_i:number,s:ReportSection){ return s.key; }
+  trackDepartmentBlock(_i:number,b:ReportDepartmentBlock){ return b.key; }
   trackItem(_i:number,x:any){ return x._key || x.id || _i; }
 }

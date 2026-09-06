@@ -393,14 +393,12 @@
 }
 
 .billing-stepper.pro-billing .select-items-template .template-result-title {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  gap: 10px !important;
+  display: block !important;
   min-width: 0 !important;
 }
 
 .billing-stepper.pro-billing .select-items-template .template-result-title b {
+  display: block !important;
   min-width: 0 !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
@@ -410,9 +408,10 @@
   font-weight: 900 !important;
 }
 
-.billing-stepper.pro-billing .select-items-template .template-result-title small {
-  flex: 0 0 auto !important;
-  max-width: 136px !important;
+.billing-stepper.pro-billing .select-items-template .template-result-kind {
+  display: inline-flex !important;
+  align-items: center !important;
+  max-width: 100% !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
@@ -420,11 +419,14 @@
   background: rgba(99, 102, 241, .12) !important;
   color: #c4b5fd !important;
   border-radius: 999px !important;
-  padding: 3px 9px !important;
+  padding: 2px 9px !important;
   font-size: 11px !important;
   font-weight: 900 !important;
+  line-height: 1.35 !important;
+  width: fit-content !important;
 }
 
+.billing-stepper.pro-billing .select-items-template .template-result-meta,
 .billing-stepper.pro-billing .select-items-template .template-result-copy > span {
   min-width: 0 !important;
   overflow: hidden !important;
@@ -525,6 +527,19 @@
   line-height: 1.35 !important;
 }
 
+.billing-stepper.pro-billing .select-items-template .template-card .template-result-kind {
+  display: inline-flex !important;
+  width: fit-content !important;
+  max-width: 100% !important;
+  border: 1px solid rgba(167, 139, 250, .42) !important;
+  background: rgba(99, 102, 241, .12) !important;
+  color: #c4b5fd !important;
+  border-radius: 999px !important;
+  padding: 2px 9px !important;
+  font-size: 11px !important;
+  font-weight: 900 !important;
+}
+
 .billing-stepper.pro-billing .select-items-template .template-card h2 {
   color: var(--v59-text) !important;
   font-size: 19px !important;
@@ -596,22 +611,26 @@
 }
 
 .billing-stepper.pro-billing .select-items-template .template-search-input-shell .template-search-glyph {
-  width: 22px !important;
-  min-width: 22px !important;
-  height: 22px !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
+  width: 18px !important;
+  min-width: 18px !important;
+  height: 18px !important;
+  display: block !important;
+  flex: 0 0 auto !important;
   color: #a78bfa !important;
-  font-size: 22px !important;
-  font-weight: 800 !important;
-  line-height: 1 !important;
   margin: 0 !important;
   padding: 0 !important;
   border: 0 !important;
   outline: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
+  overflow: visible !important;
+}
+
+.billing-stepper.pro-billing .select-items-template .template-search-input-shell .template-search-glyph circle,
+.billing-stepper.pro-billing .select-items-template .template-search-input-shell .template-search-glyph path {
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 2 !important;
 }
 
 .billing-stepper.pro-billing .select-items-template .template-search-input,
@@ -934,10 +953,18 @@
 }
 
 .billing-stepper.pro-billing .select-items-v44 .compact-rate-row .v54-drag-dots {
+  display: inline-block !important;
+  width: 10px !important;
+  height: 16px !important;
+  flex: 0 0 auto !important;
   cursor: grab !important;
   color: rgba(166, 179, 205, 0.72) !important;
-  font-size: 16px !important;
-  line-height: 1 !important;
+  background-image: radial-gradient(circle, currentColor 1.15px, transparent 1.25px) !important;
+  background-size: 5px 5.5px !important;
+  background-position: 0 0.5px !important;
+  background-repeat: repeat !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
   user-select: none !important;
 }
 

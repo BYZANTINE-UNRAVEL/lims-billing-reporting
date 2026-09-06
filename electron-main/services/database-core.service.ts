@@ -65,6 +65,17 @@ export abstract class DatabaseCoreService {
   }
 
   protected nowIst() {
+    // App-wide working date/time (Settings → Use manual date/time).
+    // Frontend DateTimeSettingsService already respected this; Electron timestamps did not.
+    try {
+      const enabled = String(this.getSetting('app.time.override.enabled', 'false') || '').trim().toLowerCase();
+      const raw = String(this.getSetting('app.time.override.value', '') || '').trim();
+      if (['true', '1', 'yes', 'on'].includes(enabled) && raw) {
+        const normalized = raw.replace('T', ' ').replace(/\//g, '-').trim();
+        const m = normalized.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+        if (m) return `${m[1]} ${m[2]}:${m[3]}:${m[4] || '00'}`;
+      }
+    } catch { /* settings may not exist during early migrate */ }
     return new Date(Date.now() + 330 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
   }
 
@@ -196,7 +207,14 @@ CREATE INDEX IF NOT EXISTS idx_quick_report_items_report ON quick_report_items(q
     // Persist per-report ordering from Quick Reporting. Master priority remains unchanged.
     this.ensureColumn('quick_report_items', 'report_order_override', 'REAL');
     this.ensureColumn('quick_report_items', 'group_order_override', 'REAL');
+    this.ensureColumn('quick_report_items', 'department_order_override', 'REAL');
+    this.ensureColumn('quick_report_items', 'report_order_overridden', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureColumn('quick_report_items', 'group_order_overridden', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureColumn('quick_report_items', 'department_order_overridden', 'INTEGER NOT NULL DEFAULT 0');
     this.ensureColumn('quick_report_items', 'recheck_remarks', 'TEXT');
+    // 1 = include in finished PDF; 0 = keep values on the finished report but hide from print.
+    this.ensureColumn('quick_report_items', 'selected_for_reporting', 'INTEGER NOT NULL DEFAULT 1');
+    this.ensureColumn('quick_reports', 'profile_remarks_json', "TEXT NOT NULL DEFAULT '{}'");
     this.quickBarcode?.ensureSchema();
   }
 
@@ -233,7 +251,6 @@ CREATE INDEX IF NOT EXISTS idx_quick_report_items_report ON quick_report_items(q
               printed_at TEXT,
               emailed_at TEXT,
               smsed_at TEXT,
-              whatsapped_at TEXT,
               delivery_status TEXT,
               show_profile_name_on_report INTEGER NOT NULL DEFAULT 1,
               show_sub_header_on_report INTEGER NOT NULL DEFAULT 1,
@@ -244,13 +261,12 @@ CREATE INDEX IF NOT EXISTS idx_quick_report_items_report ON quick_report_items(q
               report_title TEXT,
               FOREIGN KEY(bill_id) REFERENCES bills(id)
             );
-            INSERT OR IGNORE INTO reports_multi_tmp(id,bill_id,status,typed_by,approved_by,remarks,created_at,updated_at,pdf_exported_at,printed_at,emailed_at,smsed_at,whatsapped_at,delivery_status,show_profile_name_on_report,show_sub_header_on_report,report_scope,source_collection_id,workflow_key,queue_vendor_id,report_title)
+            INSERT OR IGNORE INTO reports_multi_tmp(id,bill_id,status,typed_by,approved_by,remarks,created_at,updated_at,pdf_exported_at,printed_at,emailed_at,smsed_at,delivery_status,show_profile_name_on_report,show_sub_header_on_report,report_scope,source_collection_id,workflow_key,queue_vendor_id,report_title)
             SELECT id,bill_id,status,typed_by,approved_by,remarks,created_at,updated_at,
               CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='pdf_exported_at') THEN pdf_exported_at ELSE NULL END,
               CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='printed_at') THEN printed_at ELSE NULL END,
               CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='emailed_at') THEN emailed_at ELSE NULL END,
               CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='smsed_at') THEN smsed_at ELSE NULL END,
-              CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='whatsapped_at') THEN whatsapped_at ELSE NULL END,
               CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='delivery_status') THEN delivery_status ELSE NULL END,
               CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='show_profile_name_on_report') THEN show_profile_name_on_report ELSE 1 END,
               CASE WHEN EXISTS(SELECT 1 FROM pragma_table_info('reports') WHERE name='show_sub_header_on_report') THEN show_sub_header_on_report ELSE 1 END,
@@ -276,6 +292,7 @@ CREATE INDEX IF NOT EXISTS idx_quick_report_items_report ON quick_report_items(q
     add('report_kind', "TEXT NOT NULL DEFAULT 'NORMAL'");
     add('recheck_sequence', 'INTEGER NOT NULL DEFAULT 0');
     add('recheck_mode', "TEXT NOT NULL DEFAULT 'NONE'");
+    add('profile_remarks_json', "TEXT NOT NULL DEFAULT '{}'");
     this.db.exec(`CREATE INDEX IF NOT EXISTS idx_reports_bill_scope ON reports(bill_id,report_scope,status);
                   CREATE INDEX IF NOT EXISTS idx_reports_collection_scope ON reports(source_collection_id,workflow_key,queue_vendor_id);
                   CREATE INDEX IF NOT EXISTS idx_reports_parent_recheck ON reports(parent_report_id,report_kind,status);`);
@@ -372,18 +389,6 @@ CREATE TABLE IF NOT EXISTS consultant_commission_rules(id INTEGER PRIMARY KEY AU
     );
     CREATE INDEX IF NOT EXISTS idx_bill_items_commission_status ON bill_items(commission_status);
     CREATE INDEX IF NOT EXISTS idx_commission_settlement_consultant ON commission_settlements(consultant_id, settlement_date);`);
-
-    // Backfill legacy cancelled bills that never wrote commission_status
-    this.db.prepare(`UPDATE bill_items
-      SET commission_status='CANCELLED'
-      WHERE bill_id IN (SELECT id FROM bills WHERE UPPER(COALESCE(status,'')) IN ('CANCELLED','CANCELED'))
-        AND COALESCE(commission_amount,0)>0
-        AND UPPER(COALESCE(commission_status,'GENERATED')) IN ('GENERATED','APPROVED','HELD')`).run();
-    this.db.prepare(`UPDATE bill_items
-      SET commission_status='REVERSAL_PENDING'
-      WHERE bill_id IN (SELECT id FROM bills WHERE UPPER(COALESCE(status,'')) IN ('CANCELLED','CANCELED'))
-        AND COALESCE(commission_amount,0)>0
-        AND UPPER(COALESCE(commission_status,''))='PAID'`).run();
   }
 
 
@@ -530,6 +535,13 @@ CREATE INDEX IF NOT EXISTS idx_tests_billing_order ON tests(department_id, billi
     this.ensureColumn('test_formulas', 'rounding_mode', "TEXT NOT NULL DEFAULT 'NEAREST'");
     this.db.prepare(`UPDATE tests SET input_control_type='OPTION'
       WHERE UPPER(REPLACE(COALESCE(input_control_type,''),'-','_')) IN ('DROPDOWN','RADIO','CHECKBOX','SELECT','OPTION_SELECT','SEARCH_SELECT','SEARCHSELECT')`).run();
+    // Calculated results must be editable in typing — migrate legacy readonly control type.
+    this.db.prepare(`UPDATE tests SET input_control_type='CALCULATED_EDITABLE'
+      WHERE UPPER(REPLACE(COALESCE(input_control_type,''),'-','_')) IN ('CALCULATED_READONLY','CALCULATED','CALCULATED_RO')`).run();
+    this.db.prepare(`UPDATE tests SET input_control_type='CALCULATED_EDITABLE'
+      WHERE UPPER(COALESCE(result_mode,''))='CALCULATED'
+        AND UPPER(REPLACE(COALESCE(input_control_type,''),'-','_')) NOT IN ('CALCULATED_EDITABLE','TEXTBOX','NUMERIC')`).run();
+    this.db.prepare(`UPDATE test_formulas SET allow_manual_override=1 WHERE COALESCE(allow_manual_override,0)=0`).run();
     this.backfillTestOrders();
   }
 
@@ -665,6 +677,7 @@ CREATE INDEX IF NOT EXISTS idx_tests_billing_order ON tests(department_id, billi
     this.ensureColumn('bills', 'round_off', 'REAL NOT NULL DEFAULT 0');
     this.ensureColumn('bills', 'cash_received', 'REAL NOT NULL DEFAULT 0');
     this.ensureColumn('bills', 'cash_return', 'REAL NOT NULL DEFAULT 0');
+    this.ensureColumn('bills', 'patient_snapshot_json', 'TEXT');
     this.ensureColumn('bill_items', 'discount_type', "TEXT NOT NULL DEFAULT 'VALUE'");
     this.ensureColumn('bill_items', 'discount_value', 'REAL NOT NULL DEFAULT 0');
     this.ensureColumn('bill_items', 'discount_amount', 'REAL NOT NULL DEFAULT 0');
@@ -719,6 +732,7 @@ CREATE INDEX IF NOT EXISTS idx_tests_billing_order ON tests(department_id, billi
       'patient.honorifics': 'Mr.,Mrs.,Ms.,Miss,Mx.,Baby,Baby Boy,Baby Girl,Master,Kumari,Child,Dr.,Prof.,Rev.,Sr.,Br.,Elder,Baby of',
       'patient.relationTypes': 'Father of,Mother of,Daughter of,Son of,Baby of,Child of,Parent,Guardian,Spouse,Self,Other',
       'patient.requiredFields': 'name',
+      'patient.fieldsCaps': 'off',
       'billing.requiredFields': 'items',
       'billing.pdf.logoEnabled': 'false', 'billing.pdf.logoPath': '',
       'billing.pdf.logoPlacement': 'left', 'billing.pdf.logoWidth': '48', 'billing.pdf.logoHeight': '48',
@@ -1008,8 +1022,143 @@ CREATE INDEX IF NOT EXISTS idx_tests_billing_order ON tests(department_id, billi
     return this.getSettings();
   }
 
-  listDepartments() { return this.db.prepare('SELECT * FROM departments ORDER BY priority,name').all(); }
-  saveDepartment(d: any) { const id = Number(d.id || 0); const pageBreakAfter = d.page_break_after ? 1 : 0; if (id) this.db.prepare('UPDATE departments SET name=?,priority=?,page_break_after=?,active=? WHERE id=?').run(d.name, +d.priority||0, pageBreakAfter, d.active?1:0, id); else this.db.prepare('INSERT INTO departments(name,priority,page_break_after,active) VALUES(?,?,?,?)').run(d.name, +d.priority||0, pageBreakAfter, d.active?1:0); return this.listDepartments(); }
+  listDepartments(activeOnly = false) {
+    if (activeOnly) {
+      return this.db.prepare('SELECT * FROM departments WHERE COALESCE(active,1)=1 ORDER BY priority,name').all();
+    }
+    return this.db.prepare('SELECT * FROM departments ORDER BY priority,name').all();
+  }
+
+  saveDepartment(d: any) {
+    const id = Number(d.id || 0);
+    const name = String(d?.name || '').trim();
+    if (!name) {
+      const err: any = new Error('Department name is required.');
+      err.code = 'DEPARTMENT_NAME_REQUIRED';
+      throw err;
+    }
+    const pageBreakAfter = d.page_break_after ? 1 : 0;
+    const active = d.active === false || d.active === 0 || d.active === '0' ? 0 : 1;
+    const priority = +d.priority || 0;
+
+    const clash = this.db.prepare(
+      id
+        ? 'SELECT id FROM departments WHERE lower(trim(name))=lower(?) AND id<>? LIMIT 1'
+        : 'SELECT id FROM departments WHERE lower(trim(name))=lower(?) LIMIT 1'
+    ).get(...(id ? [name, id] : [name])) as any;
+    if (clash?.id) {
+      const err: any = new Error(`Another department already uses the name "${name}".`);
+      err.code = 'DEPARTMENT_NAME_EXISTS';
+      throw err;
+    }
+
+    let oldName = '';
+    if (id) {
+      const existing = this.db.prepare('SELECT * FROM departments WHERE id=?').get(id) as any;
+      if (!existing?.id) {
+        const err: any = new Error('Department not found.');
+        err.code = 'DEPARTMENT_NOT_FOUND';
+        throw err;
+      }
+      oldName = String(existing.name || '').trim();
+      this.db.prepare('UPDATE departments SET name=?,priority=?,page_break_after=?,active=? WHERE id=?')
+        .run(name, priority, pageBreakAfter, active, id);
+    } else {
+      this.db.prepare('INSERT INTO departments(name,priority,page_break_after,active) VALUES(?,?,?,?)')
+        .run(name, priority, pageBreakAfter, active);
+    }
+
+    let scopeResult: any = null;
+    const renamed = !!id && !!oldName && oldName.toLowerCase() !== name.toLowerCase();
+    if (renamed && (d.apply_scope || d.update_billing || d.update_reporting)) {
+      scopeResult = this.applyDepartmentRenameScope(oldName, name, d);
+    }
+
+    this.audit('department.save', JSON.stringify({ id: id || null, name, oldName: oldName || null, scope: scopeResult }));
+    const departments = this.listDepartments();
+    return scopeResult ? { departments, scope: scopeResult, renamed: true, old_name: oldName, name } : departments;
+  }
+
+  protected applyDepartmentRenameScope(oldName: string, newName: string, options: any = {}) {
+    const mode = String(options.update_scope || options.rename_scope || 'future').trim();
+    const applyFrom = String(options.apply_from || '').trim();
+    const updateBilling = !!(options.update_billing ?? options.apply_billing);
+    const updateReporting = !!(options.update_reporting ?? options.apply_reporting);
+    let billing = 0;
+    let reporting = 0;
+
+    if (mode === 'future' || (!updateBilling && !updateReporting)) {
+      return { mode: 'future', billing: 0, reporting: 0, updated: 0 };
+    }
+    if (mode === 'fromDate' && !applyFrom) {
+      const err: any = new Error('Select Apply from date for department rename scope.');
+      err.code = 'DEPARTMENT_APPLY_FROM_REQUIRED';
+      throw err;
+    }
+
+    const billDateFilter = mode === 'all'
+      ? ''
+      : ' AND bill_id IN (SELECT id FROM bills WHERE date(substr(COALESCE(bill_date,\'\'),1,10)) >= date(?))';
+    const billParams = mode === 'all' ? [newName, oldName] : [newName, oldName, applyFrom];
+
+    if (updateBilling) {
+      billing = this.db.prepare(
+        `UPDATE bill_items SET department_name=? WHERE TRIM(COALESCE(department_name,''))=?${billDateFilter}`
+      ).run(...billParams).changes;
+    }
+
+    if (updateReporting) {
+      const reportDateFilter = mode === 'all'
+        ? ''
+        : ' AND report_id IN (SELECT r.id FROM reports r JOIN bills b ON b.id=r.bill_id WHERE date(substr(COALESCE(b.bill_date,\'\'),1,10)) >= date(?))';
+      const quickDateFilter = mode === 'all'
+        ? ''
+        : ' AND quick_report_id IN (SELECT qr.id FROM quick_reports qr JOIN bills b ON b.id=qr.bill_id WHERE date(substr(COALESCE(b.bill_date,\'\'),1,10)) >= date(?))';
+      const reportParams = mode === 'all' ? [newName, oldName] : [newName, oldName, applyFrom];
+      reporting += this.db.prepare(
+        `UPDATE report_items SET department_name=? WHERE TRIM(COALESCE(department_name,''))=?${reportDateFilter}`
+      ).run(...reportParams).changes;
+      reporting += this.db.prepare(
+        `UPDATE quick_report_items SET department_name=? WHERE TRIM(COALESCE(department_name,''))=?${quickDateFilter}`
+      ).run(...reportParams).changes;
+    }
+
+    return { mode, apply_from: applyFrom || null, billing, reporting, updated: billing + reporting };
+  }
+
+  protected getDepartmentDeleteBlockers(departmentId: number) {
+    const id = +departmentId;
+    if (!id) return [{ label: 'Invalid department', count: 1 }];
+    const dept = this.db.prepare('SELECT name FROM departments WHERE id=?').get(id) as any;
+    const name = String(dept?.name || '').trim();
+    const blockers = [
+      { label: 'Test Master', count: this.countRows('SELECT COUNT(*) count FROM tests WHERE department_id=?', id) },
+      { label: 'Profile Master', count: this.countRows('SELECT COUNT(*) count FROM profiles WHERE department_id=?', id) },
+    ];
+    if (name) {
+      blockers.push(
+        { label: 'Billing items', count: this.countRows('SELECT COUNT(*) count FROM bill_items WHERE TRIM(COALESCE(department_name,\'\'))=?', name) },
+        { label: 'Saved / quick reports', count: this.countRows('SELECT COUNT(*) count FROM report_items WHERE TRIM(COALESCE(department_name,\'\'))=?', name) + this.countRows('SELECT COUNT(*) count FROM quick_report_items WHERE TRIM(COALESCE(department_name,\'\'))=?', name) }
+      );
+    }
+    return blockers.filter(x => x.count > 0);
+  }
+
+  deleteDepartment(id: number) {
+    const departmentId = +id;
+    const blockers = this.getDepartmentDeleteBlockers(departmentId);
+    if (blockers.length) {
+      const details = blockers.map(x => `${x.label}: ${x.count}`).join(', ');
+      const err: any = new Error(`Cannot delete this department because it is already used. Deactivate it instead for future work. ${details}`);
+      err.code = 'DEPARTMENT_IN_USE_CANNOT_DELETE';
+      err.details = blockers;
+      throw err;
+    }
+    this.db.prepare('DELETE FROM departments WHERE id=?').run(departmentId);
+    this.audit('department.delete', JSON.stringify({ id: departmentId }));
+    return this.listDepartments();
+  }
+
   listUnits() { return this.db.prepare('SELECT * FROM units ORDER BY name').all(); }
   saveUnit(u: any) { const id = Number(u.id || 0); if (id) this.db.prepare('UPDATE units SET name=?,active=? WHERE id=?').run(u.name, u.active?1:0, id); else this.db.prepare('INSERT INTO units(name,active) VALUES(?,?)').run(u.name, u.active?1:0); return this.listUnits(); }
 
@@ -1212,7 +1361,10 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
         if (usedTests.has(testId)) throw new Error('Same test mapped more than once for this equipment.');
         usedTests.add(testId);
         const test = this.db.prepare('SELECT name, display_name, decimal_places, rounding_mode FROM tests WHERE id=?').get(testId) as any;
-        const roundingMode = ['NONE','NEAREST','UP','DOWN'].includes(String(row.rounding_mode || '').toUpperCase()) ? String(row.rounding_mode).toUpperCase() : 'NEAREST';
+        const roundingModeRaw = String(row.rounding_mode || '').toUpperCase().replace(/[\s-]+/g, '_');
+        const roundingMode = ['NO_TRANSFORM','NOTRANSFORM','NONE','NEAREST','UP','DOWN'].includes(roundingModeRaw)
+          ? (roundingModeRaw === 'NOTRANSFORM' ? 'NO_TRANSFORM' : roundingModeRaw)
+          : 'NEAREST';
         const operator = ['NONE','+','-','*','/'].includes(String(row.transform_operator || 'NONE').toUpperCase()) ? String(row.transform_operator || 'NONE').toUpperCase() : 'NONE';
         const decimalsRaw = row.decimal_places === '' || row.decimal_places === null || row.decimal_places === undefined ? null : Math.max(0, Math.min(6, Number(row.decimal_places) || 0));
         this.db.prepare(`INSERT INTO equipment_test_mappings(equipment_id,test_id,test_name,analyzer_code,lis_code,decimal_places,rounding_mode,transform_operator,transform_value,is_active,sort_order,notes,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
@@ -1341,6 +1493,7 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     const patient = first ? {
       billId: +first.bill_id || 0,
       billNo: first.bill_no || '',
+      billDate: first.bill_date || '',
       patientId: +first.patient_id || 0,
       patientNo: first.patient_no || '',
       name: this.analyzerPatientName(first),
@@ -1396,6 +1549,7 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
         gender: patient?.gender || '',
         uhId: patient?.patientNo || '',
         refBy: patient?.refBy || '',
+        billDate: patient?.billDate || '',
         lisTests: tests.map((t:any) => ({ sampleNo: sampleId, sampleId, analyzerCode: t.analyzerCode, lisId: t.lisCode, lisCode: t.lisCode, testId: t.testId, testName: t.testName, unit: t.unit }))
       }
     };
@@ -1413,7 +1567,8 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     else if (op === '*' && Number.isFinite(v)) out = n * v;
     else if (op === '/' && Number.isFinite(v) && v !== 0) out = n / v;
     const decimals = mapping?.decimal_places === null || mapping?.decimal_places === undefined || mapping?.decimal_places === '' ? null : Math.max(0, Math.min(6, Number(mapping.decimal_places) || 0));
-    const mode = String(mapping?.rounding_mode || 'NEAREST').toUpperCase();
+    const mode = String(mapping?.rounding_mode || 'NEAREST').toUpperCase().replace(/[\s-]+/g, '_');
+    if (mode === 'NO_TRANSFORM' || mode === 'NOTRANSFORM') return rawText;
     if (decimals === null || mode === 'NONE') return String(out);
     const factor = Math.pow(10, decimals);
     if (mode === 'UP') out = Math.ceil(out * factor) / factor;
@@ -1528,7 +1683,10 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
       const displayName = this.normalizeName(t.display_name || t.report_name || t.name || '');
       const normalRangeText = this.normalizeName(this.defaultReferenceTextFromPayload(t));
       const decimalPlaces = Math.max(0, Math.min(6, Number(t.decimal_places ?? t.rounding_decimals ?? 2) || 0));
-      const roundingMode = ['NONE','NEAREST','UP','DOWN'].includes(String(t.rounding_mode || '').toUpperCase()) ? String(t.rounding_mode).toUpperCase() : 'NEAREST';
+      const roundingModeRaw = String(t.rounding_mode || '').toUpperCase().replace(/[\s-]+/g, '_');
+      const roundingMode = ['NO_TRANSFORM','NOTRANSFORM','NONE','NEAREST','UP','DOWN'].includes(roundingModeRaw)
+        ? (roundingModeRaw === 'NOTRANSFORM' ? 'NO_TRANSFORM' : roundingModeRaw)
+        : 'NEAREST';
       const numberFormat = ['NONE','INDIAN','WESTERN'].includes(String(t.number_format || '').toUpperCase()) ? String(t.number_format).toUpperCase() : 'NONE';
       const outputOperator = ['+','-','*','/'].includes(String(t.output_operator || '+')) ? String(t.output_operator || '+') : '+';
       const outputConstant = Number.isFinite(Number(t.output_constant)) ? Number(t.output_constant) : 0;
@@ -1544,7 +1702,14 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
       const interpretationText = String(t.interpretation_text ?? t.interpretation_html ?? t.interpretation ?? '');
       const interpretationEnabled = this.toBool01(t.interpretation_enabled);
       const inputControlRaw = String(t.input_control_type || 'TEXTBOX').trim().toUpperCase().replace(/[- ]+/g, '_');
-      const inputControlType = ['DROPDOWN','RADIO','CHECKBOX','SELECT','OPTION_SELECT','SEARCH_SELECT','SEARCHSELECT'].includes(inputControlRaw) ? 'OPTION' : inputControlRaw;
+      let inputControlType = ['DROPDOWN','RADIO','CHECKBOX','SELECT','OPTION_SELECT','SEARCH_SELECT','SEARCHSELECT'].includes(inputControlRaw) ? 'OPTION' : inputControlRaw;
+      if (['CALCULATED_READONLY','CALCULATED','CALCULATED_RO'].includes(inputControlType)
+        || String(t.result_mode || '').toUpperCase() === 'CALCULATED'
+        || String(t.result_data_type || '').toUpperCase() === 'CALCULATED') {
+        if (['CALCULATED_READONLY','CALCULATED','CALCULATED_RO',''].includes(inputControlType) || inputControlType.includes('CALCULATED')) {
+          inputControlType = 'CALCULATED_EDITABLE';
+        }
+      }
       const vals = [
         code, t.name, displayName, departmentId, t.unit_id||null, +t.price||0, +t.running_cost||0, t.outsourced_test ? 1 : 0, +t.vendor_cost || 0, t.commission_allowed === false ? 0 : 1, normalRangeText, t.method||'', priority, '', t.active?1:0, t.billable?1:0, t.active_for_reporting === false ? 0 : 1, t.highlight_parameter ? 1 : 0,
         t.result_data_type || 'NUMBER', inputControlType, t.result_mode || 'DIRECT', billingOrder || this.nextTestOrder(departmentId, 'billing_order'), reportOrder || this.nextTestOrder(departmentId, 'report_order'), t.search_keywords || '', methodId,
@@ -1578,8 +1743,9 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
       oldFormulaIds.forEach(fid => this.db.prepare('DELETE FROM test_formula_variables WHERE formula_id=?').run(fid));
       this.db.prepare('DELETE FROM test_formulas WHERE test_id=?').run(testId);
       if ((t.result_mode === 'CALCULATED' || t.result_data_type === 'CALCULATED') && this.normalizeName(t.formula_expression || t.formula?.formula_expression)) {
+        // Calculated fields are always manually editable in report typing.
         const formulaId = Number(this.db.prepare('INSERT INTO test_formulas(test_id,formula_expression,rounding_decimals,allow_manual_override,is_active,created_at,updated_at,predefined_formula_key,rounding_mode) VALUES(?,?,?,?,?,?,?,?,?)')
-          .run(testId, this.normalizeName(t.formula_expression || t.formula?.formula_expression), decimalPlaces, t.allow_manual_override ? 1 : 0, 1, this.nowIst(), this.nowIst(), predefinedFormulaKey, roundingMode).lastInsertRowid);
+          .run(testId, this.normalizeName(t.formula_expression || t.formula?.formula_expression), decimalPlaces, 1, 1, this.nowIst(), this.nowIst(), predefinedFormulaKey, roundingMode).lastInsertRowid);
         const variables = Array.isArray(t.formula_variables) ? t.formula_variables : [];
         variables.filter((v:any) => this.normalizeName(v.variable_key) && +v.source_test_id).forEach((v:any) => {
           this.db.prepare('INSERT OR IGNORE INTO test_formula_variables(formula_id,variable_key,source_test_id) VALUES(?,?,?)')
@@ -1942,23 +2108,325 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     return tx();
   }
 
-  savePatient(p: any) { const id=+p.id||0; const no=p.patient_no || this.nextConfiguredNo('patient', 'patients', 'patient_no'); const ageValue = p.age_value === '' || p.age_value === undefined || p.age_value === null ? null : +p.age_value; const vals=[no,p.title||'',p.name,p.dob||'',p.age||'',ageValue,p.age_unit||'YEARS',p.gender||'',p.relation_type||'',p.guardian_name||'',p.guardian_mobile||'',p.age_split ? 1 : 0,p.mobile||'',p.email||'',p.address||'',p.history||'']; const now=this.nowIst(); if(id) this.db.prepare('UPDATE patients SET patient_no=?,title=?,name=?,dob=?,age=?,age_value=?,age_unit=?,gender=?,relation_type=?,guardian_name=?,guardian_mobile=?,age_split=?,mobile=?,email=?,address=?,history=?,updated_at=? WHERE id=?').run(...vals,now,id); else return this.db.prepare('INSERT INTO patients(patient_no,title,name,dob,age,age_value,age_unit,gender,relation_type,guardian_name,guardian_mobile,age_split,mobile,email,address,history,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(...vals,now,now).lastInsertRowid; return id; }
+  /** Prefer age_value + age_unit; honor age_split / rich stored age (months/days). */
+  protected formatPatientAgeDisplay(p: any): string {
+    if (!p) return '';
+    const split = p.age_split === true || p.age_split === 1 || p.age_split === '1' || p.age_split === 'true';
+    const unitLabel = (unit: string, value: number) => {
+      const u = unit === 'DAYS' ? 'day' : unit === 'MONTHS' ? 'month' : unit === 'WEEKS' ? 'week' : 'year';
+      return `${u}${Number(value) === 1 ? '' : 's'}`;
+    };
+    const stored = String(p.age || '').trim();
+    const storedIsRich = !!stored && /month|day|week/i.test(stored);
+    const storedIsZeroYearsOnly = /^0\s*years?$/i.test(stored);
+
+    if (split) {
+      let years = p.age_years;
+      let months = p.age_months;
+      let days = p.age_days;
+      const hasParts = [years, months, days].some(v => v !== undefined && v !== null && v !== '');
+      if ((!hasParts || (Number(years || 0) === 0 && Number(months || 0) === 0 && Number(days || 0) === 0)) && p.dob) {
+        const dob = new Date(String(p.dob).slice(0, 10) + 'T00:00:00');
+        const today = new Date();
+        if (!Number.isNaN(dob.getTime()) && dob <= today) {
+          let y = today.getFullYear() - dob.getFullYear();
+          let m = today.getMonth() - dob.getMonth();
+          let d = today.getDate() - dob.getDate();
+          if (d < 0) { m--; d += new Date(today.getFullYear(), today.getMonth(), 0).getDate(); }
+          if (m < 0) { y--; m += 12; }
+          years = Math.max(0, y); months = Math.max(0, m); days = Math.max(0, d);
+        }
+      }
+      if (years === undefined || years === null || years === '') years = p.age_value;
+      years = Number(years || 0) || 0;
+      months = Math.min(11, Math.max(0, Number(months || 0) || 0));
+      days = Math.min(31, Math.max(0, Number(days || 0) || 0));
+      const bits: string[] = [];
+      if (years > 0) bits.push(`${years} ${unitLabel('YEARS', years)}`);
+      if (months > 0) bits.push(`${months} ${unitLabel('MONTHS', months)}`);
+      if (days > 0) bits.push(`${days} ${unitLabel('DAYS', days)}`);
+      if (bits.length) return bits.join(' ');
+      if (storedIsRich) return stored;
+      if (stored && !storedIsZeroYearsOnly) return stored;
+      return `0 ${unitLabel('YEARS', 0)}`;
+    }
+
+    if (storedIsRich) return stored;
+    const raw = p.age_value;
+    if (raw !== '' && raw !== undefined && raw !== null && Number.isFinite(+raw)) {
+      const n = +raw;
+      const unit = String(p.age_unit || 'YEARS').toUpperCase();
+      return `${n} ${unitLabel(unit, n)}`;
+    }
+    return stored;
+  }
+
+  /** Compact patient identity stored on each bill so update-scope can freeze or rewrite history. */
+  protected buildPatientSnapshot(p: any) {
+    if (!p) return null;
+    this.applyPatientFieldsCaps(p);
+    const ageValue = p.age_value === '' || p.age_value === undefined || p.age_value === null ? null : +p.age_value;
+    const ageUnit = String(p.age_unit || 'YEARS').toUpperCase();
+    const age = this.formatPatientAgeDisplay({
+      ...p,
+      age_value: ageValue,
+      age_unit: ageUnit,
+      age_years: p.age_years ?? ageValue,
+      age_months: p.age_months,
+      age_days: p.age_days,
+      age_split: p.age_split
+    }) || String(p.age || '').trim();
+    return {
+      patient_no: String(p.patient_no || '').trim(),
+      title: String(p.title || '').trim(),
+      name: String(p.name || p.patient_name || '').trim(),
+      dob: String(p.dob || '').trim(),
+      age,
+      age_value: ageValue,
+      age_unit: ageUnit,
+      age_years: p.age_years ?? ageValue,
+      age_months: p.age_months == null || p.age_months === '' ? null : +p.age_months,
+      age_days: p.age_days == null || p.age_days === '' ? null : +p.age_days,
+      gender: String(p.gender || '').trim(),
+      relation_type: String(p.relation_type || '').trim(),
+      guardian_name: String(p.guardian_name || '').trim(),
+      guardian_mobile: String(p.guardian_mobile || '').trim(),
+      age_split: p.age_split ? 1 : 0,
+      mobile: String(p.mobile || '').trim(),
+      email: String(p.email || '').trim(),
+      address: String(p.address || '').trim(),
+      history: String(p.history || '').trim()
+    };
+  }
+
+  protected parsePatientSnapshot(raw: any) {
+    if (!raw) return null;
+    if (typeof raw === 'object') return raw;
+    try {
+      const parsed = JSON.parse(String(raw));
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch { return null; }
+  }
+
+  protected setBillPatientSnapshot(billId: number, snapshot: any) {
+    if (!billId || !snapshot) return;
+    this.ensureBillingSchema();
+    this.db.prepare('UPDATE bills SET patient_snapshot_json=? WHERE id=?').run(JSON.stringify(snapshot), +billId);
+  }
+
+  /** Prefer frozen bill snapshot for prints/lists; fall back to live joined patient fields. */
+  protected applyPatientSnapshotToRow(row: any) {
+    if (!row) return row;
+    const snap = this.parsePatientSnapshot(row.patient_snapshot_json);
+    const base = snap ? {
+      ...row,
+      patient_no: snap.patient_no || row.patient_no || '',
+      title: snap.title || row.patient_title || row.title || '',
+      patient_title: snap.title || row.patient_title || row.title || '',
+      name: snap.name || row.patient_name || row.name || '',
+      patient_name: snap.name || row.patient_name || row.name || '',
+      dob: snap.dob ?? row.dob ?? '',
+      age: snap.age ?? row.age ?? '',
+      age_value: snap.age_value ?? row.age_value ?? null,
+      age_unit: snap.age_unit || row.age_unit || 'YEARS',
+      age_years: snap.age_years ?? row.age_years ?? snap.age_value ?? row.age_value ?? null,
+      age_months: snap.age_months ?? row.age_months ?? null,
+      age_days: snap.age_days ?? row.age_days ?? null,
+      gender: snap.gender ?? row.gender ?? '',
+      relation_type: snap.relation_type ?? row.relation_type ?? '',
+      guardian_name: snap.guardian_name ?? row.guardian_name ?? '',
+      guardian_mobile: snap.guardian_mobile ?? row.guardian_mobile ?? '',
+      age_split: snap.age_split ?? row.age_split ?? 1,
+      mobile: snap.mobile ?? row.mobile ?? row.patient_mobile ?? '',
+      patient_mobile: snap.mobile ?? row.patient_mobile ?? row.mobile ?? '',
+      email: snap.email ?? row.email ?? row.patient_email ?? '',
+      patient_email: snap.email ?? row.patient_email ?? row.email ?? '',
+      address: snap.address ?? row.address ?? '',
+      history: snap.history ?? row.history ?? ''
+    } : { ...row };
+    // Always rebuild display age from value+unit so stale "29 years" text cannot win.
+    base.age = this.formatPatientAgeDisplay(base) || base.age || '';
+    return base;
+  }
+
+  /** Push current master identity onto every bill snapshot for this patient (Details save / all-history). */
+  protected refreshAllBillPatientSnapshots(patientId: number, snapshot: any) {
+    if (!patientId || !snapshot) return 0;
+    this.ensureBillingSchema();
+    const bills = this.db.prepare('SELECT id FROM bills WHERE patient_id=?').all(+patientId) as any[];
+    const stmt = this.db.prepare('UPDATE bills SET patient_snapshot_json=? WHERE id=?');
+    const json = JSON.stringify(snapshot);
+    for (const bill of bills) stmt.run(json, +bill.id);
+    return bills.length;
+  }
+
+  protected billIsPendingForPatientScope(bill: any) {
+    if (!bill?.id) return false;
+    if (String(bill.status || '').toUpperCase() === 'CANCELLED') return false;
+    if ((+bill.due || 0) > 0) return true;
+    const openReport = this.db.prepare(`SELECT 1 AS ok FROM reports WHERE bill_id=? AND UPPER(COALESCE(status,'')) NOT IN ('APPROVED','CANCELLED') LIMIT 1`).get(+bill.id) as any;
+    if (openReport) return true;
+    try {
+      const openQuick = this.db.prepare(`SELECT 1 AS ok FROM quick_reports WHERE bill_id=? AND UPPER(COALESCE(status,'FINISHED')) NOT IN ('FINISHED','APPROVED','CANCELLED') LIMIT 1`).get(+bill.id) as any;
+      if (openQuick) return true;
+    } catch { /* quick schema may be absent in some paths */ }
+    return false;
+  }
+
+  protected billMatchesPatientUpdateScope(bill: any, mode: string, applyFrom: string) {
+    const m = String(mode || 'future').toLowerCase().replace(/[\s-]+/g, '');
+    if (m === 'all' || m === 'allhistory') return true;
+    if (m === 'future' || m === 'futureonly') return false;
+    if (m === 'pending' || m === 'pendingonly') return this.billIsPendingForPatientScope(bill);
+    if (m === 'fromdate' || m === 'from_selected_date') {
+      const from = String(applyFrom || '').trim().slice(0, 10);
+      if (!from) return false;
+      const billDate = String(bill.bill_date || '').trim().slice(0, 10);
+      return !!billDate && billDate >= from;
+    }
+    return false;
+  }
+
+  /**
+   * Apply controlled patient update across historical bills.
+   * - Always updates patient master (caller).
+   * - In-scope bills (billing and/or reporting) get the NEW snapshot.
+   * - Out-of-scope bills without a snapshot are frozen to the OLD identity so reprints stay stable.
+   */
+  protected applyPatientUpdateScope(patientId: number, payload: any, beforePatient: any) {
+    this.ensureBillingSchema();
+    const mode = String(payload?.update_scope || 'future').toLowerCase();
+    const applyFrom = String(payload?.apply_from || '').slice(0, 10);
+    const updateBilling = !(payload?.update_billing === false || payload?.update_billing === 0 || payload?.update_billing === 'false');
+    const updateReporting = !(payload?.update_reporting === false || payload?.update_reporting === 0 || payload?.update_reporting === 'false');
+    const reason = String(payload?.update_reason || '').trim();
+    const beforeSnap = this.buildPatientSnapshot(beforePatient);
+    const afterRow = this.db.prepare('SELECT * FROM patients WHERE id=?').get(+patientId) as any;
+    const afterSnap = this.buildPatientSnapshot(afterRow);
+    if (!afterSnap) return { mode, updated: 0, frozen: 0, skipped: 0 };
+
+    const bills = this.db.prepare(`SELECT id, bill_no, bill_date, due, status, paid, total, patient_snapshot_json
+      FROM bills WHERE patient_id=? ORDER BY id`).all(+patientId) as any[];
+
+    let updated = 0;
+    let frozen = 0;
+    let skipped = 0;
+    const touchDocuments = updateBilling || updateReporting;
+
+    for (const bill of bills) {
+      const inScope = this.billMatchesPatientUpdateScope(bill, mode, applyFrom);
+      if (inScope && touchDocuments) {
+        this.setBillPatientSnapshot(+bill.id, afterSnap);
+        updated += 1;
+      } else if (!this.parsePatientSnapshot(bill.patient_snapshot_json) && beforeSnap) {
+        // Freeze historical identity so live master edits do not rewrite old prints.
+        this.setBillPatientSnapshot(+bill.id, beforeSnap);
+        frozen += 1;
+      } else {
+        skipped += 1;
+      }
+    }
+
+    this.audit('patient.update.scope', JSON.stringify({
+      patientId: +patientId,
+      patient_no: afterSnap.patient_no,
+      mode,
+      apply_from: applyFrom,
+      update_billing: updateBilling,
+      update_reporting: updateReporting,
+      reason,
+      bills_total: bills.length,
+      bills_updated: updated,
+      bills_frozen: frozen,
+      bills_skipped: skipped
+    }));
+    return { mode, updated, frozen, skipped, total: bills.length, updateBilling, updateReporting };
+  }
+
+  /** When patient.fieldsCaps=upper, force uppercase on patient text fields (not age/mobile/email/dob). */
+  protected applyPatientFieldsCaps(p: any) {
+    if (!p) return p;
+    const mode = String(this.getSetting('patient.fieldsCaps', 'off') || 'off').trim().toLowerCase();
+    if (mode !== 'upper' && mode !== 'uppercase' && mode !== 'caps' && mode !== 'true' && mode !== '1' && mode !== 'on') {
+      return p;
+    }
+    const up = (v: any) => {
+      const s = String(v ?? '').trim();
+      return s ? s.toUpperCase() : String(v ?? '');
+    };
+    p.title = up(p.title);
+    p.name = up(p.name);
+    p.relation_type = up(p.relation_type);
+    p.guardian_name = up(p.guardian_name);
+    p.address = up(p.address);
+    p.history = up(p.history);
+    p.gender = up(p.gender);
+    return p;
+  }
+
+  savePatient(p: any) {
+    this.ensureBillingSchema();
+    this.applyPatientFieldsCaps(p);
+    const id = +p.id || 0;
+    const before = id ? (this.db.prepare('SELECT * FROM patients WHERE id=?').get(id) as any) : null;
+    const no = p.patient_no || this.nextConfiguredNo('patient', 'patients', 'patient_no');
+    const ageValue = p.age_value === '' || p.age_value === undefined || p.age_value === null ? null : +p.age_value;
+    const ageUnit = String(p.age_unit || 'YEARS').toUpperCase() || 'YEARS';
+    // Always rebuild display age from value(+split parts) — do not keep a stale string.
+    const age = this.formatPatientAgeDisplay({
+      age_value: ageValue,
+      age_unit: ageUnit,
+      age: p.age,
+      age_split: p.age_split,
+      age_years: p.age_years ?? ageValue,
+      age_months: p.age_months,
+      age_days: p.age_days,
+      dob: p.dob
+    }) || String(p.age || '').trim();
+    const vals = [no, p.title || '', p.name, p.dob || '', age, ageValue, ageUnit, p.gender || '', p.relation_type || '', p.guardian_name || '', p.guardian_mobile || '', p.age_split ? 1 : 0, p.mobile || '', p.email || '', p.address || '', p.history || ''];
+    const now = this.nowIst();
+    let patientId = id;
+    if (id) {
+      this.db.prepare('UPDATE patients SET patient_no=?,title=?,name=?,dob=?,age=?,age_value=?,age_unit=?,gender=?,relation_type=?,guardian_name=?,guardian_mobile=?,age_split=?,mobile=?,email=?,address=?,history=?,updated_at=? WHERE id=?').run(...vals, now, id);
+    } else {
+      patientId = Number(this.db.prepare('INSERT INTO patients(patient_no,title,name,dob,age,age_value,age_unit,gender,relation_type,guardian_name,guardian_mobile,age_split,mobile,email,address,history,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(...vals, now, now).lastInsertRowid);
+    }
+
+    const applyScope = p.apply_scope === true || p.apply_scope === 1 || p.apply_scope === 'true' || p.apply_scope === '1';
+    if (applyScope && patientId) {
+      const scopeResult = this.applyPatientUpdateScope(patientId, p, before || {
+        patient_no: no, title: p.title, name: p.name, dob: p.dob, age, age_value: ageValue, age_unit: ageUnit,
+        gender: p.gender, relation_type: p.relation_type, guardian_name: p.guardian_name, guardian_mobile: p.guardian_mobile,
+        age_split: p.age_split, mobile: p.mobile, email: p.email, address: p.address, history: p.history
+      });
+      this._lastPatientScopeResult = scopeResult;
+    } else if (id) {
+      // Details save: keep historical prints in sync with master (previous live-join behavior).
+      const snap = this.buildPatientSnapshot({
+        patient_no: no, title: p.title, name: p.name, dob: p.dob, age, age_value: ageValue, age_unit: ageUnit,
+        gender: p.gender, relation_type: p.relation_type, guardian_name: p.guardian_name, guardian_mobile: p.guardian_mobile,
+        age_split: p.age_split, mobile: p.mobile, email: p.email, address: p.address, history: p.history
+      });
+      const refreshed = this.refreshAllBillPatientSnapshots(patientId, snap);
+      this.audit('patient.update', JSON.stringify({ patient_no: no, snapshots_refreshed: refreshed }));
+    } else {
+      this.audit('patient.create', `${no}`);
+    }
+    return patientId;
+  }
+
+  protected _lastPatientScopeResult: any = null;
+  lastPatientScopeResult() { return this._lastPatientScopeResult; }
+
   listConsultants() {
     this.ensureCommissionSchema();
     const rows = this.db.prepare('SELECT * FROM consultants ORDER BY name').all() as any[];
     const profiles = this.db.prepare('SELECT * FROM consultant_commission_profiles ORDER BY is_default DESC, id').all() as any[];
     const rules = this.db.prepare('SELECT r.*, cp.profile_name commission_profile_name FROM consultant_commission_rules r LEFT JOIN consultant_commission_profiles cp ON cp.id=r.commission_profile_id ORDER BY r.id').all() as any[];
-    const groupAssignments = this.db.prepare(`SELECT a.*, g.name group_name
-      FROM consultant_commission_group_assignments a
-      JOIN commission_groups g ON g.id=a.group_id
-      WHERE a.active=1 AND g.active=1
-      ORDER BY a.priority,a.id`).all() as any[];
     return rows.map(c => ({
       ...c,
       commission_profiles: profiles.filter(p => +p.consultant_id === +c.id).map(p => ({...p, active: p.active !== 0, is_default: p.is_default === 1})),
-      commission_rules: rules.filter(r => +r.consultant_id === +c.id),
-      commission_groups: groupAssignments.filter(a => +a.consultant_id === +c.id).map(a => ({...a, group_id:+a.group_id, group_name:a.group_name || `Group #${a.group_id}`})),
-      commission_group_ids: groupAssignments.filter(a => +a.consultant_id === +c.id).map(a => Number(a.group_id))
+      commission_rules: rules.filter(r => +r.consultant_id === +c.id)
     }));
   }
 
@@ -1996,14 +2464,6 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
           if (r.item_id && (String(r.item_type || '').toUpperCase() === 'TEST' || String(r.item_type || '').toUpperCase() === 'PROFILE')) ruleInsert.run(id, String(r.item_type).toUpperCase(), +r.item_id, action, commissionProfileId);
         }
       }
-      if (Array.isArray(c.commission_group_ids)) {
-        this.db.prepare('DELETE FROM consultant_commission_group_assignments WHERE consultant_id=?').run(id);
-        const assign = this.db.prepare('INSERT OR IGNORE INTO consultant_commission_group_assignments(consultant_id,group_id,priority,active) VALUES(?,?,?,1)');
-        c.commission_group_ids.forEach((groupId:any, index:number) => {
-          const gid = Number(groupId || 0);
-          if (gid > 0) assign.run(id, gid, (index + 1) * 100);
-        });
-      }
     });
     tx();
     return this.listConsultants();
@@ -2021,7 +2481,6 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
 
     if (hasAuditReferences) {
       this.db.prepare('UPDATE consultants SET active=0 WHERE id=?').run(consultantId);
-      this.db.prepare('UPDATE consultant_commission_group_assignments SET active=0 WHERE consultant_id=?').run(consultantId);
       this.audit('consultant.archive', JSON.stringify({ id: consultantId, name: consultant.name, billCount }));
       return { action: 'archived', consultants: this.listConsultants() };
     }
@@ -2029,7 +2488,6 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     const tx = this.db.transaction(() => {
       this.db.prepare('DELETE FROM consultant_commission_rules WHERE consultant_id=?').run(consultantId);
       this.db.prepare('DELETE FROM consultant_commission_profiles WHERE consultant_id=?').run(consultantId);
-      this.db.prepare('DELETE FROM consultant_commission_group_assignments WHERE consultant_id=?').run(consultantId);
       this.db.prepare('DELETE FROM consultant_commissions WHERE consultant_id=?').run(consultantId);
       this.db.prepare('DELETE FROM consultants WHERE id=?').run(consultantId);
     });
@@ -2065,12 +2523,7 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
   }
   protected normalizeCommissionStatus(value:any) {
     const v = String(value || 'GENERATED').toUpperCase();
-    return ['GENERATED','APPROVED','PAID','HELD','CANCELLED','REVERSAL_PENDING'].includes(v) ? v : 'GENERATED';
-  }
-
-  protected isProtectedCommissionStatus(status:any) {
-    const v = String(status || '').toUpperCase();
-    return v === 'APPROVED' || v === 'PAID' || v === 'REVERSAL_PENDING';
+    return ['GENERATED','APPROVED','PAID','HELD','CANCELLED'].includes(v) ? v : 'GENERATED';
   }
   protected isProfileEffective(profile:any, onDate = new Date()) {
     const from = String(profile?.effective_from || '').trim();
@@ -2233,102 +2686,55 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     return this.db.prepare(`SELECT g.*,a.custom_formula,a.custom_rate,a.priority FROM consultant_commission_group_assignments a JOIN commission_groups g ON g.id=a.group_id JOIN commission_group_items gi ON gi.group_id=g.id WHERE a.consultant_id=? AND a.active=1 AND g.active=1 AND gi.item_type=? AND gi.item_id=? AND (g.effective_from IS NULL OR date(g.effective_from)<=date('now','+330 minutes')) AND (g.effective_to IS NULL OR date(g.effective_to)>=date('now','+330 minutes')) ORDER BY a.priority ASC,a.id ASC LIMIT 1`).get(consultantId,itemType,itemId) as any;
   }
 
-  /** Zero-commission snapshot for a billed item (profile/test line — never child tests). */
-  protected emptyCommissionResult(netAmount:number, runningCost:number, source:string, status:'GENERATED'|'CANCELLED' = 'GENERATED') {
-    return {
-      commission_amount: 0,
-      extra_deduction: 0,
-      profit_amount: +(Math.max(0, netAmount) - Math.max(0, runningCost)).toFixed(2),
-      commission_profile_name: status === 'CANCELLED' ? 'No commission' : '',
-      commission_rule_source: source,
-      commission_status: status,
-      commission_formula: '',
-      commission_formula_values: '',
-      commission_group_id: null,
-      commission_rule_version: 1
-    };
-  }
-
-  protected loadActiveCommissionProfile(profileId:number): any {
-    if (!profileId) return null;
-    const profile = this.db.prepare('SELECT * FROM consultant_commission_profiles WHERE id=? AND active=1').get(profileId) as any;
-    if (!profile || !this.isProfileEffective(profile)) return null;
-    return profile;
-  }
-
-  protected resolveDefaultCommissionProfile(consultantId:number): any {
-    let profile = this.db.prepare('SELECT cp.* FROM consultants c JOIN consultant_commission_profiles cp ON cp.id=c.default_commission_profile_id WHERE c.id=? AND cp.active=1').get(consultantId) as any;
+  protected computeItemCommission(consultantId:number, item:any, netAmount:number, runningCost:number, beforeDiscountAmount?:number): any {
+    const effectiveNetAmount = Math.max(0, +netAmount || 0);
+    const rawBeforeDiscountAmount = beforeDiscountAmount === undefined || beforeDiscountAmount === null ? effectiveNetAmount : Number(beforeDiscountAmount);
+    const preDiscountAmount = Math.max(effectiveNetAmount, Number.isFinite(rawBeforeDiscountAmount) ? rawBeforeDiscountAmount : effectiveNetAmount);
+    if (!this.commissionAllowedForItem(item)) return { commission_amount:0, extra_deduction:0, profit_amount:+(effectiveNetAmount-runningCost).toFixed(2), commission_profile_name:'No commission', commission_rule_source:'Outsourced disallowed', commission_status:'CANCELLED' };
+    if (!consultantId) return { commission_amount:0, extra_deduction:0, profit_amount:+(effectiveNetAmount-runningCost).toFixed(2), commission_profile_name:'', commission_rule_source:'No consultant', commission_status:'GENERATED' };
+    const itemType = String(item.item_type || '').toUpperCase();
+    const rule = this.db.prepare('SELECT * FROM consultant_commission_rules WHERE consultant_id=? AND item_type=? AND item_id=? ORDER BY id DESC LIMIT 1').get(consultantId, itemType, +item.item_id || 0) as any;
+    if (rule && String(rule.action || '').toUpperCase() === 'NO_COMMISSION') return { commission_amount:0, extra_deduction:0, profit_amount:+(effectiveNetAmount-runningCost).toFixed(2), commission_profile_name:'No commission', commission_rule_source:'Item exception', commission_status:'CANCELLED' };
+    let profile:any = null;
+    let group:any = null;
+    if (rule?.commission_profile_id) profile = this.db.prepare('SELECT * FROM consultant_commission_profiles WHERE id=? AND active=1').get(rule.commission_profile_id) as any;
+    if (!profile && !rule) group = this.resolveCommissionGroup(consultantId,itemType,+item.item_id||0);
     if (profile && !this.isProfileEffective(profile)) profile = null;
-    if (!profile) {
-      profile = this.db.prepare('SELECT * FROM consultant_commission_profiles WHERE consultant_id=? AND is_default=1 AND active=1 ORDER BY id LIMIT 1').get(consultantId) as any;
-      if (profile && !this.isProfileEffective(profile)) profile = null;
-    }
-    if (!profile) {
+    if (!profile && !group) profile = this.db.prepare('SELECT cp.* FROM consultants c JOIN consultant_commission_profiles cp ON cp.id=c.default_commission_profile_id WHERE c.id=? AND cp.active=1').get(consultantId) as any;
+    if (profile && !this.isProfileEffective(profile)) profile = null;
+    if (!profile && !group) profile = this.db.prepare('SELECT * FROM consultant_commission_profiles WHERE consultant_id=? AND is_default=1 AND active=1 ORDER BY id LIMIT 1').get(consultantId) as any;
+    if (profile && !this.isProfileEffective(profile)) profile = null;
+    if (!profile && !group) {
       const legacy = this.db.prepare('SELECT default_commission_type, default_commission_value FROM consultants WHERE id=?').get(consultantId) as any;
-      if (legacy && (+legacy.default_commission_value || 0) > 0) {
-        profile = {
-          profile_name: 'Legacy default',
-          commission_type: legacy.default_commission_type || 'PERCENT',
-          commission_value: +legacy.default_commission_value || 0,
-          calculation_base: 'GROSS',
-          extra_deduction_type: 'NONE',
-          extra_deduction_value: 0,
-          discount_basis: 'AFTER_DISCOUNT',
-          round_mode: 'NONE',
-          fixed_apply_mode: 'PER_ITEM',
-          min_commission: 0,
-          max_commission: 0,
-          status: 'GENERATED'
-        };
-      }
+      if (legacy && (+legacy.default_commission_value || 0) > 0) profile = { profile_name:'Legacy default', commission_type: legacy.default_commission_type || 'PERCENT', commission_value:+legacy.default_commission_value || 0, calculation_base:'GROSS', extra_deduction_type:'NONE', extra_deduction_value:0, discount_basis:'AFTER_DISCOUNT', round_mode:'NONE', fixed_apply_mode:'PER_ITEM', min_commission:0, max_commission:0, status:'GENERATED' };
     }
-    return profile;
-  }
-
-  protected applyCommissionFromGroup(group:any, item:any, effectiveNetAmount:number, runningCost:number, preDiscountAmount:number) {
-    const vars = this.commissionFormulaVariables(item, effectiveNetAmount, runningCost, preDiscountAmount);
-    const kind = String(group.calculation_type || 'PERCENT_NET').toUpperCase();
-    let commission = 0;
-    let formula = '';
-    if (kind === 'FORMULA') {
-      formula = String(group.custom_formula || group.formula_expression || '');
-      commission = this.evaluateCommissionFormula(formula, vars);
-    } else if (kind === 'PERCENT_PROFIT') commission = Math.max(0, vars.PROFIT) * Number(group.custom_rate ?? group.rate ?? 0) / 100;
-    else if (kind === 'PERCENT_GROSS') commission = vars.SELLING_PRICE * Number(group.custom_rate ?? group.rate ?? 0) / 100;
-    else if (kind === 'FIXED') commission = Number(group.fixed_amount || group.custom_rate || group.rate || 0) * Math.max(1, vars.QUANTITY);
-    else commission = vars.NET_AMOUNT * Number(group.custom_rate ?? group.rate ?? 0) / 100;
-    if (Number(group.min_commission || 0) > 0 && commission > 0) commission = Math.max(commission, Number(group.min_commission));
-    if (Number(group.max_commission || 0) > 0) commission = Math.min(commission, Number(group.max_commission));
-    commission = Math.max(0, +commission.toFixed(2));
-    return {
-      commission_amount: commission,
-      extra_deduction: 0,
-      profit_amount: +(effectiveNetAmount - runningCost - commission).toFixed(2),
-      commission_profile_name: group.name || '',
-      commission_rule_source: 'Commission group',
-      commission_status: 'GENERATED',
-      commission_formula: formula,
-      commission_formula_values: JSON.stringify(vars),
-      commission_group_id: group.id,
-      commission_rule_version: Number(group.version || 1)
-    };
-  }
-
-  protected applyCommissionFromProfile(profile:any, item:any, effectiveNetAmount:number, runningCost:number, preDiscountAmount:number, ruleSource:string) {
+    if (!profile && !group) return { commission_amount:0, extra_deduction:0, profit_amount:+(effectiveNetAmount-runningCost).toFixed(2), commission_profile_name:'', commission_rule_source:'No active profile', commission_status:'GENERATED' };
+    if (group) {
+      const vars=this.commissionFormulaVariables(item,effectiveNetAmount,runningCost,preDiscountAmount);
+      const kind=String(group.calculation_type||'PERCENT_NET').toUpperCase();
+      let commission=0; let formula='';
+      if(kind==='FORMULA') { formula=String(group.custom_formula||group.formula_expression||''); commission=this.evaluateCommissionFormula(formula,vars); }
+      else if(kind==='PERCENT_PROFIT') commission=Math.max(0,vars.PROFIT)*Number(group.custom_rate??group.rate??0)/100;
+      else if(kind==='PERCENT_GROSS') commission=vars.SELLING_PRICE*Number(group.custom_rate??group.rate??0)/100;
+      else if(kind==='FIXED') commission=Number(group.fixed_amount||group.custom_rate||group.rate||0)*Math.max(1,vars.QUANTITY);
+      else commission=vars.NET_AMOUNT*Number(group.custom_rate??group.rate??0)/100;
+      if(Number(group.min_commission||0)>0&&commission>0) commission=Math.max(commission,Number(group.min_commission));
+      if(Number(group.max_commission||0)>0) commission=Math.min(commission,Number(group.max_commission));
+      commission=Math.max(0,+commission.toFixed(2));
+      return {commission_amount:commission,extra_deduction:0,profit_amount:+(effectiveNetAmount-runningCost-commission).toFixed(2),commission_profile_name:group.name||'',commission_rule_source:'Commission group',commission_status:'GENERATED',commission_formula:formula,commission_formula_values:JSON.stringify(vars),commission_group_id:group.id,commission_rule_version:Number(group.version||1)};
+    }
     const discountBasis = this.normalizeDiscountBasis(profile.discount_basis);
     const commissionAmountBase = discountBasis === 'BEFORE_DISCOUNT' ? preDiscountAmount : effectiveNetAmount;
     const baseMode = this.normalizeCalculationBase(profile.calculation_base);
     const deductionType = this.normalizeDeductionType(profile.extra_deduction_type);
-    const extraDeduction = deductionType === 'PERCENT'
-      ? Math.max(0, commissionAmountBase * (+profile.extra_deduction_value || 0) / 100)
-      : deductionType === 'AMOUNT' ? Math.max(0, +profile.extra_deduction_value || 0) : 0;
+    const extraDeduction = deductionType === 'PERCENT' ? Math.max(0, commissionAmountBase * (+profile.extra_deduction_value || 0) / 100) : deductionType === 'AMOUNT' ? Math.max(0, +profile.extra_deduction_value || 0) : 0;
     const commissionBase = Math.max(0, commissionAmountBase - (baseMode === 'GROSS' ? 0 : runningCost) - (baseMode === 'NET_AFTER_COST_DEDUCTION' ? extraDeduction : 0));
     const type = this.normalizeCommissionType(profile.commission_type);
     let commission = 0;
     if (type === 'FIXED') {
       const applyMode = this.normalizeFixedApplyMode(profile.fixed_apply_mode);
       const qty = Math.max(1, +item.quantity || 1);
-      commission = applyMode === 'PER_QUANTITY' ? Math.max(0, +profile.commission_value || 0) * qty : Math.max(0, +profile.commission_value || 0);
+      commission = applyMode === 'PER_QUANTITY' ? Math.max(0,+profile.commission_value||0) * qty : Math.max(0,+profile.commission_value||0);
     } else if (type === 'PERCENT') {
       commission = Math.max(0, commissionBase * (+profile.commission_value || 0) / 100);
     }
@@ -2338,76 +2744,7 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     if (max > 0) commission = Math.min(commission, max);
     commission = this.applyCommissionRounding(commission, profile.round_mode);
     const totalExtra = baseMode === 'NET_AFTER_COST_DEDUCTION' ? extraDeduction : 0;
-    return {
-      commission_amount: +commission.toFixed(2),
-      extra_deduction: +totalExtra.toFixed(2),
-      profit_amount: +(effectiveNetAmount - runningCost - totalExtra - commission).toFixed(2),
-      commission_profile_name: profile.profile_name || '',
-      commission_rule_source: ruleSource,
-      commission_status: this.normalizeCommissionStatus(profile.status),
-      commission_formula: '',
-      commission_formula_values: '',
-      commission_group_id: null,
-      commission_rule_version: 1
-    };
-  }
-
-  /**
-   * Commission hierarchy (billed item only — never child tests inside a profile):
-   * 1. Item-level No Commission
-   * 2. Item-level Special Commission (USE_PROFILE)
-   * 3. Commission Group
-   * 4. Consultant Default Commission
-   * 5. No Commission (0)
-   */
-  protected computeItemCommission(consultantId:number, item:any, netAmount:number, runningCost:number, beforeDiscountAmount?:number): any {
-    const effectiveNetAmount = Math.max(0, +netAmount || 0);
-    const rawBeforeDiscountAmount = beforeDiscountAmount === undefined || beforeDiscountAmount === null ? effectiveNetAmount : Number(beforeDiscountAmount);
-    const preDiscountAmount = Math.max(effectiveNetAmount, Number.isFinite(rawBeforeDiscountAmount) ? rawBeforeDiscountAmount : effectiveNetAmount);
-
-    // Master hard-block (outsourced with commission_allowed=0)
-    if (!this.commissionAllowedForItem(item)) {
-      return this.emptyCommissionResult(effectiveNetAmount, runningCost, 'Outsourced disallowed', 'CANCELLED');
-    }
-    if (!consultantId) {
-      return this.emptyCommissionResult(effectiveNetAmount, runningCost, 'No consultant');
-    }
-
-    const itemType = String(item.item_type || '').toUpperCase();
-    const itemId = +item.item_id || 0;
-    const rule = this.db.prepare('SELECT * FROM consultant_commission_rules WHERE consultant_id=? AND item_type=? AND item_id=? ORDER BY id DESC LIMIT 1')
-      .get(consultantId, itemType, itemId) as any;
-    const ruleAction = String(rule?.action || '').toUpperCase();
-
-    // 1. Item-level No Commission — highest priority
-    if (rule && ruleAction === 'NO_COMMISSION') {
-      return this.emptyCommissionResult(effectiveNetAmount, runningCost, 'Item no commission', 'CANCELLED');
-    }
-
-    // 2. Item-level Special Commission — overrides group and default
-    if (rule && ruleAction !== 'NO_COMMISSION') {
-      const specialProfile = this.loadActiveCommissionProfile(+rule.commission_profile_id || 0);
-      if (specialProfile) {
-        return this.applyCommissionFromProfile(specialProfile, item, effectiveNetAmount, runningCost, preDiscountAmount, 'Item special rule');
-      }
-      // Special rule exists but profile missing/inactive — do not fall through to group/default
-      return this.emptyCommissionResult(effectiveNetAmount, runningCost, 'Item special rule unavailable');
-    }
-
-    // 3. Commission Group — only when no item-level rule
-    const group = this.resolveCommissionGroup(consultantId, itemType, itemId);
-    if (group) {
-      return this.applyCommissionFromGroup(group, item, effectiveNetAmount, runningCost, preDiscountAmount);
-    }
-
-    // 4. Consultant Default Commission
-    const defaultProfile = this.resolveDefaultCommissionProfile(consultantId);
-    if (defaultProfile) {
-      return this.applyCommissionFromProfile(defaultProfile, item, effectiveNetAmount, runningCost, preDiscountAmount, 'Default profile');
-    }
-
-    // 5. No Commission
-    return this.emptyCommissionResult(effectiveNetAmount, runningCost, 'No commission');
+    return { commission_amount:+commission.toFixed(2), extra_deduction:+totalExtra.toFixed(2), profit_amount:+(effectiveNetAmount - runningCost - totalExtra - commission).toFixed(2), commission_profile_name:profile.profile_name || '', commission_rule_source: rule ? 'Item override' : 'Default profile', commission_status:this.normalizeCommissionStatus(profile.status) };
   }
 
   listCommissionEntries(filters:any = {}) {
@@ -2423,14 +2760,8 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     if (to) { where.push('date(b.bill_date) <= date(?)'); params.push(to); }
     if (consultantId) { where.push('b.consultant_id=?'); params.push(consultantId); }
     if (status !== 'ALL') {
-      if (status === 'CANCELLED') {
-        where.push("UPPER(COALESCE(bi.commission_status,'GENERATED'))='CANCELLED'");
-      } else if (status === 'REVERSAL_PENDING') {
-        where.push("UPPER(COALESCE(bi.commission_status,''))='REVERSAL_PENDING'");
-      } else {
-        where.push("UPPER(COALESCE(bi.commission_status,'GENERATED'))=?");
-        params.push(status);
-      }
+      if (status === 'CANCELLED') where.push("UPPER(COALESCE(b.status,'')) IN ('CANCELLED','CANCELED')");
+      else { where.push("UPPER(COALESCE(b.status,'')) NOT IN ('CANCELLED','CANCELED')"); where.push('UPPER(COALESCE(bi.commission_status,\'GENERATED\'))=?'); params.push(status); }
     }
     if (search) {
       const q = `%${search}%`;
@@ -2439,7 +2770,7 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     }
     const rows = this.db.prepare(`SELECT bi.id,bi.bill_id,bi.item_type,bi.item_id,bi.name item_name,bi.quantity,bi.net_amount,
       bi.running_cost,bi.extra_deduction,bi.commission_amount,bi.profit_amount,bi.commission_profile_name,bi.commission_rule_source,
-      UPPER(COALESCE(bi.commission_status,'GENERATED')) commission_status,
+      CASE WHEN UPPER(COALESCE(b.status,'')) IN ('CANCELLED','CANCELED') THEN 'CANCELLED' ELSE UPPER(COALESCE(bi.commission_status,'GENERATED')) END commission_status,
       bi.commission_approved_at,bi.commission_paid_at,bi.commission_hold_reason,bi.commission_settlement_id,
       b.bill_no,b.bill_date,b.total bill_total,b.paid bill_paid,b.due bill_due,b.status bill_status,
       c.id consultant_id,c.name consultant_name,c.clinic consultant_clinic,p.name patient_name
@@ -2449,17 +2780,13 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
       LEFT JOIN patients p ON p.id=b.patient_id
       WHERE ${where.join(' AND ')}
       ORDER BY datetime(b.bill_date) DESC, b.id DESC, bi.id`).all(...params) as any[];
-    const totals:any = { records:rows.length, commission:0, generated:0, approved:0, held:0, paid:0, cancelled:0, reversal_pending:0, billCount:0, consultantCount:0 };
+    const totals:any = { records:rows.length, commission:0, generated:0, approved:0, held:0, paid:0, cancelled:0, billCount:0, consultantCount:0 };
     const bills = new Set<number>(), consultants = new Set<number>();
     for (const r of rows) {
       const amount = Number(r.commission_amount || 0);
-      const st = String(r.commission_status || 'GENERATED').toUpperCase();
-      totals.commission += (st === 'CANCELLED' || st === 'REVERSAL_PENDING') ? 0 : amount;
-      if (st === 'REVERSAL_PENDING') totals.reversal_pending += amount;
-      else {
-        const key = st.toLowerCase();
-        if (key in totals) totals[key] += amount;
-      }
+      totals.commission += r.commission_status === 'CANCELLED' ? 0 : amount;
+      const key = String(r.commission_status || 'GENERATED').toLowerCase();
+      if (key in totals) totals[key] += amount;
       bills.add(Number(r.bill_id)); if (r.consultant_id) consultants.add(Number(r.consultant_id));
     }
     totals.billCount=bills.size; totals.consultantCount=consultants.size;
@@ -2477,8 +2804,7 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     const now = this.nowIst();
     const reason = status === 'HELD' ? String(payload.reason || '').trim() : '';
     this.db.prepare(`UPDATE bill_items SET commission_status=?, commission_approved_at=?, commission_hold_reason=?
-      WHERE id IN (${placeholders}) AND COALESCE(commission_amount,0)>0
-        AND UPPER(COALESCE(commission_status,'GENERATED')) NOT IN ('PAID','CANCELLED','REVERSAL_PENDING')`)
+      WHERE id IN (${placeholders}) AND COALESCE(commission_amount,0)>0 AND UPPER(COALESCE(commission_status,'GENERATED')) <> 'PAID'`)
       .run(status, status === 'APPROVED' ? now : null, reason || null, ...ids);
     this.audit('commission.status', JSON.stringify({ids,status,reason}));
     return this.listCommissionEntries(payload.filters || {});
@@ -2522,252 +2848,6 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
       FROM commission_settlements cs JOIN consultants c ON c.id=cs.consultant_id
       LEFT JOIN commission_settlement_items csi ON csi.settlement_id=cs.id
       WHERE ${where.join(' AND ')} GROUP BY cs.id ORDER BY datetime(cs.settlement_date) DESC,cs.id DESC`).all(...params);
-  }
-
-  getCommissionSettlement(settlementId:number) {
-    this.ensureCommissionSchema();
-    const id = Number(settlementId || 0);
-    if (!id) throw new Error('Settlement id is required.');
-    const header = this.db.prepare(`SELECT cs.*, c.name consultant_name, c.phone consultant_phone, c.clinic consultant_clinic
-      FROM commission_settlements cs
-      JOIN consultants c ON c.id=cs.consultant_id
-      WHERE cs.id=?`).get(id) as any;
-    if (!header) throw new Error('Settlement not found.');
-    const items = this.db.prepare(`SELECT csi.id, csi.amount, bi.id bill_item_id, bi.name item_name, bi.item_type, bi.quantity,
-        bi.net_amount, bi.running_cost, bi.profit_amount, bi.commission_profile_name, bi.commission_rule_source,
-        bi.commission_status, b.bill_no, b.bill_date, p.name patient_name
-      FROM commission_settlement_items csi
-      JOIN bill_items bi ON bi.id=csi.bill_item_id
-      JOIN bills b ON b.id=bi.bill_id
-      LEFT JOIN patients p ON p.id=b.patient_id
-      WHERE csi.settlement_id=?
-      ORDER BY datetime(b.bill_date), b.bill_no, bi.id`).all(id) as any[];
-    return { ...header, items, item_count: items.length };
-  }
-
-  /**
-   * Commission reports for PDF/Excel export.
-   * report_type: CONSULTANT_SUMMARY | BILL_DETAILS | PENDING | HELD | SETTLEMENT_HISTORY | CANCELLED_REVERSAL | PROFIT
-   */
-  getCommissionReport(filters: any = {}) {
-    this.ensureCommissionSchema();
-    const reportType = String(filters.report_type || filters.type || 'CONSULTANT_SUMMARY').toUpperCase();
-    const from = String(filters.from || filters.fromDate || '').trim();
-    const to = String(filters.to || filters.toDate || '').trim();
-    const consultantId = Number(filters.consultant_id || filters.consultantId || 0);
-    const periodLabel = [from || '…', to || '…'].join(' to ');
-
-    if (reportType === 'SETTLEMENT_HISTORY') {
-      const settlements = this.listCommissionSettlements({ from, to });
-      const filtered = consultantId
-        ? settlements.filter((s: any) => Number(s.consultant_id) === consultantId)
-        : settlements;
-      const totalAmount = +filtered.reduce((s: number, r: any) => s + Number(r.amount || 0), 0).toFixed(2);
-      return {
-        report_type: reportType,
-        title: 'Paid Settlement History',
-        period: periodLabel,
-        columns: ['Settlement No', 'Date', 'Consultant', 'Items', 'Mode', 'Reference', 'Amount'],
-        rows: filtered.map((s: any) => ({
-          settlement_no: s.settlement_no,
-          settlement_date: s.settlement_date,
-          consultant_name: s.consultant_name,
-          item_count: s.item_count,
-          payment_mode: s.payment_mode,
-          reference_no: s.reference_no || '',
-          amount: +Number(s.amount || 0).toFixed(2)
-        })),
-        totals: { records: filtered.length, amount: totalAmount }
-      };
-    }
-
-    const statusMap: Record<string, string> = {
-      PENDING: 'GENERATED',
-      HELD: 'HELD',
-      BILL_DETAILS: 'ALL',
-      CONSULTANT_SUMMARY: 'ALL',
-      PROFIT: 'ALL',
-      CANCELLED_REVERSAL: 'CANCELLED_REVERSAL'
-    };
-
-    let entries: any;
-    if (reportType === 'CANCELLED_REVERSAL') {
-      const cancelled = this.listCommissionEntries({ from, to, consultant_id: consultantId, status: 'CANCELLED', search: filters.search });
-      const reversal = this.listCommissionEntries({ from, to, consultant_id: consultantId, status: 'REVERSAL_PENDING', search: filters.search });
-      entries = {
-        rows: [...(cancelled.rows || []), ...(reversal.rows || [])],
-        totals: {
-          records: (cancelled.rows?.length || 0) + (reversal.rows?.length || 0),
-          cancelled: cancelled.totals?.cancelled || 0,
-          reversal_pending: reversal.totals?.reversal_pending || 0,
-          commission: +((cancelled.totals?.cancelled || 0) + (reversal.totals?.reversal_pending || 0)).toFixed(2)
-        }
-      };
-    } else {
-      const status = statusMap[reportType] || 'ALL';
-      entries = this.listCommissionEntries({
-        from, to, consultant_id: consultantId, status, search: filters.search
-      });
-      if (['CONSULTANT_SUMMARY', 'BILL_DETAILS', 'PROFIT'].includes(reportType)) {
-        entries = {
-          ...entries,
-          rows: (entries.rows || []).filter((r: any) => {
-            const st = String(r.commission_status || '').toUpperCase();
-            return st !== 'CANCELLED' && st !== 'REVERSAL_PENDING';
-          })
-        };
-        const commission = +entries.rows.reduce((s: number, r: any) => s + Number(r.commission_amount || 0), 0).toFixed(2);
-        entries.totals = { ...entries.totals, records: entries.rows.length, commission };
-      }
-    }
-
-    const rows = entries.rows || [];
-
-    if (reportType === 'CONSULTANT_SUMMARY') {
-      const map = new Map<string, any>();
-      for (const r of rows) {
-        const key = String(r.consultant_id || 0);
-        const cur = map.get(key) || {
-          consultant_id: r.consultant_id || 0,
-          consultant_name: r.consultant_name || 'No consultant',
-          clinic: r.consultant_clinic || '',
-          entries: 0,
-          bills: new Set<number>(),
-          net_amount: 0,
-          running_cost: 0,
-          commission_amount: 0,
-          profit_amount: 0,
-          generated: 0,
-          approved: 0,
-          held: 0,
-          paid: 0
-        };
-        cur.entries += 1;
-        cur.bills.add(Number(r.bill_id));
-        cur.net_amount += Number(r.net_amount || 0);
-        cur.running_cost += Number(r.running_cost || 0);
-        cur.commission_amount += Number(r.commission_amount || 0);
-        cur.profit_amount += Number(r.profit_amount || 0);
-        const st = String(r.commission_status || 'GENERATED').toLowerCase();
-        if (st in cur) cur[st] += Number(r.commission_amount || 0);
-        map.set(key, cur);
-      }
-      const summaryRows = Array.from(map.values()).map((r: any) => ({
-        consultant_name: r.consultant_name,
-        clinic: r.clinic,
-        entries: r.entries,
-        bill_count: r.bills.size,
-        net_amount: +r.net_amount.toFixed(2),
-        running_cost: +r.running_cost.toFixed(2),
-        commission_amount: +r.commission_amount.toFixed(2),
-        profit_amount: +r.profit_amount.toFixed(2),
-        generated: +r.generated.toFixed(2),
-        approved: +r.approved.toFixed(2),
-        held: +r.held.toFixed(2),
-        paid: +r.paid.toFixed(2)
-      })).sort((a, b) => a.consultant_name.localeCompare(b.consultant_name));
-      return {
-        report_type: reportType,
-        title: 'Consultant-wise Commission Summary',
-        period: periodLabel,
-        columns: ['Consultant', 'Clinic', 'Entries', 'Bills', 'Net', 'Running Cost', 'Commission', 'Profit', 'Pending', 'Approved', 'Held', 'Paid'],
-        rows: summaryRows,
-        totals: {
-          records: summaryRows.length,
-          commission: +summaryRows.reduce((s: number, r: any) => s + r.commission_amount, 0).toFixed(2),
-          net_amount: +summaryRows.reduce((s: number, r: any) => s + r.net_amount, 0).toFixed(2),
-          running_cost: +summaryRows.reduce((s: number, r: any) => s + r.running_cost, 0).toFixed(2),
-          profit_amount: +summaryRows.reduce((s: number, r: any) => s + r.profit_amount, 0).toFixed(2)
-        }
-      };
-    }
-
-    if (reportType === 'BILL_DETAILS') {
-      const map = new Map<number, any>();
-      for (const r of rows) {
-        const billId = Number(r.bill_id);
-        const cur = map.get(billId) || {
-          bill_id: billId,
-          bill_no: r.bill_no,
-          bill_date: r.bill_date,
-          patient_name: r.patient_name || '',
-          consultant_name: r.consultant_name || 'No consultant',
-          items: 0,
-          net_amount: 0,
-          running_cost: 0,
-          commission_amount: 0,
-          profit_amount: 0
-        };
-        cur.items += 1;
-        cur.net_amount += Number(r.net_amount || 0);
-        cur.running_cost += Number(r.running_cost || 0);
-        cur.commission_amount += Number(r.commission_amount || 0);
-        cur.profit_amount += Number(r.profit_amount || 0);
-        map.set(billId, cur);
-      }
-      const billRows = Array.from(map.values()).map((r: any) => ({
-        ...r,
-        net_amount: +r.net_amount.toFixed(2),
-        running_cost: +r.running_cost.toFixed(2),
-        commission_amount: +r.commission_amount.toFixed(2),
-        profit_amount: +r.profit_amount.toFixed(2)
-      }));
-      return {
-        report_type: reportType,
-        title: 'Bill-wise Commission Details',
-        period: periodLabel,
-        columns: ['Bill No', 'Date', 'Patient', 'Consultant', 'Items', 'Net', 'Running Cost', 'Commission', 'Profit'],
-        rows: billRows,
-        detail_rows: rows,
-        totals: {
-          records: billRows.length,
-          commission: +billRows.reduce((s: number, r: any) => s + r.commission_amount, 0).toFixed(2),
-          net_amount: +billRows.reduce((s: number, r: any) => s + r.net_amount, 0).toFixed(2),
-          profit_amount: +billRows.reduce((s: number, r: any) => s + r.profit_amount, 0).toFixed(2)
-        }
-      };
-    }
-
-    const titles: Record<string, string> = {
-      PENDING: 'Pending Approval Commission List',
-      HELD: 'Held Commission List',
-      CANCELLED_REVERSAL: 'Cancelled / Reversal Pending Commission',
-      PROFIT: 'Profit Report (with Commission Deduction)'
-    };
-
-    const detailRows = rows.map((r: any) => ({
-      bill_no: r.bill_no,
-      bill_date: r.bill_date,
-      patient_name: r.patient_name || '',
-      consultant_name: r.consultant_name || 'No consultant',
-      item_name: r.item_name,
-      item_type: r.item_type,
-      net_amount: +Number(r.net_amount || 0).toFixed(2),
-      running_cost: +Number(r.running_cost || 0).toFixed(2),
-      commission_amount: +Number(r.commission_amount || 0).toFixed(2),
-      profit_amount: +Number(r.profit_amount || 0).toFixed(2),
-      commission_rule_source: r.commission_rule_source || '',
-      commission_profile_name: r.commission_profile_name || '',
-      commission_status: r.commission_status,
-      hold_reason: r.commission_hold_reason || ''
-    }));
-
-    return {
-      report_type: reportType,
-      title: titles[reportType] || 'Commission Report',
-      period: periodLabel,
-      columns: reportType === 'PROFIT'
-        ? ['Bill No', 'Date', 'Patient', 'Consultant', 'Item', 'Net', 'Running Cost', 'Commission', 'Profit', 'Status']
-        : ['Bill No', 'Date', 'Patient', 'Consultant', 'Item', 'Net', 'Commission', 'Rule', 'Status'],
-      rows: detailRows,
-      totals: {
-        records: detailRows.length,
-        commission: +detailRows.reduce((s: number, r: any) => s + r.commission_amount, 0).toFixed(2),
-        net_amount: +detailRows.reduce((s: number, r: any) => s + r.net_amount, 0).toFixed(2),
-        running_cost: +detailRows.reduce((s: number, r: any) => s + r.running_cost, 0).toFixed(2),
-        profit_amount: +detailRows.reduce((s: number, r: any) => s + r.profit_amount, 0).toFixed(2)
-      }
-    };
   }
 
   calculateBillCommission(payload:any) {

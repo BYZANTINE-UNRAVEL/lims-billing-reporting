@@ -4378,14 +4378,12 @@
 }
 
 .billing-stepper.pro-billing .template-result-title {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  gap: 8px !important;
+  display: block !important;
   min-width: 0 !important;
 }
 
 .billing-stepper.pro-billing .template-result-title b {
+  display: block !important;
   min-width: 0 !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
@@ -4395,9 +4393,10 @@
   font-weight: 900 !important;
 }
 
-.billing-stepper.pro-billing .template-result-title small {
-  flex: 0 0 auto !important;
-  max-width: 132px !important;
+.billing-stepper.pro-billing .template-result-kind {
+  display: inline-flex !important;
+  align-items: center !important;
+  max-width: 100% !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
@@ -4405,9 +4404,11 @@
   background: rgba(99, 102, 241, .12) !important;
   color: #c4b5fd !important;
   border-radius: 999px !important;
-  padding: 3px 8px !important;
+  padding: 2px 8px !important;
   font-size: 10px !important;
   font-weight: 900 !important;
+  line-height: 1.35 !important;
+  width: fit-content !important;
 }
 
 .billing-stepper.pro-billing .template-result-copy > span {

@@ -5,10 +5,11 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
       if (+id < 0) return this.getQuickPendingReport(Math.abs(+id));
       return this.getQuickFinishedReport(+id);
     }
-    let r=this.db.prepare('SELECT r.*,b.bill_no,b.bill_date,p.id patient_id,p.patient_no,p.title patient_title,p.name patient_name,p.age,p.age_value,p.age_unit,p.gender,p.mobile,p.mobile patient_mobile,p.email patient_email,p.history,c.name consultant_name FROM reports r JOIN bills b ON b.id=r.bill_id JOIN patients p ON p.id=b.patient_id LEFT JOIN consultants c ON c.id=b.consultant_id WHERE r.id=? OR b.id=?').get(id,id) as any;
+    let r=this.db.prepare('SELECT r.*,b.bill_no,b.bill_date,b.patient_snapshot_json,p.id patient_id,p.patient_no,p.title patient_title,p.name patient_name,p.age,p.age_value,p.age_unit,p.gender,p.mobile,p.mobile patient_mobile,p.email patient_email,p.history,c.name consultant_name FROM reports r JOIN bills b ON b.id=r.bill_id JOIN patients p ON p.id=b.patient_id LEFT JOIN consultants c ON c.id=b.consultant_id WHERE r.id=? OR b.id=?').get(id,id) as any;
     if(!r) return null;
     this.ensureReportReady(+r.id);
-    r=this.db.prepare('SELECT r.*,b.bill_no,b.bill_date,p.id patient_id,p.patient_no,p.title patient_title,p.name patient_name,p.age,p.age_value,p.age_unit,p.gender,p.mobile,p.mobile patient_mobile,p.email patient_email,p.history,c.name consultant_name FROM reports r JOIN bills b ON b.id=r.bill_id JOIN patients p ON p.id=b.patient_id LEFT JOIN consultants c ON c.id=b.consultant_id WHERE r.id=?').get(r.id) as any;
+    r=this.db.prepare('SELECT r.*,b.bill_no,b.bill_date,b.patient_snapshot_json,p.id patient_id,p.patient_no,p.title patient_title,p.name patient_name,p.age,p.age_value,p.age_unit,p.gender,p.mobile,p.mobile patient_mobile,p.email patient_email,p.history,c.name consultant_name FROM reports r JOIN bills b ON b.id=r.bill_id JOIN patients p ON p.id=b.patient_id LEFT JOIN consultants c ON c.id=b.consultant_id WHERE r.id=?').get(r.id) as any;
+    r = this.applyPatientSnapshotToRow(r);
     const isRecheckReport = String((r as any).report_kind || '').toUpperCase() === 'RECHECK' || String((r as any).report_scope || '').toUpperCase() === 'RECHECK';
     const items = this.db.prepare(`SELECT ri.*,
       COALESCE(sc.id,0) collection_id,
@@ -70,24 +71,28 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
         }
       }
     }
-    return {...r, items};
+    return this.attachProfileRemarks({...r, items});
   }
   protected listQuickReports(status='') {
     this.ensureQuickReportingSchema();
     const rows:any[] = [];
-    const bills = this.db.prepare(`SELECT b.id bill_id,b.bill_no,b.bill_date,p.title patient_title,p.name patient_name,p.mobile patient_mobile,p.patient_no,p.age,p.gender,c.name consultant_name
+    const bills = this.db.prepare(`SELECT b.id bill_id,b.bill_no,b.bill_date,b.patient_snapshot_json,p.title patient_title,p.name patient_name,p.mobile patient_mobile,p.patient_no,p.age,p.age_value,p.age_unit,p.gender,c.name consultant_name
       FROM bills b JOIN patients p ON p.id=b.patient_id LEFT JOIN consultants c ON c.id=b.consultant_id
       WHERE COALESCE(b.status,'BILLED') NOT IN ('CANCELLED','DELETED')
       ORDER BY b.id DESC LIMIT 300`).all() as any[];
     for (const b of bills) {
+      const patient = this.applyPatientSnapshotToRow(b);
       const items = this.quickBuildBillItems(+b.bill_id, false, 0).filter((x:any)=>x.test_id);
-      if (items.length) { const bc = this.quickBarcodeSvc().buildState(+b.bill_id, items); rows.push({ id: -Number(b.bill_id), bill_id:+b.bill_id, status:'DRAFT', queue_status:'DRAFT', report_scope:'QUICK', report_title:'Quick Report Pending', item_count:items.length, pending_count:items.length, approved_count:0, entered_count:0, ready_for_entry_count:items.length, entry_locked:0, quick_barcode_status:bc.status, quick_barcode_generated_count:bc.generated_count, quick_barcode_pending_count:bc.pending_count, ...b }); }
+      if (items.length) { const bc = this.quickBarcodeSvc().buildState(+b.bill_id, items); rows.push({ id: -Number(b.bill_id), bill_id:+b.bill_id, status:'DRAFT', queue_status:'DRAFT', report_scope:'QUICK', report_title:'Quick Report Pending', item_count:items.length, pending_count:items.length, approved_count:0, entered_count:0, ready_for_entry_count:items.length, entry_locked:0, quick_barcode_status:bc.status, quick_barcode_generated_count:bc.generated_count, quick_barcode_pending_count:bc.pending_count, ...patient }); }
     }
-    const finished = this.db.prepare(`SELECT qr.id,qr.bill_id,qr.report_no,qr.created_at,qr.updated_at,qr.status raw_quick_status,b.bill_no,b.bill_date,p.title patient_title,p.name patient_name,p.mobile patient_mobile,p.patient_no,p.age,p.gender,c.name consultant_name,COUNT(qri.id) item_count
+    const finished = this.db.prepare(`SELECT qr.id,qr.bill_id,qr.report_no,qr.created_at,qr.updated_at,qr.status raw_quick_status,b.bill_no,b.bill_date,b.patient_snapshot_json,p.title patient_title,p.name patient_name,p.mobile patient_mobile,p.patient_no,p.age,p.age_value,p.age_unit,p.gender,c.name consultant_name,COUNT(qri.id) item_count
       FROM quick_reports qr JOIN bills b ON b.id=qr.bill_id JOIN patients p ON p.id=qr.patient_id LEFT JOIN consultants c ON c.id=b.consultant_id LEFT JOIN quick_report_items qri ON qri.quick_report_id=qr.id AND qri.test_id IS NOT NULL
       WHERE UPPER(COALESCE(qr.status,'FINISHED'))='FINISHED'
       GROUP BY qr.id ORDER BY qr.id DESC LIMIT 300`).all() as any[];
-    for (const r of finished) rows.push({ ...r, status:'APPROVED', queue_status:'APPROVED', report_scope:'QUICK', report_title:r.report_no || 'Quick Report', pending_count:0, entered_count:0, approved_count:+r.item_count || 0, ready_for_entry_count:+r.item_count || 0, entry_locked:0 });
+    for (const r of finished) {
+      const patient = this.applyPatientSnapshotToRow(r);
+      rows.push({ ...patient, status:'APPROVED', queue_status:'APPROVED', report_scope:'QUICK', report_title:r.report_no || 'Quick Report', pending_count:0, entered_count:0, approved_count:+r.item_count || 0, ready_for_entry_count:+r.item_count || 0, entry_locked:0 });
+    }
     const wanted = String(status || '').toUpperCase();
     return wanted ? rows.filter(r => String(r.status).toUpperCase() === wanted) : rows;
   }
@@ -98,7 +103,7 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
     for (const row of baseRows) {
       try { this.ensureReportReady(+row.id); } catch (err) { console.error('Unable to prepare report', row.id, err); }
     }
-    const rows = this.db.prepare(`SELECT r.*,b.bill_no,b.bill_date,p.title patient_title,p.name patient_name,p.mobile patient_mobile,p.patient_no,p.age,p.gender,c.name consultant_name,
+    const rows = this.db.prepare(`SELECT r.*,b.bill_no,b.bill_date,b.patient_snapshot_json,p.title patient_title,p.name patient_name,p.mobile patient_mobile,p.patient_no,p.age,p.age_value,p.age_unit,p.gender,c.name consultant_name,
         MIN(sc.collected_at) collected_at,
         CASE WHEN COUNT(DISTINCT COALESCE(sc.id,0)) > 1 THEN 'MULTI_SAMPLE' ELSE COALESCE(NULLIF(TRIM(MAX(ri.specimen_id)),''), NULLIF(TRIM(MAX(ri.specimen_name)),''), 'NO_SAMPLE') END specimen_group_key,
         CASE WHEN COUNT(DISTINCT COALESCE(sc.id,0)) > 1 THEN 'Multiple specimens' ELSE COALESCE(NULLIF(TRIM(MAX(ri.specimen_name)),''),'Specimen') END specimen_label,
@@ -154,7 +159,7 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
       row.entry_locked = row.ready_for_entry_count <= 0;
       row.is_recheck_report = isRecheckReport ? 1 : 0;
       row.status = row.queue_status;
-      visibleRows.push(row);
+      visibleRows.push(this.applyPatientSnapshotToRow(row));
     }
     return status ? visibleRows.filter(r => r.status === status) : visibleRows;
   }
@@ -178,10 +183,13 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
       if (!Number.isFinite(Number(raw))) return { value: null, status: 'Formula error', allow_manual_override: +formula.allow_manual_override || 0 };
       const decimals = Number.isFinite(+formula.rounding_decimals) ? Math.max(0,+formula.rounding_decimals) : 2;
       const factor = Math.pow(10, decimals);
-      const mode = String(formula.rounding_mode || 'NEAREST').toUpperCase();
+      const mode = String(formula.rounding_mode || 'NEAREST').toUpperCase().replace(/[\s-]+/g, '_');
       let n = Number(raw);
-      if (mode.includes('CEIL')) n = Math.ceil(n * factor) / factor;
-      else if (mode.includes('FLOOR')) n = Math.floor(n * factor) / factor;
+      if (mode === 'NO_TRANSFORM' || mode === 'NOTRANSFORM') {
+        return { value: String(n), status: 'Calculated', allow_manual_override: +formula.allow_manual_override || 0 };
+      }
+      if (mode.includes('CEIL') || mode === 'UP') n = Math.ceil(n * factor) / factor;
+      else if (mode.includes('FLOOR') || mode === 'DOWN') n = Math.floor(n * factor) / factor;
       else n = Math.round(n * factor) / factor;
       return { value: n.toFixed(decimals), status: 'Calculated', allow_manual_override: +formula.allow_manual_override || 0 };
     } catch { return { value: null, status: 'Formula error', allow_manual_override: +formula.allow_manual_override || 0 }; }
@@ -191,6 +199,11 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
     const test = item?.test_id ? this.db.prepare('SELECT result_data_type,decimal_places,rounding_mode,number_format,output_operator,output_constant FROM tests WHERE id=?').get(+item.test_id) as any : null;
     const type = String(test?.result_data_type || item?.result_data_type || '').toUpperCase();
     if (type !== 'NUMBER' && type !== 'CALCULATED') return String(value ?? '').trim();
+    const mode = String(test?.rounding_mode || item?.rounding_mode || 'NEAREST').toUpperCase().replace(/[\s-]+/g, '_');
+    // Preserve exactly what was typed — no rounding, padding, or output constant rewrite.
+    if (mode === 'NO_TRANSFORM' || mode === 'NOTRANSFORM') {
+      return String(value ?? '').trim();
+    }
     let raw = Number(String(value ?? '').replace(/,/g, '').trim());
     if (!Number.isFinite(raw)) return String(value ?? '').trim();
     const op = String(test?.output_operator || item?.output_operator || '+');
@@ -203,14 +216,29 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
     }
     const places = Number.isFinite(+test?.decimal_places) ? Math.max(0,+test.decimal_places) : (Number.isFinite(+item?.decimal_places) ? Math.max(0,+item.decimal_places) : 2);
     const f = Math.pow(10, places);
-    const mode = String(test?.rounding_mode || item?.rounding_mode || 'NEAREST').toUpperCase();
     let n = raw;
-    if (mode.includes('CEIL')) n = Math.ceil(n*f)/f;
-    else if (mode.includes('FLOOR')) n = Math.floor(n*f)/f;
+    if (mode.includes('CEIL') || mode === 'UP') n = Math.ceil(n*f)/f;
+    else if (mode.includes('FLOOR') || mode === 'DOWN') n = Math.floor(n*f)/f;
     else n = Math.round(n*f)/f;
     return n.toFixed(places);
   }
 
+  /** True if any selected test row has a non-empty reportable value (mirrors UI hasRealResultValue). */
+  protected selectionHasRealResultValue(selected:any[]): boolean {
+    return (selected || []).some((item:any) => {
+      if (!item?.test_id) return false;
+      const source = String(item?.final_result_source || '').toUpperCase();
+      const method = String(item?.vendor_result_method || '').toUpperCase();
+      const resultValue = String(item?.result_value || '').trim();
+      const outsourceValue = String(item?.outsource_result_value || '').trim();
+      const internalValue = String(item?.internal_check_value || '').trim();
+      const vendorFile = String(item?.vendor_report_file || '').trim();
+      if (method === 'ATTACH_REPORT_ONLY' || source === 'VENDOR_REPORT') return !!vendorFile || resultValue === 'See attached vendor report';
+      if (source === 'OUTSOURCE') return !!outsourceValue || !!resultValue;
+      if (source === 'INTERNAL_CHECK') return !!internalValue || !!resultValue;
+      return !!resultValue;
+    });
+  }
 
   protected quickItemKey(billItemId:any, testId:any) { return `${Number(billItemId) || 0}:${Number(testId) || 0}`; }
   protected quickSyntheticItemId(billItemId:any, testId:any) { return (Number(billItemId) || 0) * 100000 + (Number(testId) || 0); }
@@ -244,8 +272,9 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
   }
 
   protected quickBaseBillRow(billId:number) {
-    return this.db.prepare(`SELECT b.id bill_id,b.bill_no,b.bill_date,p.id patient_id,p.patient_no,p.title patient_title,p.name patient_name,p.age,p.age_value,p.age_unit,p.gender,p.mobile,p.mobile patient_mobile,p.email patient_email,p.history,c.name consultant_name
+    const row = this.db.prepare(`SELECT b.id bill_id,b.bill_no,b.bill_date,b.patient_snapshot_json,p.id patient_id,p.patient_no,p.title patient_title,p.name patient_name,p.age,p.age_value,p.age_unit,p.gender,p.mobile,p.mobile patient_mobile,p.email patient_email,p.history,c.name consultant_name
       FROM bills b JOIN patients p ON p.id=b.patient_id LEFT JOIN consultants c ON c.id=b.consultant_id WHERE b.id=?`).get(billId) as any;
+    return this.applyPatientSnapshotToRow(row);
   }
 
   protected quickActiveItemKeys() {
@@ -253,30 +282,134 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
     return new Set(rows.map(r => String(r.item_key || '')));
   }
 
+  /**
+   * Profile members: attach Masters profile_items / profile_tests priority so
+   * typing ↑↓ can exchange layout-scale ranks (same idea as singles + report_order).
+   */
+  protected attachMasterProfileOrders(items:any[]) {
+    if (!Array.isArray(items) || !items.length) return items;
+    const cache = new Map<string, number>();
+    const lookup = (profileId:number, testId:number) => {
+      const key = `${profileId}:${testId}`;
+      if (cache.has(key)) return cache.get(key)!;
+      let master = 0;
+      try {
+        const pi = this.db.prepare(`
+          SELECT priority FROM profile_items
+          WHERE profile_id=? AND UPPER(COALESCE(item_type,'TEST'))='TEST' AND test_id=?
+          ORDER BY priority,id LIMIT 1`).get(profileId, testId) as any;
+        master = +(pi?.priority || 0) || 0;
+        if (!master) {
+          const pt = this.db.prepare(`
+            SELECT priority FROM profile_tests
+            WHERE profile_id=? AND test_id=?
+            ORDER BY priority,id LIMIT 1`).get(profileId, testId) as any;
+          master = +(pt?.priority || 0) || 0;
+        }
+      } catch { master = 0; }
+      cache.set(key, master);
+      return master;
+    };
+    for (const item of items) {
+      if (!item?.test_id) continue;
+      const profileId = +(item.source_profile_id || 0);
+      if (!profileId) continue;
+      if (+(item.master_profile_order || 0) > 0) continue;
+      const master = lookup(profileId, +item.test_id);
+      if (master > 0) item.master_profile_order = master;
+    }
+    return items;
+  }
+
+  /**
+   * Singles: fill Masters report_order only when override is missing.
+   * Never overwrite a saved typing/PDF order value.
+   * Also collapse legacy Masters-encoded fractional group_order so PDF/typing
+   * sort by report_order_override within the department.
+   */
+  protected applyMasterReportOrderToSinglesUnlessTypingOverride(items:any[]) {
+    if (!Array.isArray(items) || !items.length) return items;
+    for (const item of items) {
+      if (!item?.test_id) continue;
+      const isSingle = !(+(item.source_profile_id || 0)) && !String(item.source_profile_name || '').trim();
+      if (!isSingle) continue;
+      let master = +(item.master_report_order ?? 0) || 0;
+      if (!master) {
+        try {
+          const t = this.db.prepare('SELECT report_order, priority FROM tests WHERE id=?').get(+item.test_id) as any;
+          master = +(t?.report_order || t?.priority || 0) || 0;
+        } catch { master = 0; }
+      }
+      if (master) item.master_report_order = master;
+      const hasSaved = item.report_order_override !== null
+        && item.report_order_override !== undefined
+        && item.report_order_override !== '';
+      if (!hasSaved && master) {
+        item.report_order_override = master;
+        item.priority = master;
+      }
+      // Only collapse legacy Masters fractions (e.g. 3000.07). Do NOT rewrite
+      // dept*10000 card orders or other shared group values down to raw dept priority —
+      // that made Biochemistry singles (3000) sort before Hematology profiles (10001000).
+      const go = +(item.group_order_override ?? Number.NaN);
+      if (Number.isFinite(go) && go !== Math.floor(go) && Math.abs(go) < 10000) {
+        const dp = +(item.department_priority ?? Number.NaN);
+        item.group_order_override = Number.isFinite(dp) ? dp : Math.floor(go);
+      }
+    }
+    return items;
+  }
+
   protected quickBuildBillItems(billId:number, includeFinished=false, quickReportId=0) {
+    // item_key is bill_item_id:test_id. Updating a bill replaces bill_items (new ids), so
+    // finished keys alone would miss and re-show finished tests in Pending. Also block by
+    // finished test_id for this bill so only newly added unfinished work remains pending.
     const blocked = includeFinished ? new Set<string>() : this.quickActiveItemKeys();
+    const finishedTestIds = includeFinished ? new Set<number>() : this.finishedQuickTestIdsForBill(billId);
+    const isBlockedTest = (billItemId:any, testId:any) => {
+      const tid = +testId || 0;
+      if (!tid) return true;
+      if (finishedTestIds.has(tid)) return true;
+      return blocked.has(this.quickItemKey(billItemId, tid));
+    };
     const billPatient = this.quickBaseBillRow(billId) || {};
     const out:any[] = [];
     const insertedKeys = new Set<string>();
     let seq = 0;
     const nextOrder = (fallback:any) => { seq += 1; return (+fallback || 0) + seq / 1000; };
     const profileName = (p:any, fallback='Profile / group') => String(p?.display_name || p?.name || fallback || 'Profile / group').trim();
-    const pushHeading = (billItemId:number, title:string, priority:any, kind='PROFILE', sourceProfileId:any=null, sourceProfileName:any='', departmentName:any='') => {
+    const pushHeading = (billItemId:number, title:string, priority:any, kind='PROFILE', sourceProfileId:any=null, sourceProfileName:any='', departmentOverride:any=null, cardGroup:any=null) => {
       const text = String(title || '').trim();
       if (!text) return;
+      // Only apply profile department when it has a real Masters name; otherwise leave blank.
+      const deptName = String(departmentOverride?.name || '').trim();
+      const deptPriority = deptName
+        ? (departmentOverride?.priority == null || departmentOverride?.priority === '' ? 9999 : +departmentOverride.priority)
+        : 9999;
+      const reportOrder = +(priority || 0) || 0;
+      // Unique key per heading text/kind so multiple INNER side-headers under one profile are kept.
+      const itemKey = `H:${billItemId}:${String(kind || 'PROFILE').toUpperCase()}:${sourceProfileId || 0}:${text}:${reportOrder}`;
+      // Card order within department only — department sort uses department_priority.
+      const groupOrder = cardGroup != null && cardGroup !== ''
+        ? +cardGroup
+        : reportOrder;
       out.push({
-        id: -this.quickSyntheticItemId(billItemId, sourceProfileId || seq + 1), report_id: quickReportId || -billId, quick_report_id: quickReportId || 0,
-        bill_id: billId, bill_item_id: billItemId, item_key: `H:${billItemId}:${sourceProfileId || text}`,
-        test_id: null, test_name: text, department_name: String(departmentName || '').trim(), side_header: '', result_value: '', unit: '', normal_range: '', method: '',
-        priority: nextOrder(priority), highlight_parameter: 0, heading_kind: kind, source_profile_id: sourceProfileId || null, source_profile_name: sourceProfileName || text,
-        result_status: 'PENDING', selected_for_reporting: 1
+        id: -(1000000000 + (++seq)), report_id: quickReportId || -billId, quick_report_id: quickReportId || 0,
+        bill_id: billId, bill_item_id: billItemId, item_key: itemKey,
+        test_id: null, test_name: text, department_name: deptName, side_header: kind === 'INNER' ? text : '', result_value: '', unit: '', normal_range: '', method: '',
+        priority: nextOrder(priority), highlight_parameter: 0, heading_kind: kind, source_profile_id: sourceProfileId || null, source_profile_name: String(sourceProfileName || '').trim(),
+        result_status: 'PENDING', selected_for_reporting: 1,
+        department_id: deptName ? (departmentOverride?.id || null) : null,
+        department_priority: deptPriority,
+        group_order_override: groupOrder,
+        report_order_override: reportOrder
       });
     };
-    const pushTest = (billItemId:number, testId:number, priority:any, sourceProfileId:any=null, sourceProfileName:any='') => {
+    const pushTest = (billItemId:number, testId:number, priority:any, sourceProfileId:any=null, sourceProfileName:any='', departmentOverride:any=null, layoutMasterPriority:any=null, cardGroup:any=null) => {
       if (!testId) return;
       const key = this.quickItemKey(billItemId, testId);
-      if (blocked.has(key) || insertedKeys.has(key)) return;
-      const t = this.db.prepare(`SELECT t.*,d.name department_name,u.name unit_name,
+      if (isBlockedTest(billItemId, testId) || insertedKeys.has(key)) return;
+      const t = this.db.prepare(`SELECT t.*,d.name department_name,d.priority department_priority,u.name unit_name,
           tf.formula_expression, tf.predefined_formula_key, tf.rounding_decimals, tf.allow_manual_override, CASE WHEN tf.id IS NULL THEN 0 ELSE 1 END has_formula,
           (SELECT GROUP_CONCAT(tro.option_value || '::' || COALESCE(tro.option_label, tro.option_value), '||') FROM test_result_options tro WHERE tro.test_id=t.id AND tro.is_active=1) result_options,
           (SELECT GROUP_CONCAT(tfv.variable_key || '::' || tfv.source_test_id, '||') FROM test_formula_variables tfv WHERE tfv.formula_id=tf.id) formula_variables
@@ -284,14 +417,41 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
         WHERE t.id=? AND COALESCE(t.active,1)=1 AND COALESCE(t.active_for_reporting,1)=1`).get(testId) as any;
       if (!t?.id) return;
       insertedKeys.add(key);
+      // Profile department wins only when Masters assigned a real department name.
+      // Mixed / blank profile dept → each test keeps its own department + priority.
+      const overrideName = String(departmentOverride?.name || '').trim();
+      const deptName = overrideName || String(t.department_name || '').trim();
+      const deptPriority = overrideName
+        ? (departmentOverride?.priority == null || departmentOverride?.priority === '' ? 9999 : +departmentOverride.priority)
+        : (t.department_priority == null || t.department_priority === '' ? 9999 : +t.department_priority);
+      // Singles: Masters Report order only (not bill priority / billing_order).
+      // Profile members: remapped layout slot for within-card test order (card group comes from profile Masters order).
+      const isSingle = !(+(sourceProfileId || 0)) && !String(sourceProfileName || '').trim();
+      const reportOrder = isSingle
+        ? (+(t.report_order || t.priority || 0) || 0)
+        : (+(priority || t.report_order || t.priority || 0) || 0);
+      // group_order = card-within-department only. Department order is department_priority.
+      // Singles default within=5000 (after profiles). Profiles share one cardGroup from Masters profile order.
+      const groupOrder = isSingle
+        ? 5000
+        : (cardGroup != null && cardGroup !== '' ? +cardGroup : (+(priority || 0) || 0));
+      const layoutMaster = !isSingle
+        ? (+(layoutMasterPriority ?? 0) || +(priority || 0) || 0)
+        : 0;
       out.push({
         id: this.quickSyntheticItemId(billItemId, testId), report_id: quickReportId || -billId, quick_report_id: quickReportId || 0,
-        bill_id: billId, bill_item_id: billItemId, item_key: key, test_id: t.id, test_name: t.display_name || t.name, department_name: t.department_name || '', side_header: '',
-        result_value: '', unit: t.unit_name || '', normal_range: this.selectedReferenceTextForItem({ test_id: t.id, normal_range: t.normal_range || '' }, billPatient) || t.normal_range || '', method: t.method || '', priority: nextOrder(priority || t.report_order || t.priority || 0),
+        bill_id: billId, bill_item_id: billItemId, item_key: key, test_id: t.id, test_name: t.display_name || t.name, department_name: deptName, side_header: '',
+        result_value: '', unit: t.unit_name || '', normal_range: this.selectedReferenceTextForItem({ test_id: t.id, normal_range: t.normal_range || '' }, billPatient) || t.normal_range || '', method: t.method || '', priority: nextOrder(reportOrder),
         highlight_parameter: t.highlight_parameter ? 1 : 0, heading_kind: '', source_profile_id: sourceProfileId || null, source_profile_name: sourceProfileName || '',
         result_status: 'PENDING', selected_for_reporting: 1, result_mode: t.result_mode, result_data_type: t.result_data_type, input_control_type: t.input_control_type,
         decimal_places: t.decimal_places, rounding_mode: t.rounding_mode, number_format: t.number_format, interpretation_enabled: t.interpretation_enabled,
-        interpretation_text: t.interpretation_text, result_options: t.result_options || '', formula_expression: t.formula_expression, predefined_formula_key: t.predefined_formula_key || '', formula_variables: t.formula_variables || '', has_formula: t.has_formula || 0
+        interpretation_text: t.interpretation_text, result_options: t.result_options || '', formula_expression: t.formula_expression, predefined_formula_key: t.predefined_formula_key || '', formula_variables: t.formula_variables || '', has_formula: t.has_formula || 0,
+        department_id: overrideName ? (departmentOverride?.id || null) : (t.department_id || null),
+        department_priority: deptPriority,
+        group_order_override: groupOrder,
+        report_order_override: reportOrder,
+        master_report_order: +(t.report_order || t.priority || 0) || 0,
+        master_profile_order: layoutMaster || null
       });
     };
     const profileHasAvailable = (billItemId:number, profileId:number, seen:Set<number>): boolean => {
@@ -300,40 +460,77 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
       if (!p?.id) return false;
       const next = new Set(seen); next.add(profileId);
       const rows = this.db.prepare('SELECT * FROM profile_items WHERE profile_id=? ORDER BY priority,id').all(profileId) as any[];
-      if (rows.length) return rows.some(pi => String(pi.item_type || 'TEST').toUpperCase()==='TEST' ? !blocked.has(this.quickItemKey(billItemId, +pi.test_id)) : String(pi.item_type || '').toUpperCase()==='PROFILE' ? profileHasAvailable(billItemId, +pi.child_profile_id, next) : false);
+      if (rows.length) return rows.some(pi => String(pi.item_type || 'TEST').toUpperCase()==='TEST' ? !isBlockedTest(billItemId, +pi.test_id) : String(pi.item_type || '').toUpperCase()==='PROFILE' ? profileHasAvailable(billItemId, +pi.child_profile_id, next) : false);
       const pt = this.db.prepare('SELECT test_id FROM profile_tests WHERE profile_id=? ORDER BY priority').all(profileId) as any[];
-      return pt.some(x => !blocked.has(this.quickItemKey(billItemId, +x.test_id)));
+      return pt.some(x => !isBlockedTest(billItemId, +x.test_id));
     };
-    const expandProfile = (billItemId:number, profileId:number, showHeading:boolean, seen:Set<number>, fallbackPriority:any=0, sourceProfileId:any=null, sourceProfileName:any='', forceSource=false) => {
+    const expandProfile = (billItemId:number, profileId:number, showHeading:boolean, seen:Set<number>, fallbackPriority:any=0, sourceProfileId:any=null, sourceProfileName:any='', forceSource=false, departmentOverride:any=null) => {
       if (!profileId || seen.has(profileId) || !profileHasAvailable(billItemId, profileId, seen)) return;
-      const p = this.db.prepare('SELECT p.*, d.name department_name FROM profiles p LEFT JOIN departments d ON d.id=p.department_id WHERE p.id=? AND COALESCE(p.active,1)=1 AND COALESCE(p.active_for_reporting,1)=1').get(profileId) as any;
+      const p = this.db.prepare('SELECT p.*, d.name department_name, d.priority department_priority FROM profiles p LEFT JOIN departments d ON d.id=p.department_id WHERE p.id=? AND COALESCE(p.active,1)=1 AND COALESCE(p.active_for_reporting,1)=1').get(profileId) as any;
       if (!p?.id) return;
       const ownName = profileName(p, sourceProfileName || 'Profile / group');
       const ownSourceId = +p.id || sourceProfileId || null;
       const ownSourceName = ownName || sourceProfileName || '';
       const cardSourceId = forceSource || showHeading ? ownSourceId : (sourceProfileId || ownSourceId);
       const cardSourceName = forceSource || showHeading ? ownSourceName : (sourceProfileName || ownSourceName);
-      const ownDepartmentName = String(p.department_name || '').trim();
-      if (showHeading) pushHeading(billItemId, ownSourceName, fallbackPriority || p.report_order || p.priority || 0, 'PROFILE', ownSourceId, ownSourceName, ownDepartmentName);
+      const ownDepartment = {
+        id: +p.department_id || null,
+        name: String(p.department_name || '').trim(),
+        priority: p.department_priority == null || p.department_priority === '' ? 9999 : +p.department_priority
+      };
+      // Nested profile that prints as its own card → that profile's Masters department.
+      // Flattened nested content (no display name) → stay under parent department.
+      // Own card with no Masters department (Mixed) → null so tests keep their own dept.
+      const cardDepartment = (forceSource || showHeading)
+        ? (ownDepartment.name ? ownDepartment : null)
+        : (departmentOverride || (ownDepartment.name ? ownDepartment : null));
+      // Profile card order = Masters report_order only (never billing_order / bill_items.priority).
+      const profileOrder = +(p.report_order || p.priority || 0) || 0;
+      const isOwnCard = !!(forceSource || showHeading);
+      // Own card → Masters profile order. Flattened into parent → inherit parent layout slot.
+      const cardGroup = isOwnCard ? profileOrder : (+fallbackPriority || profileOrder);
+      // Remap nested layout into parent slot only when flattened; own cards stay on profileOrder.
+      const slotBase = isOwnCard ? profileOrder : (+fallbackPriority || profileOrder);
+      if (showHeading) pushHeading(billItemId, ownSourceName, cardGroup, 'PROFILE', ownSourceId, ownSourceName, cardDepartment, cardGroup);
       const next = new Set(seen); next.add(profileId);
       const rows = this.db.prepare('SELECT * FROM profile_items WHERE profile_id=? ORDER BY priority,id').all(profileId) as any[];
+      // Remap this profile's local priorities into the parent/card slot so a nested
+      // profile ordered later inside a parent does not jump ahead via its own 1000/2000 masters.
+      const localMin = rows.length ? Math.min(...rows.map((r:any) => +r.priority || 0)) : 0;
+      const slotPri = (local:any) => slotBase + (((+local || 0) - localMin) / 1000);
       if (rows.length) {
         for (const pi of rows) {
           const type = String(pi.item_type || 'TEST').toUpperCase();
-          if (type === 'HEADER') pushHeading(billItemId, pi.side_header || pi.header_text || '', pi.priority, 'INNER', cardSourceId, cardSourceName, ownDepartmentName);
-          else if (type === 'PROFILE') expandProfile(billItemId, +pi.child_profile_id, pi.display_profile_name !== 0, next, pi.priority, cardSourceId, cardSourceName, pi.display_profile_name !== 0);
-          else pushTest(billItemId, +pi.test_id, pi.priority, cardSourceId, cardSourceName);
+          const pri = slotPri(pi.priority);
+          if (type === 'HEADER') pushHeading(billItemId, pi.side_header || pi.header_text || '', pri, 'INNER', cardSourceId, cardSourceName, cardDepartment, cardGroup);
+          else if (type === 'PROFILE') {
+            const childId = +pi.child_profile_id || 0;
+            const layoutShow = pi.display_profile_name !== 0;
+            // Masters show_profile_name hides the title only — keep own card / department when layout says show.
+            let masterShow = true;
+            try {
+              const child = this.db.prepare('SELECT show_profile_name FROM profiles WHERE id=?').get(childId) as any;
+              masterShow = Number(child?.show_profile_name ?? 1) !== 0;
+            } catch { masterShow = true; }
+            expandProfile(billItemId, childId, layoutShow && masterShow, next, pri, cardSourceId, cardSourceName, layoutShow, cardDepartment);
+          }
+          else pushTest(billItemId, +pi.test_id, pri, cardSourceId, cardSourceName, cardDepartment, +pi.priority || 0, cardGroup);
         }
       } else {
         const pt = this.db.prepare('SELECT pt.*,t.report_order,t.priority test_priority FROM profile_tests pt JOIN tests t ON t.id=pt.test_id WHERE pt.profile_id=? AND COALESCE(t.active_for_reporting,1)=1 ORDER BY pt.priority,t.report_order,t.priority').all(profileId) as any[];
-        for (const r of pt) pushTest(billItemId, +r.test_id, r.report_order || r.priority || r.test_priority, cardSourceId, cardSourceName);
+        const ptMin = pt.length ? Math.min(...pt.map((r:any) => +(r.priority || r.report_order || r.test_priority || 0))) : 0;
+        for (const r of pt) {
+          const local = +(r.priority || r.report_order || r.test_priority || 0);
+          pushTest(billItemId, +r.test_id, slotBase + ((local - ptMin) / 1000), cardSourceId, cardSourceName, cardDepartment, local, cardGroup);
+        }
       }
     };
     const billItems = this.db.prepare('SELECT * FROM bill_items WHERE bill_id=? ORDER BY priority,id').all(billId) as any[];
     for (const bi of billItems) {
       const type = String(bi.item_type || 'TEST').toUpperCase();
       if (type === 'TEST') pushTest(+bi.id, +bi.item_id, bi.priority);
-      else if (type === 'PROFILE') expandProfile(+bi.id, +bi.item_id, true, new Set<number>(), bi.priority, bi.item_id, bi.name, true);
+      // Top-level profile cards: Masters report_order — do not pass bill priority.
+      else if (type === 'PROFILE') expandProfile(+bi.id, +bi.item_id, true, new Set<number>(), 0, bi.item_id, bi.name, true);
     }
     // remove headings without following tests in the same source profile
     const filtered = out.filter((row, idx) => row.test_id || out.slice(idx + 1).some(n => n.test_id && String(n.source_profile_name || '') === String(row.source_profile_name || '')));
@@ -341,20 +538,148 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
     return this.quickBarcodeSvc().decorateItems(filtered);
   }
 
+  /**
+   * Finished reports previously saved INNER side-headers with nextOrder() priority,
+   * which could place them below later tests. Re-seat each INNER just before the
+   * first following test according to the profile layout master order.
+   * Also re-seat PROFILE card headers before their first test when report_order ties
+   * (create path inserts headings after tests, so id-order alone puts tests first).
+   */
+  protected repairQuickFinishedInnerHeaderOrder(items:any[]) {
+    if (!Array.isArray(items) || !items.length) return items;
+    const byProfile = new Map<number, any[]>();
+    for (const item of items) {
+      const pid = +(item?.source_profile_id || 0);
+      if (!pid) continue;
+      if (!byProfile.has(pid)) byProfile.set(pid, []);
+      byProfile.get(pid)!.push(item);
+    }
+    for (const [profileId, rows] of byProfile) {
+      const layout = this.db.prepare('SELECT * FROM profile_items WHERE profile_id=? ORDER BY priority,id').all(profileId) as any[];
+      const masterTestPri = new Map<number, number>();
+      const masterHeaderPri = new Map<string, number>();
+      for (const pi of layout) {
+        const type = String(pi.item_type || 'TEST').toUpperCase();
+        const pri = +pi.priority || 0;
+        if (type === 'TEST' && +pi.test_id) masterTestPri.set(+pi.test_id, pri);
+        if (type === 'HEADER') {
+          const text = String(pi.side_header || pi.header_text || '').trim().toLowerCase();
+          if (text) masterHeaderPri.set(text, pri);
+        }
+      }
+      const testOrders = rows.filter((r:any) => r?.test_id).map((r:any) => +(r.report_order_override ?? r.priority ?? 0));
+      const minTestOrder = testOrders.length ? Math.min(...testOrders) : 0;
+
+      for (const row of rows) {
+        const kind = String(row?.heading_kind || '').toUpperCase();
+        if (!row?.test_id && (kind === 'PROFILE' || !kind)) {
+          // PROFILE card title must sort before its tests (create inserts headers last).
+          row.report_order_override = minTestOrder - 0.0001;
+          row.priority = row.report_order_override;
+          continue;
+        }
+        if (kind !== 'INNER') continue;
+        if (!layout.length) continue;
+        const text = String(row.test_name || row.side_header || '').trim().toLowerCase();
+        const headerPri = masterHeaderPri.get(text);
+        if (headerPri == null) continue;
+        const following = rows
+          .filter((r:any) => r?.test_id && masterTestPri.has(+r.test_id) && (masterTestPri.get(+r.test_id) as number) > headerPri)
+          .map((r:any) => ({ order: +(r.report_order_override ?? r.priority ?? 0) }));
+        if (following.length) {
+          const minFollow = Math.min(...following.map((x:any) => x.order));
+          row.report_order_override = minFollow - 0.0001;
+        } else {
+          row.report_order_override = minTestOrder - 0.0001;
+        }
+        row.priority = row.report_order_override;
+      }
+    }
+    items.sort((a:any, b:any) =>
+      (+a.group_order_override || +a.priority || 0) - (+b.group_order_override || +b.priority || 0) ||
+      (+(a.report_order_override ?? a.priority ?? 0)) - (+(b.report_order_override ?? b.priority ?? 0)) ||
+      // Prefer headers before tests when numeric order ties.
+      ((a.test_id ? 1 : 0) - (b.test_id ? 1 : 0)) ||
+      (+a.id || 0) - (+b.id || 0)
+    );
+    return items;
+  }
+
+  /**
+   * Department order = department_order_override when typing swapped depts, else Masters.
+   * Card order = group_order_override within department only (never encodes dept).
+   */
+  protected repairQuickFinishedDepartmentOrder(items:any[]) {
+    if (!Array.isArray(items) || !items.length) return items;
+    let deptByName = new Map<string, number>();
+    try {
+      const depts = this.db.prepare(`SELECT name, priority FROM departments`).all() as any[];
+      deptByName = new Map((depts || []).map((d:any) => [String(d?.name || '').trim().toLowerCase(), +(d?.priority ?? 9999)]));
+    } catch { /* ignore */ }
+    for (const item of items) {
+      const name = String(item?.department_name || '').trim();
+      const fromMasters = name ? deptByName.get(name.toLowerCase()) : undefined;
+      const fromJoin = item?.department_priority != null && item?.department_priority !== '' ? +item.department_priority : NaN;
+      const mastersPriority = fromMasters != null
+        ? fromMasters
+        : (Number.isFinite(fromJoin) ? fromJoin : 9999);
+      const hasDeptOverride = item?.department_order_override !== null
+        && item?.department_order_override !== undefined
+        && item?.department_order_override !== ''
+        && Number.isFinite(+item.department_order_override);
+      const deptOverridden = !!(+item?.department_order_overridden === 1 || item?._departmentOrderOverridden || hasDeptOverride);
+      if (deptOverridden && hasDeptOverride) {
+        item.department_priority = +item.department_order_override;
+        item._departmentOrderOverridden = true;
+        item.department_order_overridden = 1;
+      } else {
+        item.department_priority = mastersPriority;
+      }
+      const hasTypedGroup = item?.group_order_override !== null && item?.group_order_override !== undefined && item?.group_order_override !== '';
+      if (!hasTypedGroup) {
+        const isSingle = !(+(item?.source_profile_id || 0)) && !String(item?.source_profile_name || '').trim();
+        const ro = +(item?.report_order_override ?? item?.priority ?? 0) || 0;
+        item.group_order_override = isSingle ? 5000 : ro;
+      }
+    }
+    items.sort((a:any, b:any) =>
+      (+(a.department_priority ?? 9999) || 9999) - (+(b.department_priority ?? 9999) || 9999) ||
+      (+a.group_order_override || +a.priority || 0) - (+b.group_order_override || +b.priority || 0) ||
+      (+(a.report_order_override ?? a.priority ?? 0)) - (+(b.report_order_override ?? b.priority ?? 0)) ||
+      ((a.test_id ? 1 : 0) - (b.test_id ? 1 : 0)) ||
+      (+a.id || 0) - (+b.id || 0)
+    );
+    return items;
+  }
+
   protected getQuickPendingReport(billId:number) {
     const base = this.quickBaseBillRow(billId);
     if (!base?.bill_id) return null;
     const items = this.quickBuildBillItems(billId, false, 0);
+    this.applyMasterReportOrderToSinglesUnlessTypingOverride(items);
     return { id: -billId, report_id: -billId, bill_id: billId, status: 'DRAFT', report_scope: 'QUICK', report_title: 'Quick Report Pending', item_count: items.filter((x:any)=>x.test_id).length, pending_count: items.filter((x:any)=>x.test_id).length, approved_count: 0, entered_count: 0, ready_for_entry_count: items.filter((x:any)=>x.test_id).length, entry_locked: 0, ...base, items };
   }
 
   protected getQuickFinishedReport(reportId:number) {
-    const qr = this.db.prepare(`SELECT qr.*,b.bill_no,b.bill_date,p.id patient_id,p.patient_no,p.title patient_title,p.name patient_name,p.age,p.age_value,p.age_unit,p.gender,p.mobile,p.mobile patient_mobile,p.email patient_email,p.history,c.name consultant_name
+    const qr = this.db.prepare(`SELECT qr.*,b.bill_no,b.bill_date,b.patient_snapshot_json,p.id patient_id,p.patient_no,p.title patient_title,p.name patient_name,p.age,p.age_value,p.age_unit,p.gender,p.mobile,p.mobile patient_mobile,p.email patient_email,p.history,c.name consultant_name
       FROM quick_reports qr JOIN bills b ON b.id=qr.bill_id JOIN patients p ON p.id=qr.patient_id LEFT JOIN consultants c ON c.id=b.consultant_id WHERE qr.id=?`).get(reportId) as any;
     if (!qr?.id) return null;
+    const base = this.applyPatientSnapshotToRow(qr);
     const items = this.db.prepare(`SELECT qri.*,qri.quick_report_id report_id,qri.quick_report_id, 'APPROVED' result_status,
-        COALESCE(NULLIF(qri.department_name,''), td.name, pd.name, '') department_name,
+        COALESCE(
+          CASE WHEN COALESCE(qri.source_profile_id,0)>0 AND TRIM(COALESCE(pd.name,'')) != '' THEN pd.name ELSE NULL END,
+          NULLIF(TRIM(qri.department_name),''),
+          td.name, pd.name, ''
+        ) department_name,
+        COALESCE(
+          qri.department_order_override,
+          CASE WHEN COALESCE(qri.source_profile_id,0)>0 AND pd.priority IS NOT NULL THEN pd.priority ELSE NULL END,
+          td.priority, pd.priority, 9999
+        ) department_priority,
+        qri.department_order_override,
+        qri.department_order_overridden,
         t.result_mode,t.result_data_type,t.input_control_type,t.decimal_places,t.rounding_mode,t.number_format,t.interpretation_enabled,t.interpretation_text,
+        t.report_order master_report_order,
         1 flag_enabled,
         (SELECT p.interpretation_enabled FROM profiles p WHERE p.id=qri.source_profile_id) profile_interpretation_enabled,
         (SELECT p.interpretation_text FROM profiles p WHERE p.id=qri.source_profile_id) profile_interpretation_text,
@@ -368,12 +693,18 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
       LEFT JOIN departments pd ON pd.id=sp.department_id
       LEFT JOIN test_formulas tf ON tf.test_id=qri.test_id AND tf.is_active=1
       WHERE qri.quick_report_id=?
-      ORDER BY COALESCE(qri.group_order_override,qri.priority,0), COALESCE(qri.report_order_override,qri.priority,0), qri.id`).all(reportId) as any[];
+      ORDER BY COALESCE(qri.department_order_override, qri.group_order_override, CASE WHEN COALESCE(qri.source_profile_id,0)>0 THEN pd.priority ELSE td.priority END, qri.priority, 0),
+               COALESCE(qri.group_order_override, 0),
+               COALESCE(qri.report_order_override,qri.priority,0), qri.id`).all(reportId) as any[];
+    this.repairQuickFinishedInnerHeaderOrder(items);
+    this.repairQuickFinishedDepartmentOrder(items);
+    this.applyMasterReportOrderToSinglesUnlessTypingOverride(items);
+    this.attachMasterProfileOrders(items);
     this.attachResultOptions(items);
     this.quickBarcodeSvc().decorateItems(items);
     for (const item of items) {
       if (item?.test_id) {
-        const selectedRef = this.pickReferenceRange(+item.test_id, qr);
+        const selectedRef = this.pickReferenceRange(+item.test_id, base);
         const selectedReferenceText = String(selectedRef?.reference_text || item.normal_range || '').trim();
         if (selectedReferenceText) {
           item.selected_reference_text = selectedReferenceText;
@@ -392,7 +723,7 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
         }
       }
     }
-    return { ...qr, id: qr.id, report_id: qr.id, status: 'APPROVED', report_scope: 'QUICK', report_title: qr.report_no || 'Quick Report', item_count: items.filter((x:any)=>x.test_id).length, pending_count: 0, approved_count: items.filter((x:any)=>x.test_id).length, entered_count: 0, ready_for_entry_count: items.filter((x:any)=>x.test_id).length, entry_locked: 0, items };
+    return this.attachProfileRemarks({ ...base, id: qr.id, report_id: qr.id, status: 'APPROVED', report_scope: 'QUICK', report_title: qr.report_no || 'Quick Report', item_count: items.filter((x:any)=>x.test_id).length, pending_count: 0, approved_count: items.filter((x:any)=>x.test_id).length, entered_count: 0, ready_for_entry_count: items.filter((x:any)=>x.test_id).length, entry_locked: 0, items });
   }
 
 
@@ -434,13 +765,23 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
     const quickId = +payload.id || +current?.id || +current?.quick_report_id || 0;
     if (!quickId) throw new Error('Quick finished report id is required.');
     if (!selected.length) throw new Error('Select at least one test to update.');
+    if (!this.selectionHasRealResultValue(selected)) {
+      throw new Error('Enter at least one result value before saving the finished report. Empty-only reports are not allowed.');
+    }
     const existingItems = (current?.items || []).filter((x:any)=>x?.test_id);
     const allowedIds = new Set(existingItems.map((x:any)=>+x.id).filter(Boolean));
     const selectedRows = selected.filter((x:any)=>+x.test_id);
     const missing = selectedRows.filter((x:any)=>!allowedIds.has(+x.id));
     if (missing.length) throw new Error('Selected finished report items were not found. Refresh the finished report and try again.');
+    const selectedIds = new Set(selectedRows.map((x:any)=>+x.id).filter(Boolean));
+    const returnUncheckedToPending = payload?.return_unchecked_to_pending === true || payload?.returnUncheckedToPending === true;
     const now = this.nowIst();
     const tx = this.db.transaction(() => {
+      this.ensureColumn('quick_report_items', 'selected_for_reporting', 'INTEGER NOT NULL DEFAULT 1');
+      this.ensureColumn('quick_report_items', 'report_order_overridden', 'INTEGER NOT NULL DEFAULT 0');
+      this.ensureColumn('quick_report_items', 'group_order_overridden', 'INTEGER NOT NULL DEFAULT 0');
+      this.ensureColumn('quick_report_items', 'department_order_override', 'REAL');
+      this.ensureColumn('quick_report_items', 'department_order_overridden', 'INTEGER NOT NULL DEFAULT 0');
       const upd = this.db.prepare(`UPDATE quick_report_items SET
           result_value=?,
           unit=?,
@@ -450,12 +791,17 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
           priority=?,
           report_order_override=?,
           group_order_override=?,
+          report_order_overridden=?,
+          group_order_overridden=?,
+          department_order_override=?,
+          department_order_overridden=?,
           flag_status=?,
           is_critical=?,
           critical_message=?,
           formula_status=?,
           final_result_source=?,
-          recheck_remarks=?
+          recheck_remarks=?,
+          selected_for_reporting=?
         WHERE id=? AND quick_report_id=?`);
       for (const incoming of selectedRows) {
         const match = existingItems.find((x:any)=>+x.id === +incoming.id) || incoming;
@@ -469,37 +815,120 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
         if (selectedReferenceText) itemForRules.normal_range = selectedReferenceText;
         const flags = this.applyResultFlagsToItem(itemForRules, current || {});
         const formulaStatus = itemForRules.test_id ? (String(itemForRules.formula_status || '').trim() || this.formulaDependencyStatus(+itemForRules.test_id, selected)) : '';
-        const priority = itemForRules.report_order_override !== null && itemForRules.report_order_override !== undefined && itemForRules.report_order_override !== ''
+        // Trust UI order as saved (Masters default or typing ↑↓). Do not rewrite here.
+        const reportOrder = itemForRules.report_order_override !== null && itemForRules.report_order_override !== undefined && itemForRules.report_order_override !== ''
           ? +itemForRules.report_order_override
           : (+itemForRules.priority || 0);
+        const overridden = !!(itemForRules._reportOrderOverridden || +itemForRules.report_order_overridden === 1);
+        const groupOverridden = !!(itemForRules._groupOrderOverridden || +itemForRules.group_order_overridden === 1);
+        const deptOverridden = !!(itemForRules._departmentOrderOverridden || +itemForRules.department_order_overridden === 1
+          || (itemForRules.department_order_override !== null && itemForRules.department_order_override !== undefined && itemForRules.department_order_override !== ''));
+        const isSingle = !(+(itemForRules.source_profile_id || 0)) && !String(itemForRules.source_profile_name || '').trim();
+        let groupOrder = itemForRules.group_order_override !== null && itemForRules.group_order_override !== undefined && itemForRules.group_order_override !== ''
+          ? +itemForRules.group_order_override
+          : null;
+        if (isSingle) {
+          // Keep UI card-within value (e.g. 5000). Do not collapse to department_priority.
+          if (groupOrder == null || !Number.isFinite(+groupOrder)) groupOrder = 5000;
+        }
+        const deptOrder = deptOverridden
+          ? +(itemForRules.department_order_override ?? itemForRules.department_priority ?? 9999)
+          : null;
         upd.run(
           finalValue,
           itemForRules.unit || '',
           itemForRules.normal_range || '',
           itemForRules.method || '',
           itemForRules.side_header || '',
-          priority,
-          itemForRules.report_order_override !== null && itemForRules.report_order_override !== undefined && itemForRules.report_order_override !== '' ? +itemForRules.report_order_override : null,
-          itemForRules.group_order_override !== null && itemForRules.group_order_override !== undefined && itemForRules.group_order_override !== '' ? +itemForRules.group_order_override : null,
+          reportOrder,
+          reportOrder,
+          groupOrder,
+          overridden ? 1 : 0,
+          groupOverridden ? 1 : 0,
+          deptOrder,
+          deptOverridden ? 1 : 0,
           flags.flag_status || '',
           flags.is_critical ? 1 : 0,
           flags.critical_message || '',
           formulaStatus,
           source,
           itemForRules.recheck_remarks || incoming.recheck_remarks || match.recheck_remarks || '',
+          1,
           +incoming.id,
           quickId
         );
+        // Keep barcode/instrument store in sync so decorateItems cannot resurrect old analyzer values.
+        const billIdForSync = +match.bill_id || +current?.bill_id || 0;
+        const itemKey = String(match.item_key || incoming.item_key || '').trim();
+        if (billIdForSync && itemKey) {
+          try {
+            this.db.prepare(`UPDATE quick_reporting_barcode_items
+              SET result_value=?, result_source=?, updated_at=?
+              WHERE bill_id=? AND TRIM(COALESCE(item_key,''))=?`)
+              .run(finalValue, String(source || 'MANUAL').toUpperCase() === 'ANALYZER' ? 'ANALYZER' : 'MANUAL', now, billIdForSync, itemKey);
+          } catch { /* schema optional on older DBs */ }
+        }
       }
+      const existingIds = existingItems.map((x:any)=>+x.id).filter(Boolean);
+      const uncheckedIds = existingIds.filter((id:number) => !selectedIds.has(id));
+      if (uncheckedIds.length) {
+        if (returnUncheckedToPending) {
+          // Explicit option only: remove from finished so tests return to Pending.
+          this.db.prepare(`DELETE FROM quick_report_items WHERE quick_report_id=? AND test_id IS NOT NULL AND id IN (${uncheckedIds.map(()=>'?').join(',')})`)
+            .run(quickId, ...uncheckedIds);
+          const remaining = this.db.prepare(`
+            SELECT DISTINCT TRIM(COALESCE(source_profile_name,'')) profile_name,
+                   COALESCE(source_profile_id,0) profile_id
+            FROM quick_report_items
+            WHERE quick_report_id=? AND test_id IS NOT NULL`).all(quickId) as any[];
+          const keepNames = new Set(remaining.map((r:any) => String(r.profile_name || '').trim()).filter(Boolean));
+          const keepIds = new Set(remaining.map((r:any) => +r.profile_id || 0).filter((n:number) => n > 0));
+          const headings = this.db.prepare(`
+            SELECT id, source_profile_id, source_profile_name
+            FROM quick_report_items
+            WHERE quick_report_id=? AND test_id IS NULL`).all(quickId) as any[];
+          for (const h of headings) {
+            const pid = +h.source_profile_id || 0;
+            const name = String(h.source_profile_name || '').trim();
+            const keep = (pid > 0 && keepIds.has(pid)) || (!!name && keepNames.has(name));
+            if (!keep) this.db.prepare('DELETE FROM quick_report_items WHERE id=? AND quick_report_id=?').run(+h.id, quickId);
+          }
+        } else {
+          // Default: preserve values; hide from finished PDF only.
+          this.db.prepare(`UPDATE quick_report_items SET selected_for_reporting=0
+            WHERE quick_report_id=? AND test_id IS NOT NULL AND id IN (${uncheckedIds.map(()=>'?').join(',')})`)
+            .run(quickId, ...uncheckedIds);
+        }
+      }
+      // Headings follow printable tests for each profile.
+      const printable = this.db.prepare(`
+        SELECT DISTINCT TRIM(COALESCE(source_profile_name,'')) profile_name,
+               COALESCE(source_profile_id,0) profile_id
+        FROM quick_report_items
+        WHERE quick_report_id=? AND test_id IS NOT NULL AND COALESCE(selected_for_reporting,1)=1`).all(quickId) as any[];
+      const printNames = new Set(printable.map((r:any) => String(r.profile_name || '').trim()).filter(Boolean));
+      const printIds = new Set(printable.map((r:any) => +r.profile_id || 0).filter((n:number) => n > 0));
+      const allHeadings = this.db.prepare(`
+        SELECT id, source_profile_id, source_profile_name
+        FROM quick_report_items WHERE quick_report_id=? AND test_id IS NULL`).all(quickId) as any[];
+      const setHeading = this.db.prepare(`UPDATE quick_report_items SET selected_for_reporting=? WHERE id=? AND quick_report_id=?`);
+      for (const h of allHeadings) {
+        const pid = +h.source_profile_id || 0;
+        const name = String(h.source_profile_name || '').trim();
+        const include = (pid > 0 && printIds.has(pid)) || (!!name && printNames.has(name));
+        setHeading.run(include ? 1 : 0, +h.id, quickId);
+      }
+      this.ensureColumn('quick_reports', 'profile_remarks_json', "TEXT NOT NULL DEFAULT '{}'");
       this.db.prepare(`UPDATE quick_reports SET
           typed_by=?,
           approved_by=?,
           remarks=?,
+          profile_remarks_json=?,
           show_profile_name_on_report=?,
           show_sub_header_on_report=?,
           updated_at=?
-        WHERE id=?`).run(payload.typed_by || '', payload.approved_by || '', payload.remarks || '', payload.show_profile_name === false ? 0 : 1, payload.show_sub_header === false ? 0 : 1, now, quickId);
-      this.audit('quick_report.finished.update', `${quickId}:${selectedRows.length}`);
+        WHERE id=?`).run(payload.typed_by || '', payload.approved_by || '', payload.remarks || '', this.serializeProfileRemarksJson(payload), payload.show_profile_name === false ? 0 : 1, payload.show_sub_header === false ? 0 : 1, now, quickId);
+      this.audit('quick_report.finished.update', `${quickId}:${selectedRows.length}:unchecked:${uncheckedIds.length}:returnPending:${returnUncheckedToPending ? 1 : 0}`);
       return quickId;
     });
     return tx();
@@ -507,16 +936,23 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
 
   protected createQuickFinishedReportFromSelection(payload:any, current:any, selected:any[]) {
     if (!selected.length) throw new Error('Select at least one test to finish.');
+    if (!this.selectionHasRealResultValue(selected)) {
+      throw new Error('Enter at least one result value before saving the finished report. Empty-only reports are not allowed.');
+    }
     const billId = Math.abs(Number(current?.bill_id || payload.bill_id || payload.id || 0));
     const base = this.quickBaseBillRow(billId);
     if (!base?.bill_id) throw new Error('Bill not found for quick report.');
     const now = this.nowIst();
+    this.ensureColumn('quick_report_items', 'report_order_overridden', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureColumn('quick_report_items', 'group_order_overridden', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureColumn('quick_report_items', 'department_order_override', 'REAL');
+    this.ensureColumn('quick_report_items', 'department_order_overridden', 'INTEGER NOT NULL DEFAULT 0');
     const tx = this.db.transaction(() => {
       const reportNo = this.nextConfiguredNo ? this.nextConfiguredNo('report', 'quick_reports', 'report_no') : `QR-${Date.now()}`;
-      const quickId = Number(this.db.prepare(`INSERT INTO quick_reports(report_no,bill_id,patient_id,status,typed_by,approved_by,remarks,show_profile_name_on_report,show_sub_header_on_report,created_at,updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(reportNo, billId, +base.patient_id, 'FINISHED', payload.typed_by || '', payload.approved_by || '', payload.remarks || '', payload.show_profile_name === false ? 0 : 1, payload.show_sub_header === false ? 0 : 1, now, now).lastInsertRowid);
+      this.ensureColumn('quick_reports', 'profile_remarks_json', "TEXT NOT NULL DEFAULT '{}'");
+      const quickId = Number(this.db.prepare(`INSERT INTO quick_reports(report_no,bill_id,patient_id,status,typed_by,approved_by,remarks,profile_remarks_json,show_profile_name_on_report,show_sub_header_on_report,created_at,updated_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(reportNo, billId, +base.patient_id, 'FINISHED', payload.typed_by || '', payload.approved_by || '', payload.remarks || '', this.serializeProfileRemarksJson(payload), payload.show_profile_name === false ? 0 : 1, payload.show_sub_header === false ? 0 : 1, now, now).lastInsertRowid);
       const allPending = this.quickBuildBillItems(billId, false, quickId);
-      const selectedIds = new Set(selected.map((x:any)=>+x.id).filter(Boolean));
       const selectedKeys = new Set<string>();
       for (const incoming of selected) {
         const match = allPending.find((x:any)=>+x.id === +incoming.id && x.test_id);
@@ -527,10 +963,39 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
         const selectedReferenceText = this.selectedReferenceTextForItem(itemForRules, base);
         if (selectedReferenceText) itemForRules.normal_range = selectedReferenceText;
         const flags = this.applyResultFlagsToItem(itemForRules, base);
-        const reportOrder = incoming.report_order_override !== null && incoming.report_order_override !== undefined && incoming.report_order_override !== '' ? +incoming.report_order_override : (+match.priority || 0);
-        const groupOrder = incoming.group_order_override !== null && incoming.group_order_override !== undefined && incoming.group_order_override !== '' ? +incoming.group_order_override : (+match.priority || 0);
-        this.db.prepare(`INSERT INTO quick_report_items(quick_report_id,bill_id,bill_item_id,item_key,test_id,test_name,department_name,side_header,result_value,unit,normal_range,method,priority,report_order_override,group_order_override,highlight_parameter,heading_kind,source_profile_id,source_profile_name,flag_status,is_critical,critical_message,formula_status,final_result_source,specimen_type_id,specimen_name,sample_id,barcode,collection_type,collect_timing,expected_collect_at,collection_date,collection_time,collection_datetime,barcode_generated,barcode_generated_at,recheck_remarks,created_at)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(quickId,billId,+match.bill_item_id,String(match.item_key),+match.test_id,match.test_name,match.department_name||'',incoming.side_header||match.side_header||'',finalValue,incoming.unit||match.unit||'',itemForRules.normal_range||incoming.normal_range||match.normal_range||'',incoming.method||match.method||'',+match.priority||0,reportOrder,groupOrder,match.highlight_parameter?1:0,'',match.source_profile_id||null,match.source_profile_name||'',flags.flag_status||'',flags.is_critical?1:0,flags.critical_message||'',incoming.formula_status||match.formula_status||'',incoming.final_result_source||match.final_result_source||'MANUAL',+match.specimen_type_id||0,match.specimen_name||'',match.sample_id||'',match.barcode||match.sample_id||'',match.collection_type||match.sample_type||'',match.collect_timing||'NOW',match.expected_collect_at||'',match.collection_date||'',match.collection_time||'',match.collection_datetime||'',match.barcode_generated?1:0,match.barcode_generated_at||'',incoming.recheck_remarks||match.recheck_remarks||'',now);
+        // Singles: trust UI order (Masters default or typing ↑↓). Never rewrite from Masters here.
+        const reportOrder = incoming.report_order_override !== null && incoming.report_order_override !== undefined && incoming.report_order_override !== ''
+          ? +incoming.report_order_override
+          : (match.report_order_override !== null && match.report_order_override !== undefined && match.report_order_override !== '' ? +match.report_order_override : (+match.priority || 0));
+        const isSingle = !(+(match.source_profile_id || incoming.source_profile_id || 0))
+          && !String(match.source_profile_name || incoming.source_profile_name || '').trim();
+        let groupOrder = incoming.group_order_override !== null && incoming.group_order_override !== undefined && incoming.group_order_override !== ''
+          ? +incoming.group_order_override
+          : (match.group_order_override !== null && match.group_order_override !== undefined && match.group_order_override !== '' ? +match.group_order_override : (+match.priority || 0));
+        if (isSingle) {
+          // Keep UI card-within value. Do not collapse to department_priority.
+          if (!Number.isFinite(+groupOrder)) groupOrder = 5000;
+        }
+        const overridden = !!(incoming._reportOrderOverridden || +incoming.report_order_overridden === 1);
+        const groupOverridden = !!(incoming._groupOrderOverridden || +incoming.group_order_overridden === 1);
+        const deptOverridden = !!(incoming._departmentOrderOverridden || +incoming.department_order_overridden === 1
+          || (incoming.department_order_override !== null && incoming.department_order_override !== undefined && incoming.department_order_override !== ''));
+        const deptOrder = deptOverridden
+          ? +(incoming.department_order_override ?? incoming.department_priority ?? match.department_priority ?? 9999)
+          : null;
+        const departmentName = String(incoming.department_name || match.department_name || '').trim();
+        this.db.prepare(`INSERT INTO quick_report_items(quick_report_id,bill_id,bill_item_id,item_key,test_id,test_name,department_name,side_header,result_value,unit,normal_range,method,priority,report_order_override,report_order_overridden,group_order_override,group_order_overridden,department_order_override,department_order_overridden,highlight_parameter,heading_kind,source_profile_id,source_profile_name,flag_status,is_critical,critical_message,formula_status,final_result_source,specimen_type_id,specimen_name,sample_id,barcode,collection_type,collect_timing,expected_collect_at,collection_date,collection_time,collection_datetime,barcode_generated,barcode_generated_at,recheck_remarks,created_at)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(quickId,billId,+match.bill_item_id,String(match.item_key),+match.test_id,match.test_name,departmentName,incoming.side_header||match.side_header||'',finalValue,incoming.unit||match.unit||'',itemForRules.normal_range||incoming.normal_range||match.normal_range||'',incoming.method||match.method||'',reportOrder,reportOrder,overridden?1:0,groupOrder,groupOverridden?1:0,deptOrder,deptOverridden?1:0,match.highlight_parameter?1:0,'',match.source_profile_id||null,match.source_profile_name||'',flags.flag_status||'',flags.is_critical?1:0,flags.critical_message||'',incoming.formula_status||match.formula_status||'',incoming.final_result_source||match.final_result_source||'MANUAL',+match.specimen_type_id||0,match.specimen_name||'',match.sample_id||'',match.barcode||match.sample_id||'',match.collection_type||match.sample_type||'',match.collect_timing||'NOW',match.expected_collect_at||'',match.collection_date||'',match.collection_time||'',match.collection_datetime||'',match.barcode_generated?1:0,match.barcode_generated_at||'',incoming.recheck_remarks||match.recheck_remarks||'',now);
+        const itemKey = String(match.item_key || '').trim();
+        if (itemKey) {
+          try {
+            const src = String(incoming.final_result_source || match.final_result_source || 'MANUAL').toUpperCase();
+            this.db.prepare(`UPDATE quick_reporting_barcode_items
+              SET result_value=?, result_source=?, updated_at=?
+              WHERE bill_id=? AND TRIM(COALESCE(item_key,''))=?`)
+              .run(finalValue, src === 'ANALYZER' ? 'ANALYZER' : 'MANUAL', now, billId, itemKey);
+          } catch { /* optional */ }
+        }
       }
       if (!selectedKeys.size) throw new Error('Selected tests were not found in Quick Reporting Pending. Refresh and try again.');
       // Copy only headings that belong to selected profile rows.
@@ -541,8 +1006,31 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
           const value = x.group_order_override !== null && x.group_order_override !== undefined && x.group_order_override !== '' ? +x.group_order_override : null;
           return value === null ? best : (best === null ? value : Math.min(best, value));
         }, null);
-        this.db.prepare(`INSERT INTO quick_report_items(quick_report_id,bill_id,bill_item_id,item_key,test_id,test_name,department_name,side_header,result_value,unit,normal_range,method,priority,report_order_override,group_order_override,highlight_parameter,heading_kind,source_profile_id,source_profile_name,created_at)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(quickId,billId,+h.bill_item_id,String(h.item_key),null,h.test_name,h.department_name||'','','','','','',+h.priority||0,+h.priority||0,headingGroupOrder ?? (+h.priority||0),0,h.heading_kind||'PROFILE',h.source_profile_id||null,h.source_profile_name||'',now);
+        // Use the pending layout order (report_order_override), not nextOrder() priority —
+        // otherwise INNER side-headers can sort below later tests (e.g. under pH).
+        // PROFILE card titles share the first test's order; seat them just before that test
+        // so ORDER BY report_order, id does not put Total Cholesterol above the profile header.
+        let headingReportOrder = h.report_order_override !== null && h.report_order_override !== undefined && h.report_order_override !== ''
+          ? +h.report_order_override
+          : (+h.priority || 0);
+        const kind = String(h.heading_kind || 'PROFILE').toUpperCase();
+        if (kind === 'PROFILE' || !kind) {
+          const testOrders = profileRows
+            .map((x:any) => x.report_order_override !== null && x.report_order_override !== undefined && x.report_order_override !== '' ? +x.report_order_override : null)
+            .filter((n:number|null): n is number => n !== null && Number.isFinite(n));
+          if (testOrders.length) headingReportOrder = Math.min(...testOrders) - 0.0001;
+        }
+        const headingGroup = headingGroupOrder ?? (h.group_order_override !== null && h.group_order_override !== undefined && h.group_order_override !== '' ? +h.group_order_override : headingReportOrder);
+        const headingDeptOrder = profileRows.reduce((best:number|null, x:any) => {
+          if (!(x._departmentOrderOverridden || +x.department_order_overridden === 1
+            || (x.department_order_override !== null && x.department_order_override !== undefined && x.department_order_override !== ''))) {
+            return best;
+          }
+          const value = +(x.department_order_override ?? x.department_priority ?? Number.NaN);
+          return Number.isFinite(value) ? (best === null ? value : Math.min(best, value)) : best;
+        }, null);
+        this.db.prepare(`INSERT INTO quick_report_items(quick_report_id,bill_id,bill_item_id,item_key,test_id,test_name,department_name,side_header,result_value,unit,normal_range,method,priority,report_order_override,group_order_override,department_order_override,department_order_overridden,highlight_parameter,heading_kind,source_profile_id,source_profile_name,created_at)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(quickId,billId,+h.bill_item_id,String(h.item_key),null,h.test_name,h.department_name||'',h.side_header||'','','','','',headingReportOrder,headingReportOrder,headingGroup,headingDeptOrder,headingDeptOrder!=null?1:0,0,h.heading_kind||'PROFILE',h.source_profile_id||null,h.source_profile_name||'',now);
       }
       this.audit('quick_report.create', `${quickId}:${reportNo}:bill:${billId}`);
       return quickId;
@@ -611,6 +1099,54 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
     }
   }
 
+  protected serializeProfileRemarksJson(payload:any): string {
+    const raw = payload?.profile_remarks ?? payload?.profile_remarks_json;
+    if (!raw) return '{}';
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw || '{}');
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return '{}';
+        const out: Record<string, string> = {};
+        for (const [k, v] of Object.entries(parsed)) {
+          const key = String(k || '').trim();
+          const text = String(v ?? '').trim();
+          if (key && text) out[key] = text;
+        }
+        return JSON.stringify(out);
+      } catch {
+        return '{}';
+      }
+    }
+    if (typeof raw === 'object' && !Array.isArray(raw)) {
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(raw)) {
+        const key = String(k || '').trim();
+        const text = String(v ?? '').trim();
+        if (key && text) out[key] = text;
+      }
+      return JSON.stringify(out);
+    }
+    return '{}';
+  }
+
+  protected attachProfileRemarks(row:any) {
+    if (!row || typeof row !== 'object') return row;
+    try {
+      const raw = row.profile_remarks ?? row.profile_remarks_json;
+      if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+        row.profile_remarks = raw;
+        return row;
+      }
+      row.profile_remarks = JSON.parse(String(raw || '{}') || '{}');
+      if (!row.profile_remarks || typeof row.profile_remarks !== 'object' || Array.isArray(row.profile_remarks)) {
+        row.profile_remarks = {};
+      }
+    } catch {
+      row.profile_remarks = {};
+    }
+    return row;
+  }
+
   saveReport(payload:any) {
     const current = this.getReport(+payload.id);
     const patient = current || {};
@@ -677,7 +1213,8 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
       // APPROVED while any other item in the same sample/report is still pending or
       // waiting approval. Item-level result_status is the source of truth.
       const finalStatus = remaining > 0 ? 'DRAFT' : (enteredCount > 0 ? 'TYPED' : (approvedCount > 0 ? 'APPROVED' : 'DRAFT'));
-      this.db.prepare('UPDATE reports SET status=?,remarks=?,typed_by=?,approved_by=?,show_profile_name_on_report=?,show_sub_header_on_report=?,updated_at=? WHERE id=?').run(finalStatus,payload.remarks||'',payload.typed_by||'',payload.approved_by||'',payload.show_profile_name === false ? 0 : 1,payload.show_sub_header === false ? 0 : 1,now,payload.id);
+      this.ensureColumn('reports', 'profile_remarks_json', "TEXT NOT NULL DEFAULT '{}'");
+      this.db.prepare('UPDATE reports SET status=?,remarks=?,profile_remarks_json=?,typed_by=?,approved_by=?,show_profile_name_on_report=?,show_sub_header_on_report=?,updated_at=? WHERE id=?').run(finalStatus,payload.remarks||'',this.serializeProfileRemarksJson(payload),payload.typed_by||'',payload.approved_by||'',payload.show_profile_name === false ? 0 : 1,payload.show_sub_header === false ? 0 : 1,now,payload.id);
       this.db.prepare(`UPDATE specimen_collections
         SET internal_check_status = CASE WHEN (SELECT COUNT(*) FROM specimen_collection_tests sct JOIN report_items ri ON ri.id=sct.report_item_id WHERE sct.collection_id=specimen_collections.id AND ri.internal_check_required=1 AND COALESCE(ri.internal_check_status,'PENDING')<>'DONE')=0 THEN 'DONE' ELSE 'PENDING' END,
             internal_checked_at = CASE WHEN (SELECT COUNT(*) FROM specimen_collection_tests sct JOIN report_items ri ON ri.id=sct.report_item_id WHERE sct.collection_id=specimen_collections.id AND ri.internal_check_required=1 AND COALESCE(ri.internal_check_status,'PENDING')<>'DONE')=0 THEN COALESCE(internal_checked_at, ?) ELSE internal_checked_at END,
@@ -707,7 +1244,6 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
     add('printed_at', 'TEXT');
     add('emailed_at', 'TEXT');
     add('smsed_at', 'TEXT');
-    add('whatsapped_at', 'TEXT');
     add('delivery_status', 'TEXT');
     add('show_profile_name_on_report', 'INTEGER NOT NULL DEFAULT 1');
     add('show_sub_header_on_report', 'INTEGER NOT NULL DEFAULT 1');
@@ -716,28 +1252,22 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
   markReportDelivery(reportId:number, channel:string, details:string='') {
     const now = this.nowIst();
     const normalized = String(channel || '').toUpperCase();
-    const delivery: Record<string, { col: string; label: string }> = {
-      PDF_EXPORT: { col: 'pdf_exported_at', label: 'PDF_EXPORTED' },
-      PRINT: { col: 'printed_at', label: 'PRINTED' },
-      EMAIL: { col: 'emailed_at', label: 'EMAILED' },
-      WHATSAPP: { col: 'whatsapped_at', label: 'WHATSAPP_SENT' },
-      SMS: { col: 'smsed_at', label: 'SMS_SENT' }
-    };
-    const selected = delivery[normalized];
-    if (!selected) throw new Error('Unknown report delivery channel.');
+    const col = normalized === 'PDF_EXPORT' ? 'pdf_exported_at' : normalized === 'PRINT' ? 'printed_at' : normalized === 'EMAIL' ? 'emailed_at' : normalized === 'SMS' ? 'smsed_at' : '';
+    if (!col) throw new Error('Unknown report delivery channel.');
+    const label = normalized === 'PDF_EXPORT' ? 'PDF_EXPORTED' : normalized === 'PRINT' ? 'PRINTED' : normalized === 'EMAIL' ? 'EMAILED' : 'SMS_SENT';
     if (this.isQuickReportingEnabled()) {
       const qr = this.db.prepare('SELECT id,status FROM quick_reports WHERE id=?').get(reportId) as any;
       if (qr?.id) {
         this.db.prepare('UPDATE quick_reports SET updated_at=? WHERE id=?').run(now, reportId);
-        this.audit(`quick_report.delivery.${normalized.toLowerCase()}`, `${reportId}:${details || selected.label}`);
+        this.audit(`quick_report.delivery.${normalized.toLowerCase()}`, `${reportId}:${details || label}`);
         return this.getReport(reportId);
       }
     }
     const r = this.db.prepare('SELECT id,status FROM reports WHERE id=?').get(reportId) as any;
     if (!r?.id) throw new Error('Report not found');
     if (String(r.status || '').toUpperCase() !== 'APPROVED') throw new Error('Delivery actions are allowed only for approved reports.');
-    this.db.prepare(`UPDATE reports SET ${selected.col}=?, delivery_status=?, updated_at=? WHERE id=?`).run(now, selected.label, now, reportId);
-    this.audit(`report.delivery.${normalized.toLowerCase()}`, `${reportId}:${details || selected.label}`);
+    this.db.prepare(`UPDATE reports SET ${col}=?, delivery_status=?, updated_at=? WHERE id=?`).run(now, label, now, reportId);
+    this.audit(`report.delivery.${normalized.toLowerCase()}`, `${reportId}:${details || label}`);
     return this.getReport(reportId);
   }
 

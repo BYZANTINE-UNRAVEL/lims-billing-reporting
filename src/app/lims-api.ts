@@ -5,8 +5,9 @@ export interface LimsApi {
   getSetting?(key: string, fallback?: string): Promise<string>;
   setSetting?(key: string, value: string): Promise<any>;
   chooseReportBackgroundImage?(): Promise<{path: string} | null>;
-  listDepartments(): Promise<any[]>;
+  listDepartments(activeOnly?: boolean): Promise<any[]>;
   saveDepartment(item: any): Promise<any[]>;
+  deleteDepartment?(id: number): Promise<any[]>;
   reorderDepartments?(items: any[]): Promise<any[]>;
   listUnits(): Promise<any[]>;
   saveUnit(item: any): Promise<any[]>;
@@ -32,12 +33,6 @@ export interface LimsApi {
   updateCommissionStatus?(payload: any): Promise<any>;
   settleCommissions?(payload: any): Promise<any>;
   listCommissionSettlements?(filters?: any): Promise<any[]>;
-  getCommissionSettlement?(id: number): Promise<any>;
-  commissionSettlementPdf?(id: number): Promise<string>;
-  commissionSettlementExcel?(id: number): Promise<string>;
-  commissionReport?(filters?: any): Promise<any>;
-  commissionReportPdf?(filters?: any): Promise<string>;
-  commissionReportExcel?(filters?: any): Promise<string>;
   listCommissionGroups?(): Promise<any[]>;
   saveCommissionGroup?(payload:any): Promise<any>;
   deleteCommissionGroup?(id:number): Promise<any[]>;
@@ -121,7 +116,10 @@ export interface LimsApi {
   approvedReportPrint?(id: number, options?: any): Promise<string>;
   approvedReportEmail?(id: number, options?: any): Promise<any>;
   approvedReportWhatsapp?(id: number, options?: any): Promise<any>;
-  openWhatsAppContact?(mobile: string): Promise<{ ok: boolean; mobile: string }>;
+  openWhatsAppContact?(mobile: string, options?: { file?: string; filePath?: string }): Promise<{ ok: boolean; mobile: string; clipboardCopied?: boolean; clipboardMode?: string }>;
+  billWhatsApp?(billId: number, options?: any): Promise<any>;
+  copyFileToClipboard?(filePath: string): Promise<{ ok: boolean; mode: string; error?: string }>;
+  onWhatsAppHandoffProgress?(callback: (progress: any) => void): () => void;
   approvedReportSms?(id: number, options?: any): Promise<any>;
   reportItemHistory?(patientId: number, testId: number, currentReportId?: number): Promise<any[]>;
   billPdf(billId: number, includeReceipts?: boolean): Promise<string>;

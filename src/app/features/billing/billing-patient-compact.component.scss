@@ -296,6 +296,12 @@
   display: grid !important;
   place-items: center !important;
 }
+.billing-stepper.pro-billing .section-icon svg,
+.billing-stepper.pro-billing .patient-detail-tabs .tab-icon svg {
+  width: 16px !important;
+  height: 16px !important;
+  display: block !important;
+}
 .billing-stepper.pro-billing .section-heading h4 {
   font-size: 17px !important;
   line-height: 1.1 !important;
@@ -365,6 +371,36 @@
   background: transparent !important;
   border-radius: 0 !important;
   overflow: visible !important;
+}
+.billing-stepper.pro-billing .age-combo-row.split-ymd {
+  height: auto !important;
+  min-height: 42px !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  align-items: end !important;
+}
+.billing-stepper.pro-billing .age-combo-row .age-part {
+  display: grid !important;
+  gap: 4px !important;
+  margin: 0 !important;
+  min-width: 0 !important;
+}
+.billing-stepper.pro-billing .age-combo-row .age-part > span {
+  font-size: 10px !important;
+  font-weight: 850 !important;
+  color: var(--muted) !important;
+  letter-spacing: .02em !important;
+}
+.billing-stepper.pro-billing .age-combo-row .age-unit-fixed {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 42px !important;
+  padding: 0 12px !important;
+  border: 1px solid rgba(148, 163, 184, .28) !important;
+  border-radius: 12px !important;
+  background: rgba(8, 14, 26, .45) !important;
+  font-size: 12px !important;
+  font-weight: 850 !important;
+  color: var(--muted) !important;
 }
 .billing-stepper.pro-billing .age-combo-row input,
 .billing-stepper.pro-billing .age-combo-row select {
@@ -642,6 +678,12 @@ body.dark-theme .billing-stepper.pro-billing .age-display-box b { color: #93c5fd
   background: transparent !important;
   box-shadow: none !important;
   overflow: visible !important;
+}
+.billing-stepper.pro-billing .age-combo-row.split-ymd {
+  height: auto !important;
+  min-height: 38px !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  align-items: end !important;
 }
 .billing-stepper.pro-billing .age-combo-row input,
 .billing-stepper.pro-billing .age-combo-row select {
@@ -1114,6 +1156,12 @@ body.dark-theme .billing-stepper.pro-billing .age-display-box b { color: #93c5fd
   background: transparent !important;
   box-shadow: none !important;
 }
+.billing-stepper.pro-billing .age-combo-row.split-ymd {
+  height: auto !important;
+  min-height: 38px !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  align-items: end !important;
+}
 .billing-stepper.pro-billing .age-combo-row input,
 .billing-stepper.pro-billing .age-combo-row select {
   height: 38px !important;
@@ -1560,6 +1608,12 @@ body.dark-theme .billing-stepper.pro-billing .age-display-box b { color: #93c5fd
   min-height: 36px !important;
   grid-template-columns: minmax(62px, .7fr) minmax(92px, 1fr) !important;
   gap: 6px !important;
+}
+.billing-stepper.pro-billing .age-combo-row.split-ymd {
+  height: auto !important;
+  min-height: 36px !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  align-items: end !important;
 }
 .billing-stepper.pro-billing .age-combo-row input,
 .billing-stepper.pro-billing .age-combo-row select {
@@ -2201,4 +2255,68 @@ body:not(.dark-theme) .billing-stepper.pro-billing .dob-field mat-icon {
 
 .billing-stepper.pro-billing .step-panel.patient-step {
   padding-bottom: 0 !important;
+}
+
+/* Split age layout: full-width Y/M/D row so fields don't clip; keep column labels aligned. */
+.billing-stepper.pro-billing .patient-section-card.basic-info-card,
+.billing-stepper.pro-billing .patient-entry-card.compact-patient-card {
+  overflow: visible !important;
+}
+.billing-stepper.pro-billing .priority-patient-grid {
+  overflow: visible !important;
+  min-width: 0 !important;
+}
+.billing-stepper.pro-billing .priority-patient-grid .field {
+  min-width: 0 !important;
+}
+.billing-stepper.pro-billing .priority-patient-grid:has(.age-combo-row.split-ymd) {
+  grid-template-columns: minmax(140px, .85fr) minmax(220px, 1.45fr) minmax(150px, .95fr) minmax(170px, 1fr) !important;
+  align-items: start !important;
+}
+.billing-stepper.pro-billing .priority-patient-grid:has(.age-combo-row.split-ymd) .honorific-field { grid-column: 1 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid:has(.age-combo-row.split-ymd) .patient-name-field { grid-column: 2 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid:has(.age-combo-row.split-ymd) .gender-field { grid-column: 3 !important; grid-row: 1 !important; }
+.billing-stepper.pro-billing .priority-patient-grid:has(.age-combo-row.split-ymd) .age-combo-field {
+  grid-column: 1 / -1 !important;
+  grid-row: 2 !important;
+}
+.billing-stepper.pro-billing .priority-patient-grid:has(.age-combo-row.split-ymd) .dob-field { grid-column: 1 !important; grid-row: 3 !important; }
+.billing-stepper.pro-billing .priority-patient-grid:has(.age-combo-row.split-ymd) .consultant-priority-field { grid-column: 2 !important; grid-row: 3 !important; }
+.billing-stepper.pro-billing .priority-patient-grid:has(.age-combo-row.split-ymd) .mobile-priority-field { grid-column: 3 !important; grid-row: 3 !important; }
+.billing-stepper.pro-billing .priority-patient-grid:has(.age-combo-row.split-ymd) .referrer-type-field { grid-column: 4 !important; grid-row: 3 !important; }
+
+.billing-stepper.pro-billing .age-combo-field {
+  min-width: 0 !important;
+  overflow: visible !important;
+}
+.billing-stepper.pro-billing .age-combo-row.split-ymd {
+  height: auto !important;
+  min-height: 36px !important;
+  width: 100% !important;
+  max-width: 420px !important;
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  align-items: end !important;
+  overflow: visible !important;
+}
+.billing-stepper.pro-billing .age-combo-row.split-ymd .age-part {
+  display: grid !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+}
+.billing-stepper.pro-billing .age-combo-row.split-ymd .age-part > span {
+  font-size: 10px !important;
+  font-weight: 850 !important;
+  color: var(--muted) !important;
+  line-height: 1 !important;
+}
+.billing-stepper.pro-billing .age-combo-row.split-ymd input {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 0 8px !important;
+  text-align: center !important;
 }

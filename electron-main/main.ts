@@ -1,13 +1,77 @@
-import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, dialog, clipboard } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
-import os from 'node:os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import log from 'electron-log';
 import { DatabaseService } from './services/database.service';
 import { ReportService } from './services/report.service';
 import { BackupService } from './services/backup.service';
 import { AnalyzerApiService } from './services/analyzer-api.service';
 import { AnalyticsPdfService } from './services/analytics-pdf.service';
+
+const execFileAsync = promisify(execFile);
+
+/** Put a real file on the OS clipboard (FileDropList on Windows) so WhatsApp Desktop can Ctrl+V attach it. */
+async function copyFileToClipboard(filePath: string): Promise<{ ok: boolean; mode: 'file' | 'path' | 'none'; error?: string }> {
+  const file = String(filePath || '').trim();
+  if (!file || !fs.existsSync(file)) return { ok: false, mode: 'none', error: 'PDF file not found.' };
+  try {
+    if (process.platform === 'win32') {
+      const escaped = file.replace(/'/g, "''");
+      await execFileAsync(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', `Set-Clipboard -Path '${escaped}'`],
+        { windowsHide: true, timeout: 20000 }
+      );
+      return { ok: true, mode: 'file' };
+    }
+    // Non-Windows: best-effort path text (cannot reliably put FileDropList from Electron alone).
+    clipboard.writeText(file);
+    return { ok: true, mode: 'path' };
+  } catch (err: any) {
+    try {
+      clipboard.writeText(file);
+      return { ok: true, mode: 'path', error: String(err?.message || err || '') };
+    } catch (err2: any) {
+      return { ok: false, mode: 'none', error: String(err2?.message || err?.message || err2 || err || 'Clipboard copy failed.') };
+    }
+  }
+}
+
+function normalizeWaMobile(raw: any): string {
+  let mobile = String(raw || '').replace(/[^0-9]/g, '');
+  if (mobile.length === 10) mobile = `91${mobile}`;
+  return mobile;
+}
+
+function formatWhatsAppPatientCaption(report: any): string {
+  const name = [report?.patient_title, report?.patient_name || report?.name]
+    .map((x: any) => String(x || '').trim())
+    .filter(Boolean)
+    .join(' ')
+    .trim() || 'Patient';
+  const ageRaw = String(report?.age || '').trim();
+  let age = ageRaw;
+  if (!age) {
+    const value = report?.age_value;
+    const unit = String(report?.age_unit || 'YEARS').trim().toLowerCase();
+    if (value != null && value !== '') {
+      const u = unit.startsWith('month') ? 'months' : unit.startsWith('day') ? 'days' : 'years';
+      age = `${value} ${u}`;
+    }
+  }
+  const gender = String(report?.gender || '').trim();
+  const bill = String(report?.bill_no || '').trim();
+  return [
+    `Patient: ${name}`,
+    ...(age ? [`Age: ${age}`] : []),
+    ...(gender ? [`Gender: ${gender}`] : []),
+    ...(bill ? [`Bill: ${bill}`] : []),
+    '',
+    'Your approved lab report is ready. Please find the PDF attached.'
+  ].join('\n');
+}
 
 let mainWindow: BrowserWindow | null = null;
 let db: DatabaseService;
@@ -23,48 +87,6 @@ let appShutdownDone = false;
 
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function realDirectoryIfAvailable(dir: string): string {
-  const resolved = path.resolve(dir);
-  if (!fs.existsSync(resolved)) return '';
-  try {
-    if (!fs.statSync(resolved).isDirectory()) return '';
-    return fs.realpathSync.native(resolved);
-  } catch {
-    return '';
-  }
-}
-
-function isPathInsideOrSame(candidate: string, root: string): boolean {
-  const relative = path.relative(root, candidate);
-  return relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative));
-}
-
-function allowedOpenRoots(): string[] {
-  const setting = (key: string) => {
-    try { return String(db?.getSetting?.(key, '') || '').trim(); } catch { return ''; }
-  };
-  return Array.from(new Set([
-    db?.dataDir,
-    db?.reportsDir,
-    setting('report.export.path'),
-    setting('backup.path'),
-    path.join(os.tmpdir(), 'lims-report-pdf-temp'),
-    path.join(app.getPath('temp'), 'lims-generated-pdf-temp')
-  ].map(x => String(x || '').trim()).filter(Boolean).map(realDirectoryIfAvailable).filter(Boolean)));
-}
-
-async function openAllowedAppPath(fileOrDir: unknown) {
-  const raw = String(fileOrDir || '').trim();
-  if (!raw) throw new Error('No file or folder path was provided.');
-  const resolved = path.resolve(raw);
-  if (!fs.existsSync(resolved)) throw new Error('File or folder was not found.');
-  const target = fs.realpathSync.native(resolved);
-  if (!allowedOpenRoots().some(root => isPathInsideOrSame(target, root))) {
-    throw new Error('Opening this path is not allowed. Use an app-generated report, export, backup, or data path.');
-  }
-  return shell.openPath(target);
 }
 
 function emitShutdownProgress(payload: Record<string, any>) {
@@ -413,8 +435,9 @@ function registerIpc() {
           : 'Database folder changed. Restart the app to use the new location.')
     };
   });
-  safeIpcHandle('masters:departments', () => db.listDepartments());
+  safeIpcHandle('masters:departments', (_e, activeOnly=false) => db.listDepartments(!!activeOnly));
   safeIpcHandle('masters:department:save', (_e, x) => db.saveDepartment(x));
+  safeIpcHandle('masters:department:delete', (_e, id) => db.deleteDepartment(Number(id)));
   safeIpcHandle('masters:departments:reorder', (_e, items) => db.reorderDepartments(items));
   safeIpcHandle('masters:units', () => db.listUnits());
   safeIpcHandle('masters:unit:save', (_e, x) => db.saveUnit(x));
@@ -440,12 +463,6 @@ function registerIpc() {
   safeIpcHandle('commissions:status', (_e, payload={}) => db.updateCommissionStatus(payload));
   safeIpcHandle('commissions:settle', (_e, payload={}) => db.createCommissionSettlement(payload));
   safeIpcHandle('commissions:settlements', (_e, filters={}) => db.listCommissionSettlements(filters));
-  safeIpcHandle('commissions:settlement:get', (_e, id) => db.getCommissionSettlement(Number(id)));
-  safeIpcHandle('commissions:settlement:pdf', async (_e, id) => reports.createCommissionSettlementPdf(Number(id)));
-  safeIpcHandle('commissions:settlement:excel', async (_e, id) => reports.createCommissionSettlementExcel(Number(id)));
-  safeIpcHandle('commissions:report', (_e, filters={}) => db.getCommissionReport(filters));
-  safeIpcHandle('commissions:report:pdf', async (_e, filters={}) => reports.createCommissionReportPdf(filters));
-  safeIpcHandle('commissions:report:excel', async (_e, filters={}) => reports.createCommissionReportExcel(filters));
   safeIpcHandle('commissions:groups:list', () => db.listCommissionGroups());
   safeIpcHandle('commissions:groups:save', (_e,payload={}) => db.saveCommissionGroup(payload));
   safeIpcHandle('commissions:groups:delete', (_e,id) => db.deleteCommissionGroup(Number(id)));
@@ -521,7 +538,11 @@ function registerIpc() {
     });
   }));
   safeIpcHandle('patients:list', (_e, q='') => db.listPatients(q));
-  safeIpcHandle('patients:save', (_e, x) => db.savePatient(x));
+  safeIpcHandle('patients:save', (_e, x) => {
+    const id = db.savePatient(x);
+    if (x?.apply_scope) return { id, scope: db.lastPatientScopeResult() };
+    return id;
+  });
   safeIpcHandle('patients:history', (_e, id) => db.patientHistory(Number(id)));
   safeIpcHandle('patients:unused-preview', () => db.previewUnusedPatients());
   safeIpcHandle('patients:drop-unused', () => db.dropUnusedPatients());
@@ -621,20 +642,151 @@ Regards`);
     const report:any = db.getReport(Number(id));
     if (!report?.id) throw new Error('Report not found');
     if (String(report.status || '').toUpperCase() !== 'APPROVED') throw new Error('WhatsApp is available only for approved reports.');
-    const file = await reports.createReportPdf(Number(id), options?.withBackground !== false, {...options, pdfOutputMode:'preview'});
-    const mobile = String(report.patient_mobile || report.mobile || '').replace(/[^0-9+]/g, '');
-    const body = encodeURIComponent(`Your approved lab report for bill ${report.bill_no || ''} is ready. Please collect/open the report PDF from the lab.`);
-    await shell.openExternal(`https://wa.me/${mobile.replace(/^\+/, '')}?text=${body}`);
-    db.markReportDelivery(Number(id), 'WHATSAPP', mobile || 'whatsapp handoff');
-    return { file, mobile };
+
+    const emit = (payload: Record<string, any>) => {
+      try { _e.sender.send('whatsapp-handoff-progress', payload); } catch { /* ignore */ }
+    };
+    const step = (sid: string, label: string, status: 'pending' | 'running' | 'done' | 'error' | 'skipped', detail = '', progress = 0) => {
+      emit({ id: sid, label, status, detail, progress, billNo: report.bill_no || '', reportId: report.id });
+    };
+
+    // Phase 1: Report Generation overlay (report-progress) — same as Export PDF.
+    // Phase 2: WhatsApp live status (clipboard + open) after PDF is done.
+    const reportProgress = (payload: any) => {
+      try { _e.sender.send('report-progress', payload); } catch { /* ignore */ }
+    };
+    const file = await reports.createReportPdf(Number(id), options?.withBackground !== false, {
+      ...options,
+      pdfOutputMode: 'export',
+      reportProgress
+    });
+    reportProgress({
+      stage: 'done',
+      stageLabel: 'Completed',
+      title: 'Report ready',
+      message: 'The PDF has been exported successfully.',
+      current: 1,
+      total: 1,
+      progress: 100,
+      statusText: 'Completed'
+    });
+    // Let the Report Generation overlay finish its dismiss animation before WhatsApp status.
+    await new Promise(resolve => setTimeout(resolve, 900));
+
+    step('clipboard', 'Copying PDF to clipboard', 'running', file, 40);
+    const clipboardResult = await copyFileToClipboard(file);
+    if (clipboardResult.ok && clipboardResult.mode === 'file') {
+      step('clipboard', 'PDF copied to clipboard', 'done', 'Ready to paste with Ctrl+V in WhatsApp Desktop', 70);
+    } else if (clipboardResult.ok) {
+      step('clipboard', 'Path copied (file paste may not work)', 'done', file, 70);
+    } else {
+      step('clipboard', 'Clipboard copy failed', 'error', clipboardResult.error || 'Could not copy PDF file', 70);
+    }
+
+    step('whatsapp', 'Opening WhatsApp', 'running', '', 88);
+    const mobile = normalizeWaMobile(options?.mobile || report.patient_mobile || report.mobile || '');
+    const body = encodeURIComponent(formatWhatsAppPatientCaption(report));
+    if (mobile) await shell.openExternal(`https://wa.me/${mobile.replace(/^\+/, '')}?text=${body}`);
+    else await shell.openExternal(`https://wa.me/?text=${body}`);
+    step('whatsapp', mobile ? `WhatsApp opened for ${mobile}` : 'WhatsApp opened', 'done', '', 98);
+
+    db.markReportDelivery(Number(id), 'EMAIL', mobile || 'whatsapp handoff');
+    const summary = clipboardResult.ok && clipboardResult.mode === 'file'
+      ? 'Done — PDF ready and copied. Press Ctrl+V in the chat to attach.'
+      : clipboardResult.ok
+        ? 'Done — PDF ready. Clipboard has the path; attach the file manually if paste fails.'
+        : 'Done — PDF ready, but clipboard copy failed. Attach the PDF from the reports folder.';
+    emit({
+      id: 'done',
+      label: summary,
+      status: clipboardResult.ok ? 'done' : 'error',
+      detail: file,
+      progress: 100,
+      cancelled: false,
+      clipboardCopied: clipboardResult.ok,
+      clipboardMode: clipboardResult.mode,
+      clipboardError: clipboardResult.error || ''
+    });
+
+    return {
+      file,
+      mobile,
+      openFile: false,
+      cancelled: false,
+      clipboardCopied: clipboardResult.ok,
+      clipboardMode: clipboardResult.mode,
+      clipboardError: clipboardResult.error || '',
+      summary
+    };
   });
-  safeIpcHandle('whatsapp:open-contact', async (_e, mobileRaw) => {
-    let mobile = String(mobileRaw || '').replace(/[^0-9]/g, '');
+  safeIpcHandle('clipboard:copy-file', async (_e, filePath) => copyFileToClipboard(String(filePath || '')));
+  safeIpcHandle('whatsapp:open-contact', async (_e, mobileRaw, options:any = {}) => {
+    let mobile = normalizeWaMobile(mobileRaw);
     if (!mobile) throw new Error('Patient mobile number is not available.');
-    // Indian mobiles are commonly stored as 10 digits; wa.me needs country code.
-    if (mobile.length === 10) mobile = `91${mobile}`;
+    const file = String(options?.file || options?.filePath || '').trim();
+    let clipboardResult: { ok: boolean; mode: 'file' | 'path' | 'none'; error?: string } = { ok: false, mode: 'none' };
+    if (file) clipboardResult = await copyFileToClipboard(file);
     await shell.openExternal(`https://wa.me/${mobile}`);
-    return { ok: true, mobile };
+    return {
+      ok: true,
+      mobile,
+      clipboardCopied: clipboardResult.ok,
+      clipboardMode: clipboardResult.mode,
+      clipboardError: clipboardResult.error || ''
+    };
+  });
+  safeIpcHandle('billing:whatsapp', async (_e, billId, options:any = {}) => {
+    const id = Number(billId);
+    if (!id) throw new Error('Bill id is required.');
+    const row:any = (db as any).getBill?.(id);
+    if (!row?.id) throw new Error('Bill not found.');
+
+    const emit = (payload: Record<string, any>) => {
+      try { _e.sender.send('whatsapp-handoff-progress', payload); } catch { /* ignore */ }
+    };
+    const step = (sid: string, label: string, status: string, detail = '', progress = 0) => {
+      emit({ id: sid, label, status, detail, progress, billNo: row.bill_no || '', billId: id });
+    };
+
+    const mobile = normalizeWaMobile(options?.mobile || row.patient_mobile || row.mobile || row.patient?.mobile || '');
+    if (!mobile) throw new Error('Patient mobile number is not available.');
+
+    step('generate', 'Generating bill PDF', 'running', '', 25);
+    const includeReceipts = options?.includeReceipts !== false;
+    const file = await reports.createBillPdf(id, !!includeReceipts);
+    step('generate', 'Bill PDF ready', 'done', file, 55);
+
+    step('clipboard', 'Copying PDF to clipboard', 'running', '', 75);
+    const clipboardResult = await copyFileToClipboard(file);
+    if (clipboardResult.ok && clipboardResult.mode === 'file') {
+      step('clipboard', 'PDF copied to clipboard', 'done', 'Press Ctrl+V in WhatsApp Desktop to attach', 88);
+    } else if (clipboardResult.ok) {
+      step('clipboard', 'Path copied (file paste may not work)', 'done', file, 88);
+    } else {
+      step('clipboard', 'Clipboard copy failed', 'error', clipboardResult.error || 'Could not copy PDF', 88);
+    }
+
+    step('whatsapp', 'Opening WhatsApp', 'running', '', 94);
+    await shell.openExternal(`https://wa.me/${mobile}`);
+    step('whatsapp', `WhatsApp opened for ${mobile}`, 'done', '', 98);
+
+    const summary = clipboardResult.ok && clipboardResult.mode === 'file'
+      ? 'Done — bill PDF copied to clipboard. Press Ctrl+V in the chat to attach.'
+      : clipboardResult.ok
+        ? 'Done — WhatsApp opened. Clipboard has the path; attach manually if paste fails.'
+        : 'Done — WhatsApp opened, but clipboard copy failed. Attach the bill PDF manually.';
+    emit({ id: 'done', label: summary, status: clipboardResult.ok ? 'done' : 'error', detail: file, progress: 100 });
+
+    return {
+      ok: true,
+      file,
+      mobile,
+      openFile: false,
+      clipboardCopied: clipboardResult.ok,
+      clipboardMode: clipboardResult.mode,
+      clipboardError: clipboardResult.error || '',
+      summary
+    };
   });
   safeIpcHandle('reports:approved-sms', async (_e, id, options={}) => {
     const report:any = db.getReport(Number(id));
@@ -672,7 +824,7 @@ Regards`);
   });
   safeIpcHandle('paths:data-dir', () => db.dataDir);
   safeIpcHandle('paths:reports-dir', () => db.reportsDir);
-  safeIpcHandle('paths:open', async (_e, fileOrDir) => openAllowedAppPath(fileOrDir));
+  safeIpcHandle('paths:open', async (_e, fileOrDir) => shell.openPath(String(fileOrDir)));
   safeIpcHandle('analyzer-api:status', () => analyzerApi?.status());
   safeIpcHandle('analyzer-api:restart', () => analyzerApi?.restart());
 }

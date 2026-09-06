@@ -3,7 +3,6 @@ import { ChangeDetectorRef, Component, EventEmitter, OnInit, Output, ViewChild, 
 import { FormsModule } from '@angular/forms';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { dateRangePresets, matchesDateRange, openNativeDatePicker, DATE_RANGE_FILTER_STYLES } from '../../shared/date-range-filters';
-import { DateTimeSettingsService } from '../../shared/date-time-settings.service';
 import { WhatsAppContactPromptComponent } from '../../shared/whatsapp-contact-prompt.component';
 
 type StatementAction = 'print' | 'download';
@@ -52,7 +51,7 @@ type StatementKind = 'detailed' | 'consolidated';
             <span>Search</span>
             <div class="input-icon">
               <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
-              <input [(ngModel)]="filters.q" placeholder="Bill no / Patient / Mobile" (keyup.enter)="loadStatement()" />
+              <input [(ngModel)]="filters.q" placeholder="Bill no / Patient ID / Name / Mobile" (keyup.enter)="loadStatement()" />
             </div>
           </label>
           <div class="filter-button-wrap">
@@ -465,7 +464,7 @@ export class StatementsPageComponent implements OnInit {
   @Output() newBill = new EventEmitter<void>();
   @ViewChild(WhatsAppContactPromptComponent) private whatsAppPrompt?: WhatsAppContactPromptComponent;
 
-  today = DateTimeSettingsService.nowInputValue().slice(0, 10);
+  today = new Date().toISOString().slice(0, 10);
   filters: any = { from: this.today, to: this.today, q: '', consultant_ids: [], status_list: [], payment_statuses: [], payment_modes: [] };
   draftFilters: any = { consultant_ids: [], status_list: [], payment_statuses: [], payment_modes: [] };
   draftSearch: any = { consultants: '', billStatus: '', paymentStatus: '', paymentMode: '' };
@@ -521,9 +520,14 @@ export class StatementsPageComponent implements OnInit {
   paymentStatusClass(b: any) { const s = this.statusText(b).toLowerCase(); return { paid: s === 'paid', partial: s === 'partial', pending: s === 'pending', excess: s === 'overpaid', cancelled: s === 'cancelled' }; }
   patientAgeGender(b: any) {
     const ageRaw = String(b?.age || '').trim();
+    const split = b?.age_split === true || b?.age_split === 1 || b?.age_split === '1' || b?.age_split === 'true';
     const ageValue = b?.age_value === '' || b?.age_value === undefined || b?.age_value === null ? '' : String(b.age_value).trim();
     const ageUnit = String(b?.age_unit || '').trim();
-    const age = ageRaw || [ageValue, ageUnit].filter(Boolean).join(' ').trim();
+    let age = '';
+    if (ageRaw && /month|day|week/i.test(ageRaw)) age = ageRaw;
+    else if (ageRaw && !(split && /^0\s*years?$/i.test(ageRaw) && Number(ageValue) === 0)) age = ageRaw;
+    else if (ageValue !== '') age = [ageValue, ageUnit].filter(Boolean).join(' ').trim();
+    else age = ageRaw;
     const gender = String(b?.gender || b?.patient_gender || '').trim();
     if (!age && !gender) return '-';
     return [age || '-', gender || '-'].join(' / ');
@@ -614,13 +618,12 @@ export class StatementsPageComponent implements OnInit {
   validateDates() { this.filterError.set(''); if (!this.filters.from || !this.filters.to) { this.filterError.set('From and To date are required.'); return false; } if (new Date(this.filters.from) > new Date(this.filters.to)) { this.filterError.set('From date cannot be after To date.'); return false; } return true; }
   openDatePicker(event: Event) { openNativeDatePicker(event); }
   setDatePreset(key: keyof ReturnType<typeof dateRangePresets>) {
-    const range = this.datePresets()[key];
+    const range = dateRangePresets()[key];
     this.filters.from = range.from;
     this.filters.to = range.to;
     this.validateDates();
   }
-  private datePresets() { return dateRangePresets(DateTimeSettingsService.nowInputValue()); }
-  private matchesPreset(key: keyof ReturnType<typeof dateRangePresets>) { return matchesDateRange(this.filters.from, this.filters.to, this.datePresets()[key]); }
+  private matchesPreset(key: keyof ReturnType<typeof dateRangePresets>) { return matchesDateRange(this.filters.from, this.filters.to, dateRangePresets()[key]); }
   isTodayRange() { return this.matchesPreset('today'); }
   isPreviousDayRange() { return this.matchesPreset('previousDay'); }
   isCurrentMonthRange() { return this.matchesPreset('currentMonth'); }
@@ -637,6 +640,31 @@ export class StatementsPageComponent implements OnInit {
   async printBill(b: any) { window.limsApi.openPath(await window.limsApi.billPdf(b.id, false)); }
   openCancel(b: any) { this.cancelForm = { reason: '', refund_amount: +b.paid || 0, refund_mode: 'Cash' }; this.cancelModal.set({ bill: b }); }
   async openPatientWhatsApp(b: any) {
+    const billId = +b?.id || 0;
+    if (billId && (window.limsApi as any).billWhatsApp) {
+      const prompted = await this.whatsAppPrompt?.promptMobile({
+        mobile: b?.mobile || b?.patient_mobile,
+        patientName: b?.patient_name || b?.name,
+        billNo: b?.bill_no
+      });
+      if (!prompted || prompted.cancelled || !prompted.mobile) return;
+      try {
+        const result = await (window.limsApi as any).billWhatsApp(billId, {
+          mobile: prompted.mobile,
+          includeReceipts: true
+        });
+        if (result?.clipboardCopied && result?.clipboardMode === 'file') {
+          alert('Clipboard: copied. WhatsApp opened — press Ctrl+V in the chat to attach the bill PDF.');
+        } else if (result?.clipboardCopied) {
+          alert('Clipboard: path copied. WhatsApp opened — attach the bill PDF manually if paste fails.');
+        } else {
+          alert(`WhatsApp opened for ${result?.mobile || prompted.mobile}. Clipboard: not copied — attach the bill PDF manually.`);
+        }
+      } catch (e: any) {
+        alert(e?.message || 'Unable to open WhatsApp.');
+      }
+      return;
+    }
     const result = await this.whatsAppPrompt?.openContact({
       mobile: b?.mobile || b?.patient_mobile,
       patientName: b?.patient_name || b?.name,

@@ -107,7 +107,6 @@ type ExitProgressState = {
       <app-report-typing-page *ngIf="tab()==='reports'" (changed)="reload()"></app-report-typing-page>
       <app-masters-page *ngIf="tab()==='masters'" (changed)="reload()"></app-masters-page>
       <app-consultants-page *ngIf="tab()==='consultants'" (changed)="reload()"></app-consultants-page>
-      <app-commissions-page *ngIf="tab()==='commissions'"></app-commissions-page>
       <app-operations-page *ngIf="tab()==='operations'" (changed)="reload()"></app-operations-page>
       <app-collection-page *ngIf="tab()==='collection'" (changed)="reload()"></app-collection-page>
       <app-analytics-page *ngIf="tab()==='analytics'"></app-analytics-page>
@@ -358,7 +357,6 @@ export class AppComponent implements OnInit, OnDestroy {
     { id: 'reports', label: 'Report Typing', icon: '▦' },
     { id: 'masters', label: 'Masters', icon: '⚙' },
     { id: 'consultants', label: 'Consultants', icon: '★' },
-    { id: 'commissions', label: 'Commissions', icon: '₪' },
     { id: 'analytics', label: 'Analytics', icon: '◒' },
     { id: 'operations', label: 'Operations', icon: '▤' },
     { id: 'collection', label: 'Lab Workflow', icon: '◈' },
@@ -1040,10 +1038,8 @@ export class AppComponent implements OnInit, OnDestroy {
     }
     this.activeBillId.set(Number(full.id));
     this.billSearchQuery.set(full.bill_no || '');
-    // Ensure the opened bill is present in the navigation list even if a prior refresh raced.
-    const tip = this.billNavRow(full);
-    const rows = this.bills().filter(b => Number(b.id) !== Number(full.id));
-    this.bills.set([tip, ...rows]);
+    // Upsert in place — never move the opened bill to index 0, or Next stays disabled.
+    this.upsertBillInNav(full);
     setTimeout(() => this.billingComponent?.loadExistingBill(full));
   }
 
@@ -1053,14 +1049,28 @@ export class AppComponent implements OnInit, OnDestroy {
     this.billSearchQuery.set(bill?.bill_no || '');
     const currentTab = this.tab();
     // Upsert immediately so Previous/Next don't wait on full reload.
-    if (bill?.id) {
-      const id = Number(bill.id);
-      const rest = this.bills().filter(b => Number(b.id) !== id);
-      this.bills.set([this.billNavRow(bill), ...rest]);
-    }
+    if (bill?.id) this.upsertBillInNav(bill);
     await this.reload();
     // Bill save/update and receipt actions must keep the user on Billing.
     if (currentTab === 'billing') this.setTab('billing');
+  }
+
+  /** Keep list order (newest-first from listBills). Only update fields or insert by id DESC. */
+  private upsertBillInNav(bill: any) {
+    const tip = this.billNavRow(bill);
+    const id = Number(tip.id);
+    if (!id) return;
+    const rows = this.bills().slice();
+    const idx = rows.findIndex(b => Number(b.id) === id);
+    if (idx >= 0) {
+      rows[idx] = { ...rows[idx], ...tip };
+      this.bills.set(rows);
+      return;
+    }
+    let insertAt = rows.findIndex(b => Number(b.id) < id);
+    if (insertAt < 0) insertAt = rows.length;
+    rows.splice(insertAt, 0, tip);
+    this.bills.set(rows);
   }
 
   private billNavRow(bill: any) {

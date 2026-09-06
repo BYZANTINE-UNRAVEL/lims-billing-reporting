@@ -91,6 +91,58 @@ export abstract class ReportLayoutService extends ReportCoreService {
     return [title, name].filter(Boolean).join(' ') || name || '-';
   }
 
+  /** Prefer stored/split age; never show "0 years" when months/days or DOB say otherwise. */
+  protected formatAgeForDisplay(patient: any): string {
+    const stored = this.safeText(patient?.age, '');
+    const split = patient?.age_split === true || patient?.age_split === 1 || patient?.age_split === '1' || patient?.age_split === 'true';
+    const unitLabel = (unit: string, value: number) => {
+      const u = unit === 'DAYS' ? 'day' : unit === 'MONTHS' ? 'month' : unit === 'WEEKS' ? 'week' : 'year';
+      return `${u}${Number(value) === 1 ? '' : 's'}`;
+    };
+    if (stored && /month|day|week/i.test(stored)) return stored;
+
+    if (split) {
+      let years = patient?.age_years;
+      let months = patient?.age_months;
+      let days = patient?.age_days;
+      const emptyParts = [years, months, days].every(v => v === undefined || v === null || v === '');
+      if ((emptyParts || (Number(years || 0) === 0 && Number(months || 0) === 0 && Number(days || 0) === 0)) && patient?.dob) {
+        const dob = new Date(String(patient.dob).slice(0, 10) + 'T00:00:00');
+        const today = new Date();
+        if (!Number.isNaN(dob.getTime()) && dob <= today) {
+          let y = today.getFullYear() - dob.getFullYear();
+          let m = today.getMonth() - dob.getMonth();
+          let d = today.getDate() - dob.getDate();
+          if (d < 0) { m--; d += new Date(today.getFullYear(), today.getMonth(), 0).getDate(); }
+          if (m < 0) { y--; m += 12; }
+          years = Math.max(0, y); months = Math.max(0, m); days = Math.max(0, d);
+        }
+      }
+      if (years === undefined || years === null || years === '') years = patient?.age_value;
+      years = Number(years || 0) || 0;
+      months = Math.min(11, Math.max(0, Number(months || 0) || 0));
+      days = Math.min(31, Math.max(0, Number(days || 0) || 0));
+      const bits: string[] = [];
+      if (years > 0) bits.push(`${years} ${unitLabel('YEARS', years)}`);
+      if (months > 0) bits.push(`${months} ${unitLabel('MONTHS', months)}`);
+      if (days > 0) bits.push(`${days} ${unitLabel('DAYS', days)}`);
+      if (bits.length) return bits.join(' ');
+      if (stored && !/^0\s*years?$/i.test(stored)) return stored;
+      return `0 ${unitLabel('YEARS', 0)}`;
+    }
+
+    const unit = this.safeText(patient?.age_unit, '').toUpperCase();
+    const value = patient?.age_value === undefined || patient?.age_value === null || patient?.age_value === ''
+      ? ''
+      : String(patient.age_value).trim();
+    if (value !== '' && Number.isFinite(Number(value))) {
+      const n = Number(value);
+      if (n === 0 && stored && !/^0\s*years?$/i.test(stored)) return stored;
+      return `${value} ${unitLabel(unit || 'YEARS', n)}`;
+    }
+    return stored || '';
+  }
+
   protected safeReportFilePart(value: any, fallback = 'NA', maxLen = 48): string {
     const text = String(value ?? '').trim() || fallback;
     const cleaned = text
@@ -104,7 +156,7 @@ export abstract class ReportLayoutService extends ReportCoreService {
 
   protected buildReportPdfFileName(report: any, computed: any): string {
     const patientName = this.safeReportFilePart(computed?.patientName || report?.patient_name || report?.name || 'Patient', 'Patient', 60);
-    const age = this.safeReportFilePart(report?.age || report?.patient_age || 'AgeNA', 'AgeNA', 22);
+    const age = this.safeReportFilePart(this.formatAgeForDisplay(report) || report?.age || report?.patient_age || 'AgeNA', 'AgeNA', 22);
     const gender = this.safeReportFilePart(report?.gender || report?.patient_gender || 'GenderNA', 'GenderNA', 18);
     const billNo = this.safeReportFilePart(report?.bill_no || report?.billNo || report?.report_no || report?.id, 'BillNA', 36);
     const patientId = this.safeReportFilePart(report?.patient_no || report?.patient_id || report?.uhid || report?.patientId || report?.id, 'PatientIDNA', 36);
@@ -242,11 +294,24 @@ export abstract class ReportLayoutService extends ReportCoreService {
     const specimen = this.safeText(computed.specimenSummary || r.sample_type || r.specimen_name || r.sample_id, '');
     const map: Record<string, string> = {
       patient_name: this.formatPatientNameForReport(r), patient_no: this.safeText(r.patient_no, ''),
-      age_gender: computed.ageGender, age: this.safeText(r.age, ''), gender: this.safeText(r.gender, ''), mobile: this.safeText(r.mobile || r.patient_mobile, ''), address: this.safeText(r.address || r.patient_address, ''),
+      age_gender: computed.ageGender, age: this.formatAgeForDisplay(r) || this.safeText(r.age, ''), gender: this.safeText(r.gender, ''), mobile: this.safeText(r.mobile || r.patient_mobile, ''), address: this.safeText(r.address || r.patient_address, ''),
       consultant: computed.consultant, collected: computed.collectedOn, reported: computed.reportedOn, billed_date: this.fmtPatientBlockDate(r.bill_date || r.created_at, 'billed'), mrn: this.safeText(r.mrn || r.uhId || r.uh_id || r.patient_mrn, ''),
       bill_no: this.safeText(r.bill_no, ''), report_no: this.safeText(r.report_no, ''), sample_type: specimen, specimen
     };
-    return map[field] ?? this.safeText(r?.[field], '');
+    return this.applyPatientValueCase(map[field] ?? this.safeText(r?.[field], ''));
+  }
+
+  protected applyPatientValueCase(value: any): string {
+    const text = String(value ?? '');
+    const trimmed = text.trim();
+    if (!trimmed || trimmed === '-') return text;
+    const mode = String(this.reportSetting('report.simple.patientDetailsValueCase', 'as_entered') || 'as_entered').trim().toLowerCase();
+    if (mode === 'upper' || mode === 'uppercase') return text.toUpperCase();
+    if (mode === 'lower' || mode === 'lowercase') return text.toLowerCase();
+    if (mode === 'title' || mode === 'titlecase' || mode === 'title_case') {
+      return text.replace(/\S+/g, word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
+    }
+    return text;
   }
 
   protected buildCode39Barcode(value: string) {
@@ -490,16 +555,16 @@ export abstract class ReportLayoutService extends ReportCoreService {
   }
 
   protected dynamicSignatureImageZone(signs: any[]): number {
+    // Manual override only when user sets Image Zone Height > 0.
     const manual = this.reportNumber('report.simple.signatureImageZoneHeightMm', 0, 0, 100);
     if (manual > 0) return this.mmToPt(manual);
+    // Otherwise size only from the configured image height — do not pre-pad
+    // with top/bottom offsets (those are nudges, not reserved blank space).
     let maxHeightMm = 0;
     for (const sign of signs || []) {
       const imagePath = sign?.imageEnabled === false ? '' : this.safeImagePath(String(sign?.imagePath || sign?.signatureImagePath || '').trim());
       if (!imagePath) continue;
-      const h = this.safeNumber(sign?.imageHeightMm, 12, 0, 120);
-      const top = Math.max(0, this.safeNumber(sign?.imageTopOffsetMm ?? sign?.imageOffsetYMm, 0, -200, 200));
-      const bottom = Math.max(0, this.safeNumber(sign?.imageBottomOffsetMm, 0, -200, 200));
-      maxHeightMm = Math.max(maxHeightMm, h + top + bottom);
+      maxHeightMm = Math.max(maxHeightMm, this.safeNumber(sign?.imageHeightMm, 12, 0, 120));
     }
     return this.mmToPt(maxHeightMm);
   }
@@ -510,22 +575,30 @@ export abstract class ReportLayoutService extends ReportCoreService {
     const imageAlignment = this.safeAlign(rawSign?.imageAlignment || rawSign?.imageAlign || textAlignment, textAlignment);
     const stack: any[] = [];
     const imagePath = rawSign?.imageEnabled === false ? '' : this.safeImagePath(String(rawSign?.imagePath || rawSign?.signatureImagePath || '').trim());
-    const imageZoneHeight = Math.max(0, rowImageZonePt);
-    if (imageZoneHeight > 0 || imagePath) {
+    const imageTextGapPt = this.mmToPt(this.reportNumber('report.simple.signatureImageTextGapMm', 1, 0, 40));
+    if (imagePath) {
       const imageWidthPt = this.mmToPt(this.safeNumber(rawSign?.imageWidthMm, 28, 1, 180));
       const imageHeightPt = this.mmToPt(this.safeNumber(rawSign?.imageHeightMm, 12, 1, 120));
       const xOffsetPt = this.mmToPt(this.safeNumber(rawSign?.imageLeftOffsetMm ?? rawSign?.imageOffsetXMm, 0, -200, 200) - this.safeNumber(rawSign?.imageRightOffsetMm, 0, -200, 200));
       const yOffsetPt = this.mmToPt(this.safeNumber(rawSign?.imageTopOffsetMm ?? rawSign?.imageOffsetYMm, 0, -200, 200));
-      const imageNode = imagePath ? {
+      const bottomOffsetPt = this.mmToPt(this.safeNumber(rawSign?.imageBottomOffsetMm, 0, -200, 200));
+      // Height follows the image fit box only. Offsets nudge placement; they do not
+      // inflate a taller empty zone above the stamp.
+      stack.push({
         image: imagePath,
         fit: [imageWidthPt, imageHeightPt],
+        width: imageWidthPt,
+        height: imageHeightPt,
         alignment: imageAlignment,
-        margin: [xOffsetPt, yOffsetPt, -xOffsetPt, 0]
-      } : { text: ' ' };
+        margin: [xOffsetPt, yOffsetPt, -xOffsetPt, Math.max(0, bottomOffsetPt) + imageTextGapPt]
+      });
+    } else if (rowImageZonePt > 0) {
+      // Sibling signs in this row have images — keep text lines aligned without
+      // inventing extra top padding beyond the shared image height.
       stack.push({
-        table: { widths: ['*'], heights: [imageZoneHeight || imageHeightPt], body: [[imageNode]] },
+        table: { widths: ['*'], heights: [rowImageZonePt], body: [[{ text: '' }]] },
         layout: 'noBorders',
-        margin: [0, 0, 0, this.mmToPt(this.reportNumber('report.simple.signatureImageTextGapMm', 1, 0, 40))]
+        margin: [0, 0, 0, imageTextGapPt]
       });
     }
     const rawLines = Array.isArray(rawSign?.lines) ? rawSign.lines : [
@@ -834,6 +907,34 @@ export abstract class ReportLayoutService extends ReportCoreService {
     return raw === 'symbol' || raw === 'drawn_arrow' || raw === 'custom' ? raw : 'text';
   }
 
+  protected flagOutputUsesUnicodeSymbol(text: string): boolean {
+    return /[↑↓▲▼△▽⬆⬇⇑⇓]/.test(String(text || ''));
+  }
+
+  protected buildFlagSymbolTextNode(flag: string): any {
+    const text = this.reportFlagOutputText(flag);
+    if (!text) return { text: '' };
+    const styleName = this.arrowStyleForReport(flag);
+    if (this.flagOutputUsesUnicodeSymbol(text)) {
+      const base = this.reportStyle('flagStyle', { bold: true, fontSize: 11, color: '#111111', fontFamily: 'NotoSansSymbols' });
+      const color = styleName === 'arrowHigh'
+        ? this.reportColor('report.simple.highColor', '#c00')
+        : styleName === 'arrowLow'
+          ? this.reportColor('report.simple.lowColor', '#00c')
+          : (base.color || '#111111');
+      const font = this.reportFont('NotoSansSymbols');
+      return {
+        text,
+        bold: true,
+        fontSize: Number(base.fontSize) || 11,
+        color,
+        font: font !== this.defaultReportFont ? font : undefined,
+        alignment: 'center'
+      };
+    }
+    return { text, style: styleName, alignment: 'center' };
+  }
+
   protected isHighReportFlag(flag:string): boolean {
     const f = String(flag || '').toUpperCase();
     return ['CH','CRITICAL_HIGH','CRITICAL HIGH','HH','H','HIGH','CR','C','CRIT','CRITICAL'].includes(f);
@@ -882,16 +983,80 @@ export abstract class ReportLayoutService extends ReportCoreService {
     return { canvas, width, height:size, alignment:'center', margin:[0,0,0,0] };
   }
 
+  /** Same geometry/stroke as canvas arrows, but SVG — positions correctly inside Flag cells. */
+  protected buildDrawnFlagArrowSvg(flag:string): any {
+    if (!flag) return { text:'' };
+    const high = this.isHighReportFlag(flag);
+    const low = this.isLowReportFlag(flag);
+    if (!high && !low) return { text:'' };
+    const critical = this.isCriticalReportFlag(flag);
+    const size = this.mmToPt(this.reportNumber('report.simple.tableFlagDrawnArrowSizeMm', 2.8, 1, 8));
+    const stroke = this.reportNumber('report.simple.tableFlagDrawnArrowStrokeWidth', 1.1, 0.3, 3);
+    const color = high ? this.reportColor('report.simple.highColor','#c00') : this.reportColor('report.simple.lowColor','#00c');
+    const gap = Math.max(1, size * 0.30);
+    const count = critical ? 2 : 1;
+    const width = count === 2 ? (size * 2 + gap) : size;
+    const lines:string[] = [];
+    const addArrow = (x:number) => {
+      const cx = x + size / 2;
+      const top = 0.5;
+      const bottom = Math.max(top + 1, size - 0.5);
+      const head = Math.max(2, size * 0.34);
+      const common = `stroke="${color}" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" fill="none"`;
+      if (high) {
+        lines.push(`<line x1="${cx}" y1="${bottom}" x2="${cx}" y2="${top}" ${common}/>`);
+        lines.push(`<line x1="${cx}" y1="${top}" x2="${cx - head}" y2="${top + head}" ${common}/>`);
+        lines.push(`<line x1="${cx}" y1="${top}" x2="${cx + head}" y2="${top + head}" ${common}/>`);
+      } else {
+        lines.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${bottom}" ${common}/>`);
+        lines.push(`<line x1="${cx}" y1="${bottom}" x2="${cx - head}" y2="${bottom - head}" ${common}/>`);
+        lines.push(`<line x1="${cx}" y1="${bottom}" x2="${cx + head}" y2="${bottom - head}" ${common}/>`);
+      }
+    };
+    addArrow(0);
+    if (critical) addArrow(size + gap);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${size}" viewBox="0 0 ${width} ${size}">${lines.join('')}</svg>`;
+    return { svg, width, height: size, alignment: 'center', margin: [0, 0, 0, 0] };
+  }
+
   protected buildReportFlagCell(flag:string): any {
     if (!flag) return { text:'' };
-    if (this.reportFlagDisplayMode() === 'drawn_arrow') return this.buildDrawnFlagArrow(flag);
-    return { text:this.reportFlagOutputText(flag), style:this.arrowStyleForReport(flag) };
+    if (this.reportFlagDisplayMode() === 'drawn_arrow') {
+      // pdfmake `canvas` inside multi-column result tables (esp. MHC with many
+      // section bands) paints into Result. SVG uses the same size/stroke/colors
+      // and stays in the Flag column like text.
+      const drawn = this.buildDrawnFlagArrowSvg(flag);
+      if (drawn?.svg) return drawn;
+    }
+    return this.buildFlagSymbolTextNode(flag);
   }
 
   protected buildResultFlagCell(resultText:string, flag:string, resultStyle:any): any {
     if (!flag) return { text:resultText, style:resultStyle };
-    if (this.reportFlagDisplayMode() !== 'drawn_arrow') return { text:`${resultText} ${this.reportFlagOutputText(flag)}`, style:resultStyle };
-    return { columns:[{ text:resultText, style:resultStyle, width:'*', alignment:'right' }, { ...this.buildDrawnFlagArrow(flag), width:'auto', margin:[3,0,0,0] }], columnGap:0 };
+    // Combined Result+Flag column only (no separate Flag column).
+    if (this.reportFlagDisplayMode() === 'drawn_arrow') {
+      const drawn = this.buildDrawnFlagArrow(flag);
+      if (Array.isArray(drawn?.canvas) && drawn.canvas.length) {
+        return {
+          columns: [
+            { text: resultText, style: resultStyle, width: '*', alignment: 'right' },
+            { ...drawn, width: 'auto', margin: [3, 0, 0, 0] }
+          ],
+          columnGap: 0
+        };
+      }
+    }
+    const flagNode = this.buildFlagSymbolTextNode(flag);
+    if (!flagNode || !String(flagNode.text || '').trim()) {
+      return { text:resultText, style:resultStyle };
+    }
+    return {
+      columns: [
+        { text: resultText, style: resultStyle, width: '*', alignment: 'right' },
+        { ...flagNode, width: 'auto', margin: [4, 0, 0, 0] }
+      ],
+      columnGap: 0
+    };
   }
 
 
@@ -953,6 +1118,8 @@ export abstract class ReportLayoutService extends ReportCoreService {
 
   protected reportTableBodyCellLineCount(cell:any): number {
     if (!cell) return 1;
+    if (typeof cell.svg === 'string' && cell.svg) return 1;
+    if (Array.isArray(cell.canvas) && cell.canvas.length) return 1;
     if (Array.isArray(cell.stack)) {
       return Math.max(1, cell.stack.reduce((total:number, part:any) => total + this.reportTableBodyCellLineCount(part), 0));
     }
@@ -972,7 +1139,53 @@ export abstract class ReportLayoutService extends ReportCoreService {
     return next;
   }
 
+  /** Center drawn Flag SVG in-cell (pdfmake ignores alignment on svg in tables). */
+  protected applyDrawnFlagGraphicsAlignment(cell:any, key:string, rowMaxLines = 1, cellLines = 1): any {
+    const align = this.reportTableColumnBodyAlign(key);
+    const w = Math.max(1, Number(cell.width) || 10);
+    const h = Math.max(1, Number(cell.height) || w);
+    const keys = this.reportTableColumnKeys();
+    const widths = this.reportResultTableWidths(keys);
+    const idx = keys.indexOf(key);
+    const cellW = idx >= 0 ? Math.max(w, Number(widths[idx]) || w) : w;
+
+    let left = 0;
+    if (align === 'center') left = Math.max(0, (cellW - w) / 2);
+    else if (align === 'right') left = Math.max(0, cellW - w);
+
+    // Vertical middle even when body align is left/right — multi-line test rows
+    // otherwise pin the arrow to the top of the Flag cell.
+    let top = 0;
+    const vCenter = key === 'flag'
+      ? this.reportBool('report.simple.tableFlagBodyVerticalCenter', true)
+      : (align === 'center' && this.reportTableColumnBodyVerticalCenter(key));
+    if (vCenter) {
+      const extraLines = Math.max(0, rowMaxLines - Math.max(1, cellLines));
+      top = extraLines * this.reportNumber('report.simple.tableBodyVerticalCenterLineOffsetPt', 4.5, 0, 24);
+    }
+
+    if (typeof cell.svg === 'string' && cell.svg) {
+      return { svg: cell.svg, width: w, height: h, margin: [left, top, 0, 0] };
+    }
+    return { ...cell, alignment: align, margin: [left, top, 0, 0] };
+  }
+
   protected applyReportTableBodyAlignment(cell:any, key:string, rowMaxLines = 1, cellLines = 1): any {
+    if (cell && typeof cell.svg === 'string' && cell.svg) {
+      return this.applyDrawnFlagGraphicsAlignment(cell, key, rowMaxLines, cellLines);
+    }
+    if (cell && Array.isArray(cell.canvas) && cell.canvas.length) {
+      return this.applyDrawnFlagGraphicsAlignment(cell, key, rowMaxLines, cellLines);
+    }
+    if (cell && cell.table && Array.isArray(cell.table.body)) {
+      const first = cell.table.body?.[0]?.[0];
+      if (first && Array.isArray(first.canvas) && first.canvas.length) {
+        return { ...cell, alignment: this.reportTableColumnBodyAlign(key) };
+      }
+    }
+    if (cell && Array.isArray(cell.columns) && cell.columns.some((c:any) => Array.isArray(c?.canvas) && c.canvas.length)) {
+      return { ...cell, alignment: this.reportTableColumnBodyAlign(key) };
+    }
     const align = this.reportTableColumnBodyAlign(key);
     const next:any = this.applyReportTableAlignmentDeep(cell, align);
     if (align === 'center' && this.reportTableColumnBodyVerticalCenter(key)) {
@@ -990,6 +1203,8 @@ export abstract class ReportLayoutService extends ReportCoreService {
   protected formatReportResultForDisplay(item:any, value:any): string {
     const text = String(value ?? '').trim();
     if (!text) return '';
+    const roundMode = String(item?.rounding_mode || '').toUpperCase().replace(/[\s-]+/g, '_');
+    if (roundMode === 'NO_TRANSFORM' || roundMode === 'NOTRANSFORM') return text;
     const type = String(item?.result_data_type || '').toUpperCase();
     if (type !== 'NUMBER' && type !== 'CALCULATED') return text;
     const n = Number(text.replace(/,/g, ''));

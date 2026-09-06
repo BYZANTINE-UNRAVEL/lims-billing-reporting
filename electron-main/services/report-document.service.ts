@@ -36,7 +36,13 @@ export class ReportDocumentService extends ReportContentService {  async createR
 
     const showProfileName = options?.show_profile_name !== false && r.show_profile_name_on_report !== 0;
     const showSubHeader = options?.show_sub_header !== false && r.show_sub_header_on_report !== 0;
-    const normalizedReportItems = this.normalizeReportItemsForPdf(r.items || [], options);
+    const pdfOptions = {
+      ...options,
+      show_profile_name: showProfileName,
+      show_sub_header: showSubHeader,
+      order_mode: String(options?.order_mode || '').toUpperCase() || (String(r.report_scope || '').toUpperCase() === 'QUICK' ? 'TYPED' : '')
+    };
+    const normalizedReportItems = this.normalizeReportItemsForPdf(r.items || [], pdfOptions);
     const printableItems = normalizedReportItems.filter((i:any)=> {
       if (i.test_id) return true;
       const kind = String(i.heading_kind || '').toUpperCase();
@@ -50,7 +56,7 @@ export class ReportDocumentService extends ReportContentService {  async createR
     const computed = {
       patientName: this.formatPatientNameForReport(r),
       patientNo: this.safeText(r.patient_no, '-'),
-      ageGender: [this.safeText(r.age, ''), this.safeText(r.gender, '')].filter(Boolean).join(' / ') || '-',
+      ageGender: [this.formatAgeForDisplay(r), this.safeText(r.gender, '')].filter(Boolean).join(' / ') || '-',
       consultant: this.safeText(r.consultant_name || r.ref_by || r.referred_by, '-'),
       specimenSummary,
       collectedOn: this.fmtPatientBlockDate(r.collected_at || r.collection_date || r.sample_collected_at || r.bill_date, 'collected'),
@@ -70,11 +76,15 @@ export class ReportDocumentService extends ReportContentService {  async createR
     const reportTitleText = this.reportSetting('report.simple.reportTitleText', 'LABORATORY REPORT');
 
     const tableColumns = this.reportTableColumnKeys();
+    const tableWidths = this.reportResultTableWidths(tableColumns);
     const buildTableHeader = () => tableColumns.map((key:string) => ({
       text: this.reportTableColumnLabel(key),
       style: 'columnHeader',
       alignment: this.reportTableColumnHeaderAlign(key)
     }));
+    // One continuous results table so pdfmake headerRows can reprint
+    // Test/Specimen|Flag|Result|Unit|Reference on every page. Flag cells use SVG
+    // (not canvas), so colSpan section rows in the same table are safe.
     const tableBodies:any[][] = [[buildTableHeader()]];
     const tableBreakReasons:string[] = [''];
     let tableBody:any[] = tableBodies[0];
@@ -84,8 +94,11 @@ export class ReportDocumentService extends ReportContentService {  async createR
       tableBodies.push(tableBody);
       tableBreakReasons.push(reason);
     };
-
-    const spanRow = (cell:any) => [cell, ...Array(Math.max(0, tableColumns.length - 1)).fill({})];
+    // Each filler cell must be its own object (never Array.fill({})).
+    const spanRow = (cell:any) => [
+      cell,
+      ...Array.from({ length: Math.max(0, tableColumns.length - 1) }, () => ({ text: '' }))
+    ];
     const flagMode = this.reportFlagMode();
     const flagsEnabled = this.reportBool('report.simple.tableFlagsEnabled', true) && flagMode !== 'none' && flagMode !== 'range_only';
     const flagStylesEnabled = flagsEnabled && (flagMode === 'flag_abnormal' || flagMode === 'critical_flag_abnormal');
@@ -104,9 +117,31 @@ export class ReportDocumentService extends ReportContentService {  async createR
     const departmentBreakEnabled = (id:number, name:string) => (id > 0 && pageBreakAfterDepartmentIds.has(id)) || (!!name && pageBreakAfterDepartmentNames.has(name));
     let hasAnyDepartment = false;
     const activeProfileInterpretations:any[] = [];
+    const profileRemarksMap = this.parseProfileRemarksMap(r.profile_remarks ?? r.profile_remarks_json);
+    const lookupProfileRemarkText = (entry:any) => {
+      const id = +(entry?.profileId || 0) || 0;
+      const name = String(entry?.label || entry?.profileName || '').trim();
+      const keys = [
+        id > 0 ? String(id) : '',
+        id > 0 ? `id:${id}` : '',
+        name,
+        name ? `name:${name}` : ''
+      ].filter(Boolean);
+      for (const key of keys) {
+        const text = String(profileRemarksMap?.[key] || '').trim();
+        if (text) return text;
+      }
+      return '';
+    };
     const flushProfileInterpretation = () => {
       const entry = activeProfileInterpretations.pop();
       if (!entry) return;
+      if (entry.seenTest && this.profileRemarksAllowed()) {
+        const remarksText = lookupProfileRemarkText(entry);
+        if (this.hasPrintableHtml(remarksText)) {
+          tableBody.push(spanRow({ stack:this.buildRemarksPdfNodes(remarksText, 'profile'), colSpan:tableColumns.length }));
+        }
+      }
       if (entry.seenTest && this.interpretationAllowed('profile') && Number(entry.enabled || 0) === 1 && this.hasPrintableHtml(entry.html)) {
         tableBody.push(spanRow({ stack:this.buildInterpretationPdfNodes(entry.html, entry.label || 'Profile'), colSpan:tableColumns.length }));
       }
@@ -120,9 +155,15 @@ export class ReportDocumentService extends ReportContentService {  async createR
       const departmentChanged = (currentDepartmentId > 0 && lastRenderedDepartmentId > 0 && currentDepartmentId !== lastRenderedDepartmentId)
         || (!!currentDepartmentName && !!lastRenderedDepartmentName && currentDepartmentName !== lastRenderedDepartmentName);
       if (departmentChanged && departmentBreakEnabled(lastRenderedDepartmentId, lastRenderedDepartmentName)) {
-        flushAllProfileInterpretations();
+        // Mixed multi-dept packages stay open across departments — only flush when the
+        // active profile is not a mixed package (otherwise interpretation/page-break
+        // mid-package can corrupt the next table and fail pdfmake).
+        const openMixed = activeProfileInterpretations.some((x:any) => this.isMixedProfileMaster(+x.profileId || 0));
+        if (!openMixed) {
+          flushAllProfileInterpretations();
+          lastRenderedProfileId = 0;
+        }
         beginFreshReportTable('category');
-        lastRenderedProfileId = 0;
       }
 
       const currentProfileId = +(item?.source_profile_id || 0) || 0;
@@ -149,7 +190,14 @@ export class ReportDocumentService extends ReportContentService {  async createR
         while (activeProfileInterpretations.length && activeProfileInterpretations[activeProfileInterpretations.length - 1].seenTest) flushProfileInterpretation();
 
         if (isProfile) {
-          activeProfileInterpretations.push({ label:this.safeText(item.test_name, 'Profile'), enabled:item.profile_interpretation_enabled, html:item.profile_interpretation_text, seenTest:false });
+          activeProfileInterpretations.push({
+            label: this.safeText(item.test_name, 'Profile'),
+            profileName: this.safeText(item.source_profile_name || item.test_name, ''),
+            profileId: +(item.source_profile_id || 0) || 0,
+            enabled: item.profile_interpretation_enabled,
+            html: item.profile_interpretation_text,
+            seenTest: false
+          });
         }
 
         const headingCell:any = { text:this.safeText(item.test_name, ''), style:isDepartment?'categoryHeader':'sectionHeader', colSpan:tableColumns.length }; tableBody.push(spanRow(headingCell));
@@ -161,16 +209,23 @@ export class ReportDocumentService extends ReportContentService {  async createR
         continue;
       }
 
-      activeProfileInterpretations.forEach((x:any) => x.seenTest = true);
+      activeProfileInterpretations.forEach((x:any) => {
+        x.seenTest = true;
+        if (!(+x.profileId || 0) && currentProfileId) x.profileId = currentProfileId;
+        if (!String(x.profileName || '').trim() && item?.source_profile_name) {
+          x.profileName = String(item.source_profile_name || '').trim();
+        }
+      });
       if (!hasAnyDepartment && item.department_name) {
         tableBody.push(spanRow({ text:String(item.department_name), style:'categoryHeader', colSpan:tableColumns.length }));
         hasAnyDepartment = true;
       }
 
       const itemFlagsEnabled = Number(item?.flag_enabled ?? 1) !== 0;
-      const rawFlag = itemFlagsEnabled ? this.resultFlag(item, criticalEnabled) : '';
-      const flag = flagsEnabled && itemFlagsEnabled ? rawFlag : '';
-      const flagText = flagsEnabled && itemFlagsEnabled ? this.reportFlagOutputText(flag) : '';
+      const rawResultValue = String(item?.result_value ?? '').trim();
+      const hasRealResult = rawResultValue !== '' && rawResultValue !== '-' && rawResultValue !== '—';
+      const rawFlag = itemFlagsEnabled && hasRealResult ? this.resultFlag(item, criticalEnabled) : '';
+      const flag = flagsEnabled && itemFlagsEnabled && hasRealResult ? rawFlag : '';
       const specimen = this.reportItemSpecimenText(item);
       const specimenText = specimenPrefix && specimen ? `${specimenPrefix} ${specimen}` : specimen;
       const testNameText = this.safeText(item.test_name || item.name, '-');
@@ -180,12 +235,19 @@ export class ReportDocumentService extends ReportContentService {  async createR
       const testStack:any[] = [];
       if (showSpecimen && specimen && specimenPlacement === 'above-test') testStack.push({ text: specimenText, style:'specimen', margin:[0,0,0,3] });
       testStack.push({ text: showSpecimen && specimen && specimenPlacement === 'same-line' ? `${testNameText}  ${specimenText}` : testNameText, style:testNameCellStyle });
-      if (showSpecimen && specimen && specimenPlacement === 'under-test') testStack.push({ text: specimenText, style:'specimen', margin:[0,6,0,0] });
-      const sampleId = String(item?.specimen_id || item?.sample_id || item?.sampleId || '').trim();
-      if (showSampleId && sampleId) testStack.push({ text:`Sample: ${sampleId}`, style:'specimen', margin:[0,3,0,0] });
       const method = String(item?.method || item?.method_name || item?.reference_method || '').trim();
       const methodText = methodPrefix && method ? `${methodPrefix} ${method}` : method;
-      if (showMethod && method && methodPlacement === 'under-test') testStack.push({ text: methodText, style:'refMethod', margin:[0,3,0,0] });
+      const methodUnderTest = !!(showMethod && method && methodPlacement === 'under-test');
+      const specimenUnderTest = !!(showSpecimen && specimen && specimenPlacement === 'under-test');
+      // When both sit under the parameter name, print one line: Specimen / Method
+      if (specimenUnderTest && methodUnderTest) {
+        testStack.push({ text: `${specimenText} / ${methodText}`, style:'specimen', margin:[0,6,0,0] });
+      } else if (specimenUnderTest) {
+        testStack.push({ text: specimenText, style:'specimen', margin:[0,6,0,0] });
+      }
+      const sampleId = String(item?.specimen_id || item?.sample_id || item?.sampleId || '').trim();
+      if (showSampleId && sampleId) testStack.push({ text:`Sample: ${sampleId}`, style:'specimen', margin:[0,3,0,0] });
+      if (methodUnderTest && !specimenUnderTest) testStack.push({ text: methodText, style:'refMethod', margin:[0,3,0,0] });
 
       const referenceOnly = this.reportReferenceText(item);
       const refStack:any[] = [];
@@ -194,6 +256,7 @@ export class ReportDocumentService extends ReportContentService {  async createR
       if (showMethod && method && methodPlacement === 'under-reference') refStack.push({ text: methodText, style:'refMethod', margin:[0,6,0,0] });
 
       const resultText = this.safeText(this.formatReportResultForDisplay(item, item.result_value), '-');
+      const hasSeparateFlagColumn = tableColumns.includes('flag');
       
       const cellFor = (key:string): any => {
         const resultStyle = flagStylesEnabled ? this.resultStyleForReport(flag) : 'resultNormal';
@@ -202,9 +265,13 @@ export class ReportDocumentService extends ReportContentService {  async createR
           case 'test_specimen': cell = { stack:testStack }; if(testNameCellFill) cell.fillColor = testNameCellFill; break;
           case 'test': cell = { text:testNameText, style:testNameCellStyle }; if(testNameCellFill) cell.fillColor = testNameCellFill; break;
           case 'specimen': cell = { text: showSpecimen ? specimenText : '', style:'specimen' }; break;
-          case 'result_flag': cell = this.buildResultFlagCell(resultText, flag, resultStyle); break;
+          // Separate Flag column: Result is value-only. Combined layout only when
+          // arrangement uses result_flag without a Flag column.
+          case 'result_flag': cell = hasSeparateFlagColumn
+            ? { text:resultText, style:resultStyle }
+            : this.buildResultFlagCell(resultText, flag, resultStyle); break;
           case 'result': cell = { text:resultText, style:resultStyle }; break;
-          case 'flag': cell = this.buildReportFlagCell(flag); break;
+          case 'flag': cell = hasSeparateFlagColumn ? this.buildReportFlagCell(flag) : { text:'' }; break;
           case 'unit': cell = { text:this.safeText(item.unit, ''), style:'tableData' }; break;
           case 'reference_method': cell = { stack:refStack.length ? refStack : [{text:''}] }; break;
           case 'reference': cell = this.buildReferencePdfNode(referenceOnly, [0,0,0,0], this.reportTableColumnBodyAlign('reference')); break;
@@ -253,20 +320,31 @@ export class ReportDocumentService extends ReportContentService {  async createR
     content.push(...this.reportHrBlocks('after-title'));
     content.push(...this.reportHrBlocks('before-table'));
     tableBodies.forEach((body:any[], index:number) => {
-      if (index > 0) {
-        content.push({
-          text:'Continued on next page…',
-          style:'continuedNotice',
-          alignment:'right',
-          margin:[0, this.mmToPt(2), 0, this.mmToPt(1)]
-        });
-      }
+      // Skip accidental header-only tables (can happen with stacked page-breaks).
+      if (!body.length || (index > 0 && body.length <= 1)) return;
+      const breakReason = String(tableBreakReasons[index] || '');
+      const nextBreakReason = String(tableBreakReasons[index + 1] || '');
+      const showContinued = (nextBreakReason === 'profile' || nextBreakReason === 'category') && body.length > 1;
+      const tableBottomMm = showContinued
+        ? Math.min(2, this.reportNumber('report.simple.tableMarginBottomMm', 6))
+        : this.reportNumber('report.simple.tableMarginBottomMm', 6);
+      const topMm = this.reportNumber('report.simple.tableMarginTopMm', 2);
       content.push({
-        pageBreak:index > 0 ? 'before' : undefined,
-        margin:[this.mmToPt(this.reportNumber('report.simple.tableMarginLeftMm', 0, 0, 100), 0), this.mmToPt(this.reportNumber('report.simple.tableMarginTopMm', 2), 6), this.mmToPt(this.reportNumber('report.simple.tableMarginRightMm', 0, 0, 100), 0), this.mmToPt(this.reportNumber('report.simple.tableMarginBottomMm', 6), 18)],
-        table:{ headerRows:1, dontBreakRows:true, keepWithHeaderRows:1, widths:this.reportResultTableWidths(tableColumns), body },
+        pageBreak: index > 0 && ['profile', 'category', 'test'].includes(breakReason) ? 'before' : undefined,
+        margin:[this.mmToPt(this.reportNumber('report.simple.tableMarginLeftMm', 0, 0, 100), 0), this.mmToPt(topMm, 0), this.mmToPt(this.reportNumber('report.simple.tableMarginRightMm', 0, 0, 100), 0), this.mmToPt(tableBottomMm, showContinued ? 6 : 18)],
+        // Clone widths per table — shared arrays can be mutated by pdfmake across page-break tables.
+        table:{ headerRows: 1, dontBreakRows:true, keepWithHeaderRows: 1, widths: Array.isArray(tableWidths) ? [...tableWidths] : tableWidths, body },
         layout:this.reportTableLayout()
       });
+      if (showContinued) {
+        content.push({
+          id: `lims-continued-${index}`,
+          text: 'Continued on next page…',
+          style: 'continuedNotice',
+          alignment: 'right',
+          margin: [0, this.mmToPt(1.5), 0, this.mmToPt(1)]
+        });
+      }
     });
 
     content.push(...this.reportHrBlocks('end'));
@@ -543,22 +621,6 @@ export class ReportDocumentService extends ReportContentService {  async createR
     return { y: map.year, mo: map.month, d: map.day, h: map.hour, mi: map.minute };
   }
   protected safeText(value:any, fallback='-') { const v = value === undefined || value === null ? '' : String(value).trim(); return v || fallback; }
-  protected formatAgeForDisplay(patient:any) {
-    const storedAge = this.safeText(patient?.age, '');
-    const unit = this.safeText(patient?.age_unit, '').toUpperCase();
-    const value = patient?.age_value === undefined || patient?.age_value === null || patient?.age_value === '' ? '' : String(patient.age_value).trim();
-    if (storedAge) {
-      const lowerAge = storedAge.toLowerCase();
-      if (/(year|month|mts|week|day|yr|yrs)/i.test(storedAge)) return storedAge;
-      if (!unit) return storedAge;
-    }
-    const baseValue = storedAge || value;
-    if (!baseValue) return '';
-    const n = Number(baseValue);
-    const singular = Number.isFinite(n) && n === 1;
-    const label = unit === 'MONTHS' ? (singular ? 'month' : 'months') : unit === 'WEEKS' ? (singular ? 'week' : 'weeks') : unit === 'DAYS' ? (singular ? 'day' : 'days') : (singular ? 'year' : 'years');
-    return `${baseValue} ${label}`;
-  }
   protected statusLabel(b:any) {
     const paid = +b.paid || 0;
     const total = +b.total || 0;
