@@ -2850,6 +2850,257 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
       WHERE ${where.join(' AND ')} GROUP BY cs.id ORDER BY datetime(cs.settlement_date) DESC,cs.id DESC`).all(...params);
   }
 
+  protected isProtectedCommissionStatus(status:any) {
+    const v = String(status || '').toUpperCase();
+    return v === 'APPROVED' || v === 'PAID' || v === 'REVERSAL_PENDING';
+  }
+
+  getCommissionSettlement(settlementId:number) {
+    this.ensureCommissionSchema();
+    const id = Number(settlementId || 0);
+    if (!id) throw new Error('Settlement id is required.');
+    const header = this.db.prepare(`SELECT cs.*, c.name consultant_name, c.phone consultant_phone, c.clinic consultant_clinic
+      FROM commission_settlements cs
+      JOIN consultants c ON c.id=cs.consultant_id
+      WHERE cs.id=?`).get(id) as any;
+    if (!header) throw new Error('Settlement not found.');
+    const items = this.db.prepare(`SELECT csi.id, csi.amount, bi.id bill_item_id, bi.name item_name, bi.item_type, bi.quantity,
+        bi.net_amount, bi.running_cost, bi.profit_amount, bi.commission_profile_name, bi.commission_rule_source,
+        bi.commission_status, b.bill_no, b.bill_date, p.name patient_name
+      FROM commission_settlement_items csi
+      JOIN bill_items bi ON bi.id=csi.bill_item_id
+      JOIN bills b ON b.id=bi.bill_id
+      LEFT JOIN patients p ON p.id=b.patient_id
+      WHERE csi.settlement_id=?
+      ORDER BY datetime(b.bill_date), b.bill_no, bi.id`).all(id) as any[];
+    return { ...header, items, item_count: items.length };
+  }
+
+  /**
+   * Commission reports for PDF/Excel export.
+   * report_type: CONSULTANT_SUMMARY | BILL_DETAILS | PENDING | HELD | SETTLEMENT_HISTORY | CANCELLED_REVERSAL | PROFIT
+   */
+  getCommissionReport(filters: any = {}) {
+    this.ensureCommissionSchema();
+    const reportType = String(filters.report_type || filters.type || 'CONSULTANT_SUMMARY').toUpperCase();
+    const from = String(filters.from || filters.fromDate || '').trim();
+    const to = String(filters.to || filters.toDate || '').trim();
+    const consultantId = Number(filters.consultant_id || filters.consultantId || 0);
+    const periodLabel = [from || '...', to || '...'].join(' to ');
+
+    if (reportType === 'SETTLEMENT_HISTORY') {
+      const settlements = this.listCommissionSettlements({ from, to });
+      const filtered = consultantId
+        ? settlements.filter((s: any) => Number(s.consultant_id) === consultantId)
+        : settlements;
+      const totalAmount = +filtered.reduce((s: number, r: any) => s + Number(r.amount || 0), 0).toFixed(2);
+      return {
+        report_type: reportType,
+        title: 'Paid Settlement History',
+        period: periodLabel,
+        columns: ['Settlement No', 'Date', 'Consultant', 'Items', 'Mode', 'Reference', 'Amount'],
+        rows: filtered.map((s: any) => ({
+          settlement_no: s.settlement_no,
+          settlement_date: s.settlement_date,
+          consultant_name: s.consultant_name,
+          item_count: s.item_count,
+          payment_mode: s.payment_mode,
+          reference_no: s.reference_no || '',
+          amount: +Number(s.amount || 0).toFixed(2)
+        })),
+        totals: { records: filtered.length, amount: totalAmount }
+      };
+    }
+
+    const statusMap: Record<string, string> = {
+      PENDING: 'GENERATED',
+      HELD: 'HELD',
+      BILL_DETAILS: 'ALL',
+      CONSULTANT_SUMMARY: 'ALL',
+      PROFIT: 'ALL',
+      CANCELLED_REVERSAL: 'CANCELLED_REVERSAL'
+    };
+
+    let entries: any;
+    if (reportType === 'CANCELLED_REVERSAL') {
+      const cancelled = this.listCommissionEntries({ from, to, consultant_id: consultantId, status: 'CANCELLED', search: filters.search });
+      const reversal = this.listCommissionEntries({ from, to, consultant_id: consultantId, status: 'REVERSAL_PENDING', search: filters.search });
+      entries = {
+        rows: [...(cancelled.rows || []), ...(reversal.rows || [])],
+        totals: {
+          records: (cancelled.rows?.length || 0) + (reversal.rows?.length || 0),
+          cancelled: cancelled.totals?.cancelled || 0,
+          reversal_pending: reversal.totals?.reversal_pending || 0,
+          commission: +((cancelled.totals?.cancelled || 0) + (reversal.totals?.reversal_pending || 0)).toFixed(2)
+        }
+      };
+    } else {
+      const status = statusMap[reportType] || 'ALL';
+      entries = this.listCommissionEntries({
+        from, to, consultant_id: consultantId, status, search: filters.search
+      });
+      if (['CONSULTANT_SUMMARY', 'BILL_DETAILS', 'PROFIT'].includes(reportType)) {
+        entries = {
+          ...entries,
+          rows: (entries.rows || []).filter((r: any) => {
+            const st = String(r.commission_status || '').toUpperCase();
+            return st !== 'CANCELLED' && st !== 'REVERSAL_PENDING';
+          })
+        };
+        const commission = +entries.rows.reduce((s: number, r: any) => s + Number(r.commission_amount || 0), 0).toFixed(2);
+        entries.totals = { ...entries.totals, records: entries.rows.length, commission };
+      }
+    }
+
+    const rows = entries.rows || [];
+
+    if (reportType === 'CONSULTANT_SUMMARY') {
+      const map = new Map<string, any>();
+      for (const r of rows) {
+        const key = String(r.consultant_id || 0);
+        const cur = map.get(key) || {
+          consultant_id: r.consultant_id || 0,
+          consultant_name: r.consultant_name || 'No consultant',
+          clinic: r.consultant_clinic || '',
+          entries: 0,
+          bills: new Set<number>(),
+          net_amount: 0,
+          running_cost: 0,
+          commission_amount: 0,
+          profit_amount: 0,
+          generated: 0,
+          approved: 0,
+          held: 0,
+          paid: 0
+        };
+        cur.entries += 1;
+        cur.bills.add(Number(r.bill_id));
+        cur.net_amount += Number(r.net_amount || 0);
+        cur.running_cost += Number(r.running_cost || 0);
+        cur.commission_amount += Number(r.commission_amount || 0);
+        cur.profit_amount += Number(r.profit_amount || 0);
+        const st = String(r.commission_status || 'GENERATED').toLowerCase();
+        if (st in cur) cur[st] += Number(r.commission_amount || 0);
+        map.set(key, cur);
+      }
+      const summaryRows = Array.from(map.values()).map((r: any) => ({
+        consultant_name: r.consultant_name,
+        clinic: r.clinic,
+        entries: r.entries,
+        bill_count: r.bills.size,
+        net_amount: +r.net_amount.toFixed(2),
+        running_cost: +r.running_cost.toFixed(2),
+        commission_amount: +r.commission_amount.toFixed(2),
+        profit_amount: +r.profit_amount.toFixed(2),
+        generated: +r.generated.toFixed(2),
+        approved: +r.approved.toFixed(2),
+        held: +r.held.toFixed(2),
+        paid: +r.paid.toFixed(2)
+      })).sort((a, b) => a.consultant_name.localeCompare(b.consultant_name));
+      return {
+        report_type: reportType,
+        title: 'Consultant-wise Commission Summary',
+        period: periodLabel,
+        columns: ['Consultant', 'Clinic', 'Entries', 'Bills', 'Net', 'Running Cost', 'Commission', 'Profit', 'Pending', 'Approved', 'Held', 'Paid'],
+        rows: summaryRows,
+        totals: {
+          records: summaryRows.length,
+          commission: +summaryRows.reduce((s: number, r: any) => s + r.commission_amount, 0).toFixed(2),
+          net_amount: +summaryRows.reduce((s: number, r: any) => s + r.net_amount, 0).toFixed(2),
+          running_cost: +summaryRows.reduce((s: number, r: any) => s + r.running_cost, 0).toFixed(2),
+          profit_amount: +summaryRows.reduce((s: number, r: any) => s + r.profit_amount, 0).toFixed(2)
+        }
+      };
+    }
+
+    if (reportType === 'BILL_DETAILS') {
+      const map = new Map<number, any>();
+      for (const r of rows) {
+        const billId = Number(r.bill_id);
+        const cur = map.get(billId) || {
+          bill_id: billId,
+          bill_no: r.bill_no,
+          bill_date: r.bill_date,
+          patient_name: r.patient_name || '',
+          consultant_name: r.consultant_name || 'No consultant',
+          items: 0,
+          net_amount: 0,
+          running_cost: 0,
+          commission_amount: 0,
+          profit_amount: 0
+        };
+        cur.items += 1;
+        cur.net_amount += Number(r.net_amount || 0);
+        cur.running_cost += Number(r.running_cost || 0);
+        cur.commission_amount += Number(r.commission_amount || 0);
+        cur.profit_amount += Number(r.profit_amount || 0);
+        map.set(billId, cur);
+      }
+      const billRows = Array.from(map.values()).map((r: any) => ({
+        ...r,
+        net_amount: +r.net_amount.toFixed(2),
+        running_cost: +r.running_cost.toFixed(2),
+        commission_amount: +r.commission_amount.toFixed(2),
+        profit_amount: +r.profit_amount.toFixed(2)
+      }));
+      return {
+        report_type: reportType,
+        title: 'Bill-wise Commission Details',
+        period: periodLabel,
+        columns: ['Bill No', 'Date', 'Patient', 'Consultant', 'Items', 'Net', 'Running Cost', 'Commission', 'Profit'],
+        rows: billRows,
+        detail_rows: rows,
+        totals: {
+          records: billRows.length,
+          commission: +billRows.reduce((s: number, r: any) => s + r.commission_amount, 0).toFixed(2),
+          net_amount: +billRows.reduce((s: number, r: any) => s + r.net_amount, 0).toFixed(2),
+          profit_amount: +billRows.reduce((s: number, r: any) => s + r.profit_amount, 0).toFixed(2)
+        }
+      };
+    }
+
+    const titles: Record<string, string> = {
+      PENDING: 'Pending Approval Commission List',
+      HELD: 'Held Commission List',
+      CANCELLED_REVERSAL: 'Cancelled / Reversal Pending Commission',
+      PROFIT: 'Profit Report (with Commission Deduction)'
+    };
+
+    const detailRows = rows.map((r: any) => ({
+      bill_no: r.bill_no,
+      bill_date: r.bill_date,
+      patient_name: r.patient_name || '',
+      consultant_name: r.consultant_name || 'No consultant',
+      item_name: r.item_name,
+      item_type: r.item_type,
+      net_amount: +Number(r.net_amount || 0).toFixed(2),
+      running_cost: +Number(r.running_cost || 0).toFixed(2),
+      commission_amount: +Number(r.commission_amount || 0).toFixed(2),
+      profit_amount: +Number(r.profit_amount || 0).toFixed(2),
+      commission_rule_source: r.commission_rule_source || '',
+      commission_profile_name: r.commission_profile_name || '',
+      commission_status: r.commission_status,
+      hold_reason: r.commission_hold_reason || ''
+    }));
+
+    return {
+      report_type: reportType,
+      title: titles[reportType] || 'Commission Report',
+      period: periodLabel,
+      columns: reportType === 'PROFIT'
+        ? ['Bill No', 'Date', 'Patient', 'Consultant', 'Item', 'Net', 'Running Cost', 'Commission', 'Profit', 'Status']
+        : ['Bill No', 'Date', 'Patient', 'Consultant', 'Item', 'Net', 'Commission', 'Rule', 'Status'],
+      rows: detailRows,
+      totals: {
+        records: detailRows.length,
+        commission: +detailRows.reduce((s: number, r: any) => s + r.commission_amount, 0).toFixed(2),
+        net_amount: +detailRows.reduce((s: number, r: any) => s + r.net_amount, 0).toFixed(2),
+        running_cost: +detailRows.reduce((s: number, r: any) => s + r.running_cost, 0).toFixed(2),
+        profit_amount: +detailRows.reduce((s: number, r: any) => s + r.profit_amount, 0).toFixed(2)
+      }
+    };
+  }
+
   calculateBillCommission(payload:any) {
     this.ensureCommissionSchema();
     const consultantId = +payload.consultant_id || 0;
