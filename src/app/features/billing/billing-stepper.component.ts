@@ -35,6 +35,10 @@ export class BillingStepperComponent implements OnInit {
   tests: any[] = [];
   profiles: any[] = [];
   consultants: any[] = [];
+  /** consultantId → Map of "TEST:id" / "PROFILE:id" → { selling_rate, cpt } */
+  private consultantRatesCache = new Map<number, Map<string, { selling_rate: number | null; cpt: string }>>();
+  private consultantRatesLoading = new Map<number, Promise<void>>();
+  private lastConsultantIdForRates: number | null = null;
   @Output() billCreated = new EventEmitter<any>();
   @Output() billCleared = new EventEmitter<void>();
   @Output() errorOccurred = new EventEmitter<string>();
@@ -56,11 +60,20 @@ export class BillingStepperComponent implements OnInit {
   mobileEditedManually = false;
   duplicateMobileCheckToken = 0;
   patientBillQuery = '';
+  patientSearchField: 'NAME' | 'MOBILE' | 'PATIENT_ID' = 'NAME';
+  readonly patientSearchFieldOptions: { value: 'NAME' | 'MOBILE' | 'PATIENT_ID'; label: string }[] = [
+    { value: 'NAME', label: 'Name' },
+    { value: 'MOBILE', label: 'Mobile No' },
+    { value: 'PATIENT_ID', label: 'Patient ID' },
+  ];
   billSearch = '';
   billItemResultsCache: any[] = [];
   suggestedBillItemCardsCache: any[] = [];
   private commissionPreviewTimer: any = null;
   private commissionPreviewSeq = 0;
+  private billItemSearchTimer: any = null;
+  private billItemSearchSeq = 0;
+  private catalogByKey = new Map<string, any>();
   pendingBillItemSelections: any[] = [];
   private lastPointerBillItemToggleKey = '';
   private lastPointerBillItemToggleAt = 0;
@@ -226,7 +239,7 @@ export class BillingStepperComponent implements OnInit {
     this.searchOpen = this.hasBillSearch();
     this.showBillItemSuggestions = !this.hasBillSearch();
     this.billItemActiveIndex = 0;
-    this.rebuildBillItemCaches();
+    this.scheduleBillItemCatalogRefresh();
   }
 
   openBillItemSearchOverlay() {
@@ -315,7 +328,7 @@ export class BillingStepperComponent implements OnInit {
     this.searchOpen = this.hasBillSearch();
     this.showBillItemSuggestions = !this.hasBillSearch();
     this.billItemActiveIndex = 0;
-    this.rebuildBillItemCaches();
+    this.scheduleBillItemCatalogRefresh();
   }
 
   onBillItemSearchKeydown(event: KeyboardEvent) {
@@ -348,7 +361,7 @@ export class BillingStepperComponent implements OnInit {
     this.searchOpen = false;
     this.billItemActiveIndex = 0;
     this.showBillItemSuggestions = true;
-    this.rebuildBillItemCaches();
+    this.scheduleBillItemCatalogRefresh(true);
   }
 
   private billItemTapAllowed() {
@@ -528,8 +541,8 @@ export class BillingStepperComponent implements OnInit {
   }
 
 
-  billableTests() { return this.tests.filter(t => Number(t.active) === 1 && Number(t.billable) === 1); }
-  billableProfiles() { return this.profiles.filter(p => Number(p.active) === 1 && Number(p.billable) === 1); }
+  billableTests() { return this.tests.filter(t => Number(t.active ?? 1) === 1 && Number(t.billable ?? 1) === 1); }
+  billableProfiles() { return this.profiles.filter(p => Number(p.active ?? 1) === 1 && Number(p.billable ?? 1) === 1); }
   hasBillSearch() { return String(this.billSearch || '').trim().length >= 2; }
 
   allBillableOptions() {
@@ -549,15 +562,15 @@ export class BillingStepperComponent implements OnInit {
     const all = includeSelected ? this.allBillableOptions() : this.allBillableSuggestions();
     if (q.length < 2) {
       return all
-        .map(s => ({ ...s, _score: this.recentScore(s.key, recentKeys) + this.defaultPopularityScore(s), reason: this.recentScore(s.key, recentKeys) ? 'Recent' : 'Suggested' }))
+        .map(s => ({ ...s, _score: this.recentScore(s.key, recentKeys) + this.defaultPopularityScore(s), reason: s.reason || (this.recentScore(s.key, recentKeys) ? 'Recent' : 'Suggested') }))
         .sort((a, b) => b._score - a._score || String(a.name).localeCompare(String(b.name)))
-        .slice(0, 8);
+        .slice(0, 12);
     }
     return all
       .map(s => ({ ...s, _score: this.searchScore(s, q, recentKeys), reason: this.reasonForSuggestion(s, q, recentKeys) }))
       .filter(s => s._score > 0)
       .sort((a, b) => b._score - a._score || String(a.name).localeCompare(String(b.name)))
-      .slice(0, 8);
+      .slice(0, 20);
   }
 
   suggestedItems() { return this.smartSuggestions(); }
@@ -566,49 +579,90 @@ export class BillingStepperComponent implements OnInit {
 
   recentItems() { return this.smartSuggestions(); }
 
+  private rememberCatalogRows(rows: any[]) {
+    for (const row of rows || []) {
+      const type = String(row?.itemType || row?.item_type || '').toUpperCase();
+      const id = Number(row?.id || 0);
+      if (!type || !id) continue;
+      const key = `${type}:${id}`;
+      this.catalogByKey.set(key, row);
+      if (type === 'TEST') {
+        const idx = this.tests.findIndex((t: any) => +t.id === id);
+        if (idx >= 0) this.tests[idx] = { ...this.tests[idx], ...row };
+        else this.tests = [...this.tests, row];
+      } else if (type === 'PROFILE') {
+        const idx = this.profiles.findIndex((p: any) => +p.id === id);
+        if (idx >= 0) this.profiles[idx] = { ...this.profiles[idx], ...row };
+        else this.profiles = [...this.profiles, row];
+      }
+    }
+  }
+
+  private scheduleBillItemCatalogRefresh(immediate = false) {
+    if (this.billItemSearchTimer) clearTimeout(this.billItemSearchTimer);
+    const delay = immediate ? 0 : (this.hasBillSearch() ? 160 : 40);
+    this.billItemSearchTimer = setTimeout(() => { void this.refreshBillItemCatalog(); }, delay);
+  }
+
+  private async refreshBillItemCatalog() {
+    const seq = ++this.billItemSearchSeq;
+    const q = String(this.billSearch || '').trim();
+    try {
+      const api: any = window.limsApi;
+      const rows = api.searchBillingCatalog
+        ? await api.searchBillingCatalog({ q, limit: this.hasBillSearch() ? 40 : 20, recentKeys: this.loadRecentKeys() })
+        : [];
+      if (seq !== this.billItemSearchSeq) return;
+      const list = Array.isArray(rows) ? rows : [];
+      this.rememberCatalogRows(list);
+      this.rebuildBillItemCachesFromCatalog(list);
+    } catch {
+      if (seq !== this.billItemSearchSeq) return;
+      this.rebuildBillItemCachesFromCatalog([]);
+    }
+  }
+
   rebuildBillItemCaches() {
-    this.billItemResultsCache = this.hasBillSearch() ? this.smartSuggestions(true).slice(0, 20) : [];
-    this.suggestedBillItemCardsCache = this.buildSuggestedBillItemCards();
+    this.scheduleBillItemCatalogRefresh();
+  }
+
+  private rebuildBillItemCachesFromCatalog(rows: any[]) {
+    const q = String(this.billSearch || '').trim().toLowerCase();
+    const terms = q.split(/\s+/).filter((t) => t.length >= 2);
+    const matchesQuery = (row: any) => {
+      if (!terms.length) return true;
+      const hay = [
+        row?.name, row?.display_name, row?.code, row?.search_keywords, row?.department_name, row?.meta, row?.typeLabel
+      ].map((x: any) => String(x || '').toLowerCase()).join(' ');
+      return terms.every((term) => hay.includes(term));
+    };
+    const mapped = (rows || [])
+      .map((row: any) => {
+        const type = (String(row.itemType || row.item_type || 'TEST').toUpperCase() === 'PROFILE' ? 'PROFILE' : 'TEST') as 'TEST' | 'PROFILE';
+        return this.toSuggestion(type, row);
+      })
+      .filter((s) => !this.hasBillSearch() || matchesQuery(s));
+    const available = mapped.filter(s => !this.bill.items.some((i: any) => i.item_type === s.itemType && +i.item_id === +s.id));
+    if (this.hasBillSearch()) {
+      this.billItemResultsCache = mapped.slice(0, 20);
+      this.suggestedBillItemCardsCache = [];
+    } else {
+      this.billItemResultsCache = [];
+      const tests = available.filter(s => s.itemType === 'TEST').slice(0, 5);
+      const profiles = available.filter(s => s.itemType === 'PROFILE').slice(0, 4);
+      this.suggestedBillItemCardsCache = [...tests, ...profiles];
+    }
     if (this.billItemActiveIndex >= this.billItemResultsCache.length) {
       this.billItemActiveIndex = Math.max(this.billItemResultsCache.length - 1, 0);
     }
   }
 
   popularBillItemSuggestions() {
-    const queryBefore = this.billSearch;
-    if (String(queryBefore || '').trim().length >= 2) {
-      return this.smartSuggestions().slice(0, 5);
-    }
-    const recentKeys = this.loadRecentKeys();
-    return this.allBillableSuggestions()
-      .map(s => ({ ...s, _score: this.recentScore(s.key, recentKeys) + this.defaultPopularityScore(s), reason: this.recentScore(s.key, recentKeys) ? 'Recent' : 'Popular' }))
-      .sort((a, b) => b._score - a._score || String(a.name).localeCompare(String(b.name)))
-      .slice(0, 5);
+    return this.suggestedBillItemCardsCache.slice(0, 5);
   }
 
   buildSuggestedBillItemCards() {
-    const recentKeys = this.loadRecentKeys();
-    const rank = (s: any) => ({
-      ...s,
-      _score: this.recentScore(s.key, recentKeys) + this.defaultPopularityScore(s),
-      reason: this.recentScore(s.key, recentKeys) ? 'Recent' : 'Suggested'
-    });
-    const byScoreThenName = (a: any, b: any) =>
-      b._score - a._score || String(a.name || a.display_name || '').localeCompare(String(b.name || b.display_name || ''));
-
-    // Default suggestion cards are intentionally balanced:
-    // first 5 single tests, then 4 profiles = 9 cards total.
-    const available = this.allBillableSuggestions().map(rank);
-    const singleTests = available
-      .filter((s: any) => s.itemType === 'TEST')
-      .sort(byScoreThenName)
-      .slice(0, 5);
-    const profiles = available
-      .filter((s: any) => s.itemType === 'PROFILE')
-      .sort(byScoreThenName)
-      .slice(0, 4);
-
-    return [...singleTests, ...profiles];
+    return this.suggestedBillItemCardsCache;
   }
 
   suggestedBillItemCards() { return this.suggestedBillItemCardsCache; }
@@ -623,12 +677,14 @@ export class BillingStepperComponent implements OnInit {
     this.registrationTypeOptions = this.parseSettingList(this.settings['billing.registrationTypes'], this.registrationTypeOptions);
     this.patientRequiredFields = this.parseSettingList(this.settings['patient.requiredFields'], ['name']);
     this.billingRequiredFields = this.parseSettingList(this.settings['billing.requiredFields'], ['items']);
-    this.tests = await api.listTests();
-    this.profiles = await api.listProfiles();
-    this.consultants = await api.listConsultants();
+    // Never load full masters into Billing — search DB with LIMIT instead.
+    this.tests = [];
+    this.profiles = [];
+    this.catalogByKey.clear();
+    this.consultants = [];
     this.applyRegistrationDefaults();
     this.consultantQuery = this.selectedConsultantName() || this.consultantQuery;
-    this.rebuildBillItemCaches();
+    await this.refreshBillItemCatalog();
   }
 
   parseSettingList(value: any, fallback: string[]) { const items = String(value || '').split(',').map(x => x.trim()).filter(Boolean); return items.length ? Array.from(new Set(items)) : fallback; }
@@ -676,6 +732,7 @@ export class BillingStepperComponent implements OnInit {
     return score;
   }
   filteredConsultants(q = this.consultantQuery) {
+    // Kept for legacy callers; live results come from searchConsultantsForBilling / runConsultantAutocompleteSearch.
     const query = String(q || '').trim().toLowerCase();
     const active = (this.consultants || []).filter((c: any) => Number(c.active ?? 1) === 1);
     return active
@@ -691,13 +748,31 @@ export class BillingStepperComponent implements OnInit {
   shouldShowConsultantEmpty() {
     return this.consultantSearchOpen && String(this.consultantQuery || '').trim().length >= 1 && this.consultantResults().length === 0;
   }
+  private consultantSearchTimer: any = null;
   private runConsultantAutocompleteSearch() {
     const q = String(this.consultantQuery || '').trim();
-    if (q.length >= 1) {
+    if (q.length < 1) {
+      this.clearConsultantResults();
+      return;
+    }
+    if (this.consultantSearchTimer) clearTimeout(this.consultantSearchTimer);
+    this.consultantSearchTimer = setTimeout(() => void this.fetchConsultantResults(q), 180);
+  }
+  private async fetchConsultantResults(q: string) {
+    const api: any = window.limsApi;
+    try {
+      if (api.searchConsultants) {
+        const result = await api.searchConsultants({ q, status: 'ACTIVE', page: 1, pageSize: 12 });
+        const rows = Array.isArray(result?.rows) ? result.rows : [];
+        this.consultantResults.set(rows.map((c: any) => ({ ...c, _score: this.consultantSearchScore(c, q.toLowerCase()) }))
+          .sort((a: any, b: any) => b._score - a._score || String(a.name).localeCompare(String(b.name))));
+      } else {
+        this.consultantResults.set(this.filteredConsultants(q));
+      }
+      this.consultantSearchOpen = true;
+    } catch {
       this.consultantResults.set(this.filteredConsultants(q));
       this.consultantSearchOpen = true;
-    } else {
-      this.clearConsultantResults();
     }
   }
   searchRegistrationReference() {
@@ -752,17 +827,36 @@ export class BillingStepperComponent implements OnInit {
     if (!this.bill.referrer_type) this.bill.referrer_type = configuredType || 'Walk-in';
     const configuredReferenceId = +(this.settings?.['billing.defaultReferenceId'] || 0);
     if (this.requiresReference() && configuredReferenceId && !this.bill.consultant_id) {
-      const found = (this.consultants || []).find((c:any) => +c.id === configuredReferenceId);
-      if (found) {
-        this.bill.consultant_id = +found.id;
-        this.consultantQuery = found.name || '';
-        if (this.bill.patient) {
-          this.bill.patient.referrer_type = this.bill.referrer_type;
-          this.bill.patient.consultant_id = this.bill.consultant_id;
-        }
-      }
+      void this.applyDefaultReference(configuredReferenceId);
+    } else if (this.bill.consultant_id) {
+      void this.ensureConsultantRates(+this.bill.consultant_id, true);
+      this.lastConsultantIdForRates = +this.bill.consultant_id;
     }
     this.syncRegistrationToPatientFields();
+  }
+
+  private async applyDefaultReference(configuredReferenceId: number) {
+    const api: any = window.limsApi;
+    let found = (this.consultants || []).find((c: any) => +c.id === configuredReferenceId);
+    if (!found && api.getConsultant) {
+      found = await api.getConsultant(configuredReferenceId);
+      if (found) this.rememberConsultant(found);
+    }
+    if (!found) return;
+    this.bill.consultant_id = +found.id;
+    this.consultantQuery = found.name || '';
+    if (this.bill.patient) {
+      this.bill.patient.referrer_type = this.bill.referrer_type;
+      this.bill.patient.consultant_id = this.bill.consultant_id;
+    }
+    void this.ensureConsultantRates(+found.id, true);
+    this.lastConsultantIdForRates = +found.id;
+  }
+
+  private rememberConsultant(c: any) {
+    if (!c?.id) return;
+    const rest = (this.consultants || []).filter((x: any) => +x.id !== +c.id);
+    this.consultants = [c, ...rest].slice(0, 40);
   }
 
   private syncRegistrationToPatientFields() {
@@ -798,9 +892,12 @@ export class BillingStepperComponent implements OnInit {
   }
   selectConsultantForBill(c: any) {
     if (c?.id && this.isWalkInRegistration()) this.bill.referrer_type = 'Referral';
+    const prevId = Number(this.bill.consultant_id || 0) || null;
     this.bill.consultant_id = c?.id ?? null;
     this.consultantQuery = c?.name || '';
+    this.rememberConsultant(c);
     this.clearConsultantResults();
+    void this.onBillConsultantChanged(prevId, Number(this.bill.consultant_id || 0) || null);
     this.scheduleCommissionPreview();
   }
 
@@ -810,9 +907,11 @@ export class BillingStepperComponent implements OnInit {
   }
   selectNoConsultantForBill() {
     this.bill.referrer_type = 'Walk-in';
+    const prevId = Number(this.bill.consultant_id || 0) || null;
     this.bill.consultant_id = null;
     this.consultantQuery = 'Self';
     this.clearConsultantResults();
+    void this.onBillConsultantChanged(prevId, null);
     this.scheduleCommissionPreview();
   }
   openConsultantModal() { this.consultantModal = { open: true, name: this.consultantQuery && !['No consultant','Self'].includes(this.consultantQuery) ? this.consultantQuery : '', phone: '', clinic: '' }; }
@@ -821,8 +920,12 @@ export class BillingStepperComponent implements OnInit {
     const name = String(this.consultantModal.name || '').trim();
     if (!name) { this.notify('Consultant name is required.', 'error'); return; }
     const updated = await window.limsApi.saveConsultant({ name, phone: this.consultantModal.phone || '', clinic: this.consultantModal.clinic || '', active: 1, default_commission_type: 'PERCENT', default_commission_value: 0 });
-    this.consultants = updated || [];
-    const created = this.consultants.find((c: any) => String(c.name || '').toLowerCase() === name.toLowerCase()) || this.consultants[this.consultants.length - 1];
+    const api: any = window.limsApi;
+    let created = (updated || []).find((c: any) => String(c.name || '').toLowerCase() === name.toLowerCase());
+    if (!created && api.searchConsultants) {
+      const result = await api.searchConsultants({ q: name, status: 'ACTIVE', page: 1, pageSize: 10 });
+      created = (result?.rows || []).find((c: any) => String(c.name || '').toLowerCase() === name.toLowerCase()) || result?.rows?.[0];
+    }
     if (created) this.selectConsultantForBill(created);
     this.closeConsultantModal();
     this.notify(`${name} added to consultants.`);
@@ -970,9 +1073,31 @@ export class BillingStepperComponent implements OnInit {
     this.searchPatientsForBilling();
   }
 
+  onPatientSearchFieldChange() {
+    this.searchPatientsForBilling();
+  }
+
+  patientSearchPlaceholder(): string {
+    switch (this.patientSearchField) {
+      case 'MOBILE': return 'Search by mobile no...';
+      case 'PATIENT_ID': return 'Search by patient ID...';
+      default: return 'Search by patient name...';
+    }
+  }
+
   async searchPatientsForBilling() {
     const q = String(this.patientBillQuery || '').trim();
-    this.billingPatientResults.set(q.length >= 2 ? await window.limsApi.listPatients(q) : []);
+    if (q.length < 2) {
+      this.billingPatientResults.set([]);
+      return;
+    }
+    const api: any = window.limsApi;
+    if (api.searchPatients) {
+      const result = await api.searchPatients({ q, searchField: this.patientSearchField, page: 1, pageSize: 25 });
+      this.billingPatientResults.set(Array.isArray(result?.rows) ? result.rows : []);
+      return;
+    }
+    this.billingPatientResults.set(await window.limsApi.listPatients({ q, searchField: this.patientSearchField }));
   }
 
   clearPatientSearchResults() {
@@ -1048,7 +1173,14 @@ export class BillingStepperComponent implements OnInit {
     if (this.selectedPatientMobileFromSearch && mobile === this.selectedPatientMobileFromSearch && !this.mobileEditedManually) return false;
     if (this.duplicateMobileBypass === mobile && proceedAfter) return false;
     const token = ++this.duplicateMobileCheckToken;
-    const rows = await window.limsApi.listPatients(mobile);
+    const api: any = window.limsApi;
+    let rows: any[] = [];
+    if (api.searchPatients) {
+      const result = await api.searchPatients({ q: mobile, searchField: 'MOBILE', page: 1, pageSize: 25 });
+      rows = Array.isArray(result?.rows) ? result.rows : [];
+    } else {
+      rows = await window.limsApi.listPatients(mobile);
+    }
     if (token !== this.duplicateMobileCheckToken) return false;
     const currentId = Number(this.bill.patient?.id || 0);
     const matches = (rows || []).filter((p: any) => this.normalizeMobile(p.mobile) === mobile && Number(p.id || 0) !== currentId);
@@ -1159,12 +1291,25 @@ export class BillingStepperComponent implements OnInit {
   }
 
   addItem(type: string, x: any, refreshPreview = true) {
-    if (this.bill.items.some((i: any) => i.item_type === type && i.item_id === x.id)) return;
+    void this.addItemAsync(type, x, refreshPreview);
+  }
+
+  private async addItemAsync(type: string, x: any, refreshPreview = true) {
+    if (this.bill.items.some((i: any) => i.item_type === type && +i.item_id === +x.id)) return;
+    const masterPrice = +x.price || 0;
+    const cid = Number(this.bill?.consultant_id || 0);
+    if (cid) await this.ensureConsultantRates(cid);
+    if (this.bill.items.some((i: any) => i.item_type === type && +i.item_id === +x.id)) return;
+    const resolved = this.resolveItemPrice(type, x.id, masterPrice);
     const item = {
       item_type: type,
       item_id: x.id,
       name: x.display_name || x.name,
-      price: +x.price || 0,
+      price: resolved.price,
+      base_rate: resolved.price,
+      mrp: resolved.price,
+      cpt: resolved.cpt || '',
+      _master_price: masterPrice,
       quantity: 1,
       discount_type: 'VALUE',
       discount_value: 0,
@@ -1182,6 +1327,132 @@ export class BillingStepperComponent implements OnInit {
     this.sortBillItemsAlphabetically();
     this.rebuildBillItemCaches();
     if (refreshPreview) this.scheduleCommissionPreview();
+  }
+
+  private rateKey(type: string, id: number) {
+    return `${String(type || '').toUpperCase()}:${Number(id || 0)}`;
+  }
+
+  private ensureConsultantRates(consultantId: number, force = false): Promise<void> {
+    const id = Number(consultantId || 0);
+    if (!id) return Promise.resolve();
+    if (!force && this.consultantRatesCache.has(id)) return Promise.resolve();
+    if (!force) {
+      const inflight = this.consultantRatesLoading.get(id);
+      if (inflight) return inflight;
+    }
+    const load = (async () => {
+      try {
+        const rows = await window.limsApi.listConsultantItemRates?.(id) || [];
+        const map = new Map<string, { selling_rate: number | null; cpt: string }>();
+        for (const r of rows) {
+          map.set(this.rateKey(r.item_type, r.item_id), {
+            selling_rate: r.selling_rate === null || r.selling_rate === undefined ? null : +r.selling_rate,
+            cpt: String(r.cpt || '')
+          });
+        }
+        this.consultantRatesCache.set(id, map);
+      } catch {
+        this.consultantRatesCache.set(id, new Map());
+      } finally {
+        this.consultantRatesLoading.delete(id);
+      }
+    })();
+    this.consultantRatesLoading.set(id, load);
+    return load;
+  }
+
+  resolveItemPrice(type: string, itemId: number, masterPrice: number): { price: number; cpt: string } {
+    return this.resolveItemPriceForConsultant(Number(this.bill?.consultant_id || 0), type, itemId, masterPrice);
+  }
+
+  private resolveItemPriceForConsultant(consultantId: number, type: string, itemId: number, masterPrice: number): { price: number; cpt: string } {
+    const cid = Number(consultantId || 0);
+    if (!cid) return { price: masterPrice, cpt: '' };
+    const map = this.consultantRatesCache.get(cid);
+    if (!map?.size) return { price: masterPrice, cpt: '' };
+    const exact = map.get(this.rateKey(type, itemId));
+    if (exact && exact.selling_rate !== null && exact.selling_rate !== undefined) {
+      return { price: Math.max(0, +exact.selling_rate || 0), cpt: exact.cpt || '' };
+    }
+    // Same display name, different catalog id (duplicate masters).
+    const targetName = this.catalogItemName(type, itemId);
+    if (!targetName) {
+      if (exact) return { price: masterPrice, cpt: exact.cpt || '' };
+      return { price: masterPrice, cpt: '' };
+    }
+    const siblingRates: number[] = [];
+    let siblingCpt = '';
+    for (const [key, row] of map.entries()) {
+      if (!key.startsWith(`${String(type || '').toUpperCase()}:`)) continue;
+      if (row.selling_rate === null || row.selling_rate === undefined) continue;
+      const otherId = Number(key.split(':')[1] || 0);
+      if (!otherId || +otherId === +itemId) continue;
+      if (this.catalogItemName(type, otherId) !== targetName) continue;
+      siblingRates.push(Math.max(0, +row.selling_rate || 0));
+      if (!siblingCpt && row.cpt) siblingCpt = row.cpt;
+    }
+    if (siblingRates.length) {
+      const first = siblingRates[0];
+      if (siblingRates.every(r => Math.abs(r - first) < 0.009)) {
+        return { price: first, cpt: siblingCpt || exact?.cpt || '' };
+      }
+    }
+    return { price: masterPrice, cpt: exact?.cpt || '' };
+  }
+
+  private catalogItemName(type: string, itemId: number): string {
+    const norm = (s: any) => String(s || '').trim().toLowerCase();
+    const key = `${String(type).toUpperCase()}:${Number(itemId || 0)}`;
+    const cached = this.catalogByKey.get(key);
+    if (cached) return norm(cached?.display_name || cached?.name);
+    if (String(type).toUpperCase() === 'PROFILE') {
+      const p = this.profiles.find((x: any) => +x.id === +itemId);
+      return norm(p?.display_name || p?.name);
+    }
+    const t = this.tests.find((x: any) => +x.id === +itemId);
+    return norm(t?.display_name || t?.name);
+  }
+
+  private masterPriceForItem(type: string, itemId: number): number {
+    const key = `${String(type).toUpperCase()}:${Number(itemId || 0)}`;
+    const cached = this.catalogByKey.get(key);
+    if (cached) return +(cached?.price || 0);
+    if (String(type).toUpperCase() === 'PROFILE') {
+      const p = this.profiles.find((x: any) => +x.id === +itemId);
+      return +(p?.price || 0);
+    }
+    const t = this.tests.find((x: any) => +x.id === +itemId);
+    return +(t?.price || 0);
+  }
+
+  private async onBillConsultantChanged(prevId: number | null, nextId: number | null) {
+    if (nextId) await this.ensureConsultantRates(nextId, true);
+    if (!this.bill?.items?.length) {
+      this.lastConsultantIdForRates = nextId;
+      return;
+    }
+    // Refresh prices only when line still matches previous default (master or prior consultant rate).
+    this.bill.items = this.bill.items.map((i: any) => {
+      if (this.editingBillId && !this.canEditBillItemRate?.(i)) return i;
+      const master = i._master_price !== undefined ? +i._master_price : this.masterPriceForItem(i.item_type, i.item_id);
+      const prevResolved = prevId
+        ? this.resolveItemPriceForConsultant(prevId, i.item_type, i.item_id, master).price
+        : master;
+      const current = +i.price || 0;
+      if (Math.abs(current - prevResolved) > 0.009) return i; // user-edited — keep
+      const next = this.resolveItemPriceForConsultant(Number(nextId || 0), i.item_type, i.item_id, master);
+      return {
+        ...i,
+        price: next.price,
+        base_rate: next.price,
+        mrp: next.price,
+        cpt: next.cpt || i.cpt || '',
+        _master_price: master
+      };
+    });
+    this.lastConsultantIdForRates = nextId;
+    this.rebuildBillItemCaches();
   }
   clearBillItems() { this.bill.items = []; this.pendingBillItemSelections = []; this.rebuildBillItemCaches(); this.scheduleCommissionPreview(); }
 
@@ -1540,7 +1811,10 @@ export class BillingStepperComponent implements OnInit {
   }
   selectedConsultantName() {
     const id = Number(this.bill?.consultant_id || 0);
-    return this.consultants.find((c: any) => Number(c.id) === id)?.name || '';
+    if (!id) return '';
+    const cached = this.consultants.find((c: any) => Number(c.id) === id)
+      || this.consultantResults().find((c: any) => Number(c.id) === id);
+    return cached?.name || this.bill?.consultant_name || '';
   }
 
   absValue(value: any) { return Math.abs(Number(value || 0)); }

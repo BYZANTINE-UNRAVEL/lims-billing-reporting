@@ -5,7 +5,7 @@ export abstract class DatabaseBillingService extends DatabaseCoreService {  crea
     const tx = this.db.transaction(() => {
       const patientId = this.savePatient(payload.patient);
       const billNo = this.nextConfiguredNo('invoice', 'bills', 'bill_no');
-      const data = this.prepareBillPayload(payload);
+      const data = this.prepareBillPayload({ ...payload, paid: 0, cash_received: 0 });
       const billId = Number(this.db.prepare('INSERT INTO bills(bill_no,patient_id,consultant_id,bill_date,subtotal,discount,discount_type,discount_value,total,paid,due,payment_mode,round_mode,round_off,cash_received,cash_return,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
         .run(billNo, patientId, payload.consultant_id || null, this.nowIst(), data.subtotal, data.finalDiscount, data.discountType, data.discountValue, data.total, 0, data.total, data.paymentMode, data.roundMode, data.roundOff, 0, 0, data.notes).lastInsertRowid);
       this.replaceBillItems(billId, data.preparedItems);
@@ -722,17 +722,27 @@ export abstract class DatabaseBillingService extends DatabaseCoreService {  crea
   }
   listBills(filters:any={}) {
     this.ensureBillingSchema();
+    this.assertFilterDateRange(filters?.from, filters?.to);
     const from = filters.from || '1900-01-01';
     const to = filters.to || '2999-12-31';
     const q = `%${filters.q || ''}%`;
+    const searchField = String(filters.searchField || filters.search_field || '').toUpperCase();
     const list = (value:any) => Array.isArray(value) ? value.map(v => String(v)).filter(Boolean) : (value && value !== 'ALL' ? [String(value)] : []);
     const statusList = list(filters.status_list || filters.status);
     const consultantIds = list(filters.consultant_ids || filters.consultant_id);
     const paymentModes = list(filters.payment_modes || filters.payment_mode);
     const paymentStatuses = list(filters.payment_statuses || filters.payment_status);
     const paymentStatusExpr = `CASE WHEN b.status='CANCELLED' THEN 'CANCELLED' WHEN COALESCE(b.paid,0)<=0 THEN 'PENDING' WHEN COALESCE(b.paid,0)>COALESCE(b.total,0) THEN 'OVERPAID' WHEN COALESCE(b.paid,0)>=COALESCE(b.total,0) THEN 'PAID' ELSE 'PARTIAL' END`;
-    const whereParts = [`date(b.bill_date) BETWEEN date(?) AND date(?)`, `(p.name LIKE ? OR b.bill_no LIKE ? OR p.mobile LIKE ?)`];
-    const params:any[] = [from, to, q, q, q];
+    let searchClause = `(p.name LIKE ? OR b.bill_no LIKE ? OR p.mobile LIKE ? OR p.patient_no LIKE ?)`;
+    let searchParams: any[] = [q, q, q, q];
+    if (String(filters.q || '').trim()) {
+      if (searchField === 'NAME') { searchClause = `p.name LIKE ?`; searchParams = [q]; }
+      else if (searchField === 'BILL_NO') { searchClause = `b.bill_no LIKE ?`; searchParams = [q]; }
+      else if (searchField === 'MOBILE') { searchClause = `p.mobile LIKE ?`; searchParams = [q]; }
+      else if (searchField === 'PATIENT_ID') { searchClause = `p.patient_no LIKE ?`; searchParams = [q]; }
+    }
+    const whereParts = [`date(b.bill_date) BETWEEN date(?) AND date(?)`, searchClause];
+    const params:any[] = [from, to, ...searchParams];
     if (statusList.length) { whereParts.push(`b.status IN (${statusList.map(() => '?').join(',')})`); params.push(...statusList); }
     if (consultantIds.length) {
       const realIds = consultantIds.filter(v => v !== 'NONE');
@@ -752,58 +762,364 @@ export abstract class DatabaseBillingService extends DatabaseCoreService {  crea
   }
   analytics(filters:any={}) {
     this.ensureBillingSchema();
-    const from = String(filters.from || '1900-01-01');
-    const to = String(filters.to || '2999-12-31');
-    const bills = this.db.prepare(`SELECT b.*, p.patient_no, p.name patient_name, p.created_at patient_registered_at,
-      c.name consultant_name
+    this.assertFilterDateRange(filters?.from, filters?.to, { required: true });
+    const from = String(filters.from || '').slice(0, 10);
+    const to = String(filters.to || '').slice(0, 10);
+    // Exclusive upper bound keeps the range sargable on idx_bills_date / idx_bills_date_status.
+    const toExclusive = (() => {
+      const d = new Date(to + 'T00:00:00');
+      d.setDate(d.getDate() + 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
+    const phase = String(filters.phase || 'all').toLowerCase();
+    const daySpan = Math.max(1, Math.round((new Date(to + 'T00:00:00').getTime() - new Date(from + 'T00:00:00').getTime()) / 86400000) + 1);
+    const useMonthlyBuckets = daySpan > 62;
+
+    const emptyDashboard = {
+      billCount: 0, cancelledCount: 0, billed: 0, paid: 0, due: 0, discount: 0, subtotal: 0,
+      patientCount: 0, consultantCount: 0, dueBillCount: 0, itemQty: 0, refundTotal: 0, refundCount: 0,
+      previousBilled: 0, pendingReports: 0, finishedReports: 0, pendingReportItems: 0, finishedReportItems: 0,
+      daily: [] as any[], payments: [] as any[], topItems: [] as any[], consultants: [] as any[],
+      statuses: [] as any[], ageing: [
+        { label: '0 - 30 days', value: 0 }, { label: '31 - 60 days', value: 0 },
+        { label: '61 - 90 days', value: 0 }, { label: 'Over 90 days', value: 0 }
+      ]
+    };
+
+    // --- phase: summary (fast KPI scalars only) ---
+    if (phase === 'summary' || phase === 'all') {
+      const billKpis = this.db.prepare(`SELECT
+          COUNT(*) bill_count,
+          SUM(CASE WHEN status IN ('CANCELLED','CANCELED') THEN 1 ELSE 0 END) cancelled_count,
+          SUM(CASE WHEN status NOT IN ('CANCELLED','CANCELED') THEN 1 ELSE 0 END) active_count,
+          ROUND(SUM(CASE WHEN status NOT IN ('CANCELLED','CANCELED') THEN COALESCE(total,0) ELSE 0 END),2) billed,
+          ROUND(SUM(CASE WHEN status NOT IN ('CANCELLED','CANCELED') THEN COALESCE(paid,0) ELSE 0 END),2) paid,
+          ROUND(SUM(CASE WHEN status NOT IN ('CANCELLED','CANCELED') THEN MAX(0,COALESCE(due,0)) ELSE 0 END),2) due,
+          ROUND(SUM(CASE WHEN status NOT IN ('CANCELLED','CANCELED') THEN COALESCE(discount,0) ELSE 0 END),2) discount,
+          ROUND(SUM(CASE WHEN status NOT IN ('CANCELLED','CANCELED') THEN COALESCE(subtotal,0) ELSE 0 END),2) subtotal,
+          SUM(CASE WHEN status NOT IN ('CANCELLED','CANCELED') AND COALESCE(due,0)>0 THEN 1 ELSE 0 END) due_bill_count
+        FROM bills
+        WHERE bill_date >= ? AND bill_date < ?`).get(from, toExclusive) as any;
+
+      let refundTotal = 0, refundCount = 0;
+      try {
+        const rf = this.db.prepare(`SELECT COUNT(*) c, ROUND(SUM(COALESCE(amount,0)),2) t
+          FROM refunds WHERE refunded_at >= ? AND refunded_at < ?`).get(from, toExclusive) as any;
+        refundCount = Number(rf?.c || 0);
+        refundTotal = Number(rf?.t || 0);
+      } catch {}
+
+      let pendingReports = 0, finishedReports = 0;
+      try {
+        const reportKpis = this.db.prepare(`SELECT
+            SUM(CASE WHEN UPPER(COALESCE(r.status,''))='APPROVED' THEN 1 ELSE 0 END) finished_reports,
+            SUM(CASE WHEN UPPER(COALESCE(r.status,'')) NOT IN ('APPROVED','CANCELLED','APPROVED_CANCELLED','COLLECTION_STAGING') THEN 1 ELSE 0 END) pending_reports
+          FROM reports r
+          JOIN bills b ON b.id=r.bill_id
+          WHERE b.bill_date >= ? AND b.bill_date < ?
+            AND COALESCE(r.report_scope,'COLLECTION')<>'STAGING'
+            AND UPPER(COALESCE(r.status,'')) NOT IN ('CANCELLED','APPROVED_CANCELLED','COLLECTION_STAGING')`).get(from, toExclusive) as any;
+        pendingReports = Number(reportKpis?.pending_reports || 0);
+        finishedReports = Number(reportKpis?.finished_reports || 0);
+      } catch {}
+
+      // Skip previous-period scan for long ranges (doubles work and freezes UI).
+      let previousBilled = 0;
+      if (daySpan <= 62) {
+        try {
+          const prevTo = new Date(from + 'T00:00:00');
+          prevTo.setDate(prevTo.getDate() - 1);
+          const prevFrom = new Date(prevTo);
+          prevFrom.setDate(prevFrom.getDate() - daySpan + 1);
+          const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          const pf = iso(prevFrom);
+          const ptExclusiveDate = new Date(iso(prevTo) + 'T00:00:00');
+          ptExclusiveDate.setDate(ptExclusiveDate.getDate() + 1);
+          const ptEx = `${ptExclusiveDate.getFullYear()}-${String(ptExclusiveDate.getMonth() + 1).padStart(2, '0')}-${String(ptExclusiveDate.getDate()).padStart(2, '0')}`;
+          previousBilled = Number((this.db.prepare(`SELECT ROUND(SUM(COALESCE(total,0)),2) t FROM bills
+            WHERE bill_date >= ? AND bill_date < ? AND status NOT IN ('CANCELLED','CANCELED')`).get(pf, ptEx) as any)?.t || 0);
+        } catch {}
+      }
+
+      Object.assign(emptyDashboard, {
+        billCount: Number(billKpis?.active_count || 0),
+        cancelledCount: Number(billKpis?.cancelled_count || 0),
+        billed: Number(billKpis?.billed || 0),
+        paid: Number(billKpis?.paid || 0),
+        due: Number(billKpis?.due || 0),
+        discount: Number(billKpis?.discount || 0),
+        subtotal: Number(billKpis?.subtotal || 0),
+        dueBillCount: Number(billKpis?.due_bill_count || 0),
+        refundTotal,
+        refundCount,
+        previousBilled,
+        pendingReports,
+        finishedReports,
+        pendingReportItems: pendingReports,
+        finishedReportItems: finishedReports
+      });
+
+      if (phase === 'summary') {
+        return { bills: [], items: [], refunds: [], reports: [], previousBilled, dashboard: emptyDashboard };
+      }
+    }
+
+    // --- phase: charts (one pass over bill rows; no bill_items) ---
+    if (phase === 'charts' || phase === 'all') {
+      const daily = new Map<string, { billed: number; paid: number }>();
+      const payments = new Map<string, number>();
+      const consultants = new Map<number, { count: number; billed: number; paid: number; due: number }>();
+      const statuses = new Map<string, number>();
+      const patients = new Set<number>();
+      const consultantIds = new Set<number>();
+      const ageing = { d0: 0, d31: 0, d61: 0, d90: 0 };
+      const now = Date.now();
+      const stmt = this.db.prepare(`SELECT status, payment_mode, total, paid, due, bill_date, patient_id, consultant_id
+        FROM bills WHERE bill_date >= ? AND bill_date < ?`);
+      for (const b of stmt.iterate(from, toExclusive) as IterableIterator<any>) {
+        const status = String(b.status || '').toUpperCase();
+        if (status === 'CANCELLED' || status === 'CANCELED') continue;
+        const t = Number(b.total || 0);
+        const p = Number(b.paid || 0);
+        const d = Math.max(0, Number(b.due || 0));
+        if (b.patient_id) patients.add(Number(b.patient_id));
+        if (b.consultant_id) consultantIds.add(Number(b.consultant_id));
+        const rawDay = String(b.bill_date || '').slice(0, 10);
+        const bucket = useMonthlyBuckets ? rawDay.slice(0, 7) : rawDay;
+        const dr = daily.get(bucket) || { billed: 0, paid: 0 };
+        dr.billed += t; dr.paid += p; daily.set(bucket, dr);
+        const mode = String(b.payment_mode || '').trim() || 'Unspecified';
+        payments.set(mode, (payments.get(mode) || 0) + p);
+        const cid = Number(b.consultant_id || 0);
+        const cr = consultants.get(cid) || { count: 0, billed: 0, paid: 0, due: 0 };
+        cr.count++; cr.billed += t; cr.paid += p; cr.due += d; consultants.set(cid, cr);
+        const payStatus = d <= 0 ? 'PAID' : (p > 0 ? 'PARTIAL' : (status || 'DUE'));
+        statuses.set(payStatus, (statuses.get(payStatus) || 0) + 1);
+        if (d > 0 && rawDay) {
+          const age = Math.max(0, Math.floor((now - new Date(rawDay + 'T00:00:00').getTime()) / 86400000));
+          if (age <= 30) ageing.d0 += d;
+          else if (age <= 60) ageing.d31 += d;
+          else if (age <= 90) ageing.d61 += d;
+          else ageing.d90 += d;
+        }
+      }
+
+      const nameById = new Map<number, string>();
+      try {
+        const ids = [...consultantIds];
+        if (ids.length) {
+          const rows = this.db.prepare(`SELECT id, name FROM consultants WHERE id IN (${ids.map(() => '?').join(',')})`).all(...ids) as any[];
+          for (const r of rows) nameById.set(Number(r.id), String(r.name || ''));
+        }
+      } catch {}
+
+      emptyDashboard.patientCount = patients.size;
+      emptyDashboard.consultantCount = consultantIds.size;
+      emptyDashboard.daily = [...daily.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([date, v]) => ({ date, billed: +v.billed.toFixed(2), paid: +v.paid.toFixed(2) }));
+      emptyDashboard.payments = [...payments.entries()].map(([label, value]) => ({ label, value: +value.toFixed(2) }))
+        .sort((a, b) => b.value - a.value);
+      emptyDashboard.consultants = [...consultants.entries()]
+        .map(([id, v]) => ({
+          name: id ? (nameById.get(id) || `Consultant #${id}`) : 'Walk-in / Direct',
+          count: v.count,
+          billed: +v.billed.toFixed(2),
+          paid: +v.paid.toFixed(2),
+          due: +v.due.toFixed(2)
+        }))
+        .sort((a, b) => b.billed - a.billed)
+        .slice(0, 100);
+      emptyDashboard.statuses = [...statuses.entries()].map(([label, value]) => ({ label: label.replaceAll('_', ' '), value }))
+        .sort((a, b) => b.value - a.value);
+      emptyDashboard.ageing = [
+        { label: '0 - 30 days', value: +ageing.d0.toFixed(2) },
+        { label: '31 - 60 days', value: +ageing.d31.toFixed(2) },
+        { label: '61 - 90 days', value: +ageing.d61.toFixed(2) },
+        { label: 'Over 90 days', value: +ageing.d90.toFixed(2) }
+      ];
+
+      if (phase === 'charts') {
+        return {
+          bills: [], items: [], refunds: [], reports: [],
+          dashboard: {
+            patientCount: patients.size,
+            consultantCount: consultantIds.size,
+            daily: emptyDashboard.daily,
+            payments: emptyDashboard.payments,
+            consultants: emptyDashboard.consultants,
+            statuses: emptyDashboard.statuses,
+            ageing: emptyDashboard.ageing
+          }
+        };
+      }
+    }
+
+    // --- phase: items (optional bill_items scan) ---
+    if (phase === 'items' || phase === 'all') {
+      try {
+        const itemKpis = this.db.prepare(`SELECT ROUND(SUM(COALESCE(bi.quantity,1)),2) item_qty
+          FROM bill_items bi
+          JOIN bills b ON b.id=bi.bill_id
+          WHERE b.bill_date >= ? AND b.bill_date < ? AND b.status NOT IN ('CANCELLED','CANCELED')`).get(from, toExclusive) as any;
+        emptyDashboard.itemQty = Number(itemKpis?.item_qty || 0);
+        emptyDashboard.topItems = this.db.prepare(`SELECT bi.name name,
+            ROUND(SUM(COALESCE(bi.quantity,1)),2) count,
+            ROUND(SUM(COALESCE(bi.net_amount, bi.price * COALESCE(bi.quantity,1))),2) value
+          FROM bill_items bi
+          JOIN bills b ON b.id=bi.bill_id
+          WHERE b.bill_date >= ? AND b.bill_date < ? AND b.status NOT IN ('CANCELLED','CANCELED')
+          GROUP BY bi.name
+          ORDER BY count DESC, value DESC
+          LIMIT 50`).all(from, toExclusive) as any[];
+      } catch {
+        emptyDashboard.itemQty = 0;
+        emptyDashboard.topItems = [];
+      }
+      if (phase === 'items') {
+        return {
+          bills: [],
+          items: emptyDashboard.topItems.map((x: any) => ({ name: x.name, quantity: x.count, net_amount: x.value })),
+          refunds: [],
+          reports: [],
+          dashboard: {
+            itemQty: emptyDashboard.itemQty,
+            topItems: emptyDashboard.topItems
+          }
+        };
+      }
+    }
+
+    return {
+      bills: [],
+      items: emptyDashboard.topItems.map((x: any) => ({ name: x.name, quantity: x.count, net_amount: x.value })),
+      refunds: [],
+      reports: [],
+      previousBilled: emptyDashboard.previousBilled,
+      dashboard: emptyDashboard
+    };
+  }
+
+  /** Paged drill-down rows for analytics modals — never returns unbounded year dumps. */
+  analyticsDetails(filters: any = {}) {
+    this.ensureBillingSchema();
+    this.assertFilterDateRange(filters?.from, filters?.to, { required: true });
+    const from = String(filters.from || '').slice(0, 10);
+    const to = String(filters.to || '').slice(0, 10);
+    const toExclusive = (() => {
+      const d = new Date(to + 'T00:00:00');
+      d.setDate(d.getDate() + 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
+    const kind = String(filters.kind || 'bills').trim().toLowerCase();
+    const pageSize = Math.min(5000, Math.max(1, Number(filters.pageSize || filters.limit || 100) || 100));
+    const page = Math.max(1, Math.floor(+filters.page || 1));
+    const offset = (page - 1) * pageSize;
+
+    if (kind === 'daily' || kind === 'dailysummary') {
+      const where: string[] = [`b.bill_date >= ?`, `b.bill_date < ?`];
+      const params: any[] = [from, toExclusive];
+      if (filters.outstandingOnly || String(filters.scope || '').toLowerCase() === 'outstanding') {
+        where.push(`COALESCE(b.due,0) > 0`);
+        where.push(`b.status NOT IN ('CANCELLED','CANCELED')`);
+      } else if (String(filters.scope || '').toLowerCase() === 'cancelled') {
+        where.push(`b.status IN ('CANCELLED','CANCELED')`);
+      } else {
+        where.push(`b.status NOT IN ('CANCELLED','CANCELED')`);
+      }
+      const mode = String(filters.paymentMode || filters.payment_mode || '').trim().toLowerCase();
+      if (mode) {
+        where.push(`LOWER(COALESCE(b.payment_mode,'')) LIKE ?`);
+        params.push(`%${mode}%`);
+      }
+      const whereSql = where.join(' AND ');
+      const total = Number((this.db.prepare(`SELECT COUNT(DISTINCT substr(b.bill_date,1,10)) c FROM bills b WHERE ${whereSql}`).get(...params) as any)?.c || 0);
+      const rows = this.db.prepare(`SELECT substr(b.bill_date,1,10) date,
+          COUNT(*) bill_count,
+          ROUND(SUM(COALESCE(b.total,0)),2) billed,
+          ROUND(SUM(COALESCE(b.paid,0)),2) paid,
+          ROUND(SUM(MAX(0, COALESCE(b.due,0))),2) due
+        FROM bills b
+        WHERE ${whereSql}
+        GROUP BY substr(b.bill_date,1,10)
+        ORDER BY date ASC
+        LIMIT ? OFFSET ?`).all(...params, pageSize, offset) as any[];
+      return { rows, total, page, pageSize, aggregate: 'daily' };
+    }
+
+    if (kind === 'refunds') {
+      try {
+        const total = Number((this.db.prepare(`SELECT COUNT(*) c FROM refunds WHERE refunded_at >= ? AND refunded_at < ?`).get(from, toExclusive) as any)?.c || 0);
+        const rows = this.db.prepare(`SELECT r.*, b.bill_no, p.name patient_name
+          FROM refunds r JOIN bills b ON b.id=r.bill_id JOIN patients p ON p.id=b.patient_id
+          WHERE r.refunded_at >= ? AND r.refunded_at < ?
+          ORDER BY r.refunded_at DESC LIMIT ? OFFSET ?`).all(from, toExclusive, pageSize, offset) as any[];
+        return { rows, total, page, pageSize };
+      } catch {
+        return { rows: [], total: 0, page, pageSize };
+      }
+    }
+
+    if (kind === 'reports' || kind === 'pendingreports' || kind === 'finishedreports') {
+      try {
+        const statusFilter = kind === 'pendingreports'
+          ? `AND UPPER(COALESCE(r.status,'')) NOT IN ('APPROVED','CANCELLED','APPROVED_CANCELLED','COLLECTION_STAGING')`
+          : kind === 'finishedreports'
+            ? `AND UPPER(COALESCE(r.status,''))='APPROVED'`
+            : `AND UPPER(COALESCE(r.status,'')) NOT IN ('CANCELLED','APPROVED_CANCELLED','COLLECTION_STAGING')`;
+        const total = Number((this.db.prepare(`SELECT COUNT(*) c FROM reports r
+          JOIN bills b ON b.id=r.bill_id
+          WHERE b.bill_date >= ? AND b.bill_date < ?
+            AND COALESCE(r.report_scope,'COLLECTION')<>'STAGING'
+            ${statusFilter}`).get(from, toExclusive) as any)?.c || 0);
+        const rows = this.db.prepare(`SELECT r.id, r.status, r.created_at, r.updated_at, r.approved_at,
+            b.bill_no, b.bill_date, p.patient_no, p.name patient_name,
+            COALESCE(c.name,'Walk-in / Direct') consultant_name,
+            0 item_count, 0 finished_item_count, 0 pending_item_count,
+            CASE WHEN UPPER(COALESCE(r.status,''))='APPROVED' THEN 'FINISHED' ELSE 'PENDING' END queue_status
+          FROM reports r
+          JOIN bills b ON b.id=r.bill_id
+          JOIN patients p ON p.id=b.patient_id
+          LEFT JOIN consultants c ON c.id=b.consultant_id
+          WHERE b.bill_date >= ? AND b.bill_date < ?
+            AND COALESCE(r.report_scope,'COLLECTION')<>'STAGING'
+            ${statusFilter}
+          ORDER BY b.bill_date DESC, r.id DESC
+          LIMIT ? OFFSET ?`).all(from, toExclusive, pageSize, offset) as any[];
+        return { rows, total, page, pageSize };
+      } catch {
+        return { rows: [], total: 0, page, pageSize };
+      }
+    }
+
+    const where: string[] = [`b.bill_date >= ?`, `b.bill_date < ?`];
+    const params: any[] = [from, toExclusive];
+    if (kind === 'cancelled' || kind === 'cancelledbills') {
+      where.push(`b.status IN ('CANCELLED','CANCELED')`);
+    } else {
+      where.push(`b.status NOT IN ('CANCELLED','CANCELED')`);
+    }
+    if (kind === 'outstanding' || filters.outstandingOnly) {
+      where.push(`COALESCE(b.due,0) > 0`);
+    }
+    const mode = String(filters.paymentMode || filters.payment_mode || '').trim().toLowerCase();
+    if (mode) {
+      where.push(`LOWER(COALESCE(b.payment_mode,'')) LIKE ?`);
+      params.push(`%${mode}%`);
+    }
+    const whereSql = where.join(' AND ');
+    const total = Number((this.db.prepare(`SELECT COUNT(*) c FROM bills b WHERE ${whereSql}`).get(...params) as any)?.c || 0);
+    const rows = this.db.prepare(`SELECT b.id, b.bill_no, b.bill_date, b.total, b.paid, b.due, b.discount, b.subtotal,
+        b.status, b.payment_mode, b.patient_id, b.consultant_id,
+        CASE WHEN COALESCE(b.due,0)<=0 THEN 'PAID' WHEN COALESCE(b.paid,0)>0 THEN 'PARTIAL' ELSE 'DUE' END payment_status,
+        p.patient_no, p.name patient_name, p.created_at patient_registered_at,
+        COALESCE(c.name,'Walk-in / Direct') consultant_name
       FROM bills b
       JOIN patients p ON p.id=b.patient_id
       LEFT JOIN consultants c ON c.id=b.consultant_id
-      WHERE date(b.bill_date) BETWEEN date(?) AND date(?)
-      ORDER BY b.bill_date DESC, b.id DESC`).all(from, to) as any[];
-    const items = this.db.prepare(`SELECT bi.*, b.bill_no, b.bill_date, b.patient_id, p.name patient_name,
-      COALESCE(c.name,'Walk-in / Direct') consultant_name
-      FROM bill_items bi
-      JOIN bills b ON b.id=bi.bill_id
-      JOIN patients p ON p.id=b.patient_id
-      LEFT JOIN consultants c ON c.id=b.consultant_id
-      WHERE date(b.bill_date) BETWEEN date(?) AND date(?) AND b.status<>'CANCELLED'
-      ORDER BY b.bill_date DESC, bi.id DESC`).all(from, to) as any[];
-    let refunds:any[] = [];
-    try {
-      refunds = this.db.prepare(`SELECT r.*, b.bill_no, p.name patient_name
-        FROM refunds r JOIN bills b ON b.id=r.bill_id JOIN patients p ON p.id=b.patient_id
-        WHERE date(r.refunded_at) BETWEEN date(?) AND date(?) ORDER BY r.refunded_at DESC`).all(from, to) as any[];
-    } catch {}
-    let reports:any[] = [];
-    try {
-      reports = this.db.prepare(`SELECT r.id, r.status, r.created_at, r.updated_at, r.approved_at,
-          b.bill_no, b.bill_date, p.patient_no, p.name patient_name,
-          COALESCE(c.name,'Walk-in / Direct') consultant_name,
-          COUNT(ri.id) item_count,
-          SUM(CASE WHEN UPPER(COALESCE(ri.result_status,'PENDING')) IN ('APPROVED','FINALIZED') THEN 1 ELSE 0 END) finished_item_count,
-          SUM(CASE WHEN UPPER(COALESCE(ri.result_status,'PENDING')) NOT IN ('APPROVED','FINALIZED','CANCELLED') THEN 1 ELSE 0 END) pending_item_count
-        FROM reports r
-        JOIN bills b ON b.id=r.bill_id
-        JOIN patients p ON p.id=b.patient_id
-        LEFT JOIN consultants c ON c.id=b.consultant_id
-        LEFT JOIN report_items ri ON ri.report_id=r.id AND ri.test_id IS NOT NULL AND COALESCE(ri.selected_for_reporting,1)=1
-        WHERE date(b.bill_date) BETWEEN date(?) AND date(?)
-          AND COALESCE(r.report_scope,'COLLECTION')<>'STAGING'
-          AND UPPER(COALESCE(r.status,'')) NOT IN ('CANCELLED','APPROVED_CANCELLED','COLLECTION_STAGING')
-        GROUP BY r.id
-        HAVING COUNT(ri.id)>0
-        ORDER BY b.bill_date DESC, r.id DESC`).all(from, to) as any[];
-      reports = reports.map((r:any) => {
-        const raw = String(r.status || '').toUpperCase();
-        const pendingItems = Number(r.pending_item_count || 0);
-        const finishedItems = Number(r.finished_item_count || 0);
-        const total = Number(r.item_count || 0);
-        const queue_status = raw === 'APPROVED' || (total > 0 && pendingItems === 0 && finishedItems === total) ? 'FINISHED' : 'PENDING';
-        return { ...r, queue_status };
-      });
-    } catch {}
-    return { bills, items, refunds, reports };
+      WHERE ${whereSql}
+      ORDER BY b.bill_date DESC, b.id DESC
+      LIMIT ? OFFSET ?`).all(...params, pageSize, offset) as any[];
+    return { rows, total, page, pageSize };
   }
 
   cancelBill(billId:number, payload:any={}) {
@@ -934,6 +1250,7 @@ export abstract class DatabaseBillingService extends DatabaseCoreService {  crea
     const bill = this.db.prepare('SELECT total FROM bills WHERE id=?').get(billId) as any;
     const total = +bill?.total || 0;
     this.db.prepare('UPDATE bills SET paid=?,due=MAX(total-?,0) WHERE id=?').run(paid, paid, billId);
+    // Commission is calculated only when a statement is generated for the period — not on receipt.
   }
 
   protected reportReadyCollectionStatusesSql(alias='ri') {

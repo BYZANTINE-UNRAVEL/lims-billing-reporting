@@ -2,7 +2,7 @@ import { CommonModule, DatePipe } from '@angular/common';
 import { ChangeDetectorRef, Component, EventEmitter, OnInit, Output, ViewChild, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { dateRangePresets, matchesDateRange, openNativeDatePicker, DATE_RANGE_FILTER_STYLES } from '../../shared/date-range-filters';
+import { dateRangeFilterError, dateRangePresets, matchesDateRange, openNativeDatePicker, DATE_RANGE_FILTER_STYLES } from '../../shared/date-range-filters';
 import { WhatsAppContactPromptComponent } from '../../shared/whatsapp-contact-prompt.component';
 
 type StatementAction = 'print' | 'download';
@@ -49,9 +49,28 @@ type StatementKind = 'detailed' | 'consolidated';
         <div class="filter-row">
           <label class="field search-field">
             <span>Search</span>
-            <div class="input-icon">
-              <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
-              <input [(ngModel)]="filters.q" placeholder="Bill no / Patient ID / Name / Mobile" (keyup.enter)="loadStatement()" />
+            <div class="statement-search-bar">
+              <select class="statement-search-field" [(ngModel)]="searchField" (ngModelChange)="onSearchFieldChange()" aria-label="Search by">
+                <option *ngFor="let opt of searchFieldOptions" [ngValue]="opt.value">{{ opt.label }}</option>
+              </select>
+              <div class="input-icon statement-search-input-wrap">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+                <input
+                  [(ngModel)]="filters.q"
+                  [placeholder]="searchPlaceholder()"
+                  (focus)="searchSuggestionsOpen = true"
+                  (blur)="scheduleCloseSearchSuggestions()"
+                  (input)="searchSuggestionsOpen = true"
+                  (keydown.escape)="searchSuggestionsOpen = false"
+                  (keyup.enter)="loadStatement()"
+                  autocomplete="off" />
+                <div class="statement-search-suggestions" *ngIf="searchSuggestionsOpen && searchSuggestions().length" (mousedown)="$event.preventDefault()">
+                  <button type="button" class="statement-search-suggestion" *ngFor="let s of searchSuggestions()" (click)="applySearchSuggestion(s.value)">
+                    <b>{{ s.label }}</b>
+                    <small>{{ s.meta }}</small>
+                  </button>
+                </div>
+              </div>
             </div>
           </label>
           <div class="filter-button-wrap">
@@ -366,10 +385,18 @@ type StatementKind = 'detailed' | 'consolidated';
     .filter-card { padding:18px; overflow:hidden; }
     .filter-card .date-range-filters { margin-bottom:14px; }
     .filter-row { display:flex; flex-wrap:wrap; gap:12px; align-items:end; }
-    .filter-row .search-field { flex:1 1 240px; min-width:240px; }
+    .filter-row .search-field { flex:1 1 320px; min-width:280px; }
     .filter-row .filter-button-wrap { flex:0 0 140px; }
     .filter-row .icon-btn { flex:0 0 54px; }
     .filter-row .search-btn { flex:0 0 150px; }
+    .statement-search-bar { display:flex; align-items:stretch; gap:8px; width:100%; }
+    .statement-search-field { width:148px; min-width:132px; flex:0 0 auto; }
+    .statement-search-input-wrap { position:relative; flex:1 1 auto; min-width:0; }
+    .statement-search-suggestions { position:absolute; left:0; right:0; top:calc(100% + 6px); z-index:40; background:var(--surface, var(--panel)); border:1px solid var(--border); border-radius:14px; padding:6px; box-shadow:0 18px 40px rgba(0,0,0,.28); max-height:260px; overflow:auto; }
+    .statement-search-suggestion { width:100%; display:flex; flex-direction:column; align-items:flex-start; gap:2px; text-align:left; border:0; background:transparent; color:var(--text); border-radius:10px; padding:8px 10px; cursor:pointer; }
+    .statement-search-suggestion:hover { background:var(--soft); }
+    .statement-search-suggestion b { font-size:13px; font-weight:900; }
+    .statement-search-suggestion small { color:var(--muted); font-size:11px; font-weight:700; }
     .field span, .modal-grid span, .stacked span { display:block; color:var(--muted); font-size:12.5px; font-weight:900; margin:0 0 7px; }
     input, select, textarea { width:100%; box-sizing:border-box; border:1px solid var(--border); border-radius:14px; background-color:var(--input); color:var(--text); outline:none; font-weight:800; font-size:14px; }
     input, select { height:46px; padding:0 13px; } textarea { min-height:84px; padding:12px; resize:vertical; }
@@ -466,6 +493,15 @@ export class StatementsPageComponent implements OnInit {
 
   today = new Date().toISOString().slice(0, 10);
   filters: any = { from: this.today, to: this.today, q: '', consultant_ids: [], status_list: [], payment_statuses: [], payment_modes: [] };
+  searchField: 'NAME' | 'BILL_NO' | 'MOBILE' | 'PATIENT_ID' = 'NAME';
+  searchSuggestionsOpen = false;
+  private searchSuggestionsCloseTimer: any = null;
+  readonly searchFieldOptions: { value: 'NAME' | 'BILL_NO' | 'MOBILE' | 'PATIENT_ID'; label: string }[] = [
+    { value: 'NAME', label: 'Name' },
+    { value: 'BILL_NO', label: 'Bill No' },
+    { value: 'MOBILE', label: 'Mobile No' },
+    { value: 'PATIENT_ID', label: 'Patient ID' },
+  ];
   draftFilters: any = { consultant_ids: [], status_list: [], payment_statuses: [], payment_modes: [] };
   draftSearch: any = { consultants: '', billStatus: '', paymentStatus: '', paymentMode: '' };
   billStatusOptions = [
@@ -494,8 +530,17 @@ export class StatementsPageComponent implements OnInit {
   constructor(private cdr: ChangeDetectorRef) {}
 
   async ngOnInit() {
-    this.consultants = await window.limsApi.listConsultants();
+    this.consultants = await this.loadConsultantOptions();
     await this.loadStatement();
+  }
+
+  private async loadConsultantOptions() {
+    const api: any = window.limsApi;
+    if (api.searchConsultants) {
+      const result = await api.searchConsultants({ status: 'ACTIVE', page: 1, pageSize: 100 });
+      return Array.isArray(result?.rows) ? result.rows : [];
+    }
+    return (await window.limsApi.listConsultants()).filter((c: any) => +c.active !== 0);
   }
 
   rawBills() { return this.statement()?.bills || []; }
@@ -615,7 +660,11 @@ export class StatementsPageComponent implements OnInit {
   applyAdvancedFilters() { this.filters.consultant_ids = [...this.list(this.draftFilters.consultant_ids)]; this.filters.status_list = [...this.list(this.draftFilters.status_list)]; this.filters.payment_statuses = [...this.list(this.draftFilters.payment_statuses)]; this.filters.payment_modes = [...this.list(this.draftFilters.payment_modes)]; this.filterModal.set(false); this.page.set(1); this.loadStatement(); }
 
   selectedDays() { if (!this.filters.from || !this.filters.to) return 0; const a = new Date(this.filters.from + 'T00:00:00'); const b = new Date(this.filters.to + 'T00:00:00'); return Math.round((+b - +a) / 86400000) + 1; }
-  validateDates() { this.filterError.set(''); if (!this.filters.from || !this.filters.to) { this.filterError.set('From and To date are required.'); return false; } if (new Date(this.filters.from) > new Date(this.filters.to)) { this.filterError.set('From date cannot be after To date.'); return false; } return true; }
+  validateDates() {
+    const err = dateRangeFilterError(this.filters.from, this.filters.to);
+    this.filterError.set(err);
+    return !err;
+  }
   openDatePicker(event: Event) { openNativeDatePicker(event); }
   setDatePreset(key: keyof ReturnType<typeof dateRangePresets>) {
     const range = dateRangePresets()[key];
@@ -631,8 +680,52 @@ export class StatementsPageComponent implements OnInit {
   isThirtyDayRange() { return this.matchesPreset('thirtyDays'); }
   isCurrentYearRange() { return this.matchesPreset('currentYear'); }
   isLastYearRange() { return this.matchesPreset('lastYear'); }
-  async loadStatement() { if (!this.validateDates()) return; this.page.set(1); this.selectedBillId.set(null); const serverFilters = { from: this.filters.from, to: this.filters.to, q: this.filters.q, status_list: this.filters.status_list, consultant_ids: this.filters.consultant_ids, payment_statuses: this.filters.payment_statuses, payment_modes: this.filters.payment_modes }; this.statement.set(await window.limsApi.statement(serverFilters)); }
-  clearFilters() { this.filters = { from: this.today, to: this.today, q: '', consultant_ids: [], status_list: [], payment_statuses: [], payment_modes: [] }; this.loadStatement(); }
+  async loadStatement() { if (!this.validateDates()) return; this.page.set(1); this.selectedBillId.set(null); this.searchSuggestionsOpen = false; const serverFilters = { from: this.filters.from, to: this.filters.to, q: this.filters.q, searchField: this.searchField, status_list: this.filters.status_list, consultant_ids: this.filters.consultant_ids, payment_statuses: this.filters.payment_statuses, payment_modes: this.filters.payment_modes }; this.statement.set(await window.limsApi.statement(serverFilters)); }
+  clearFilters() { this.filters = { from: this.today, to: this.today, q: '', consultant_ids: [], status_list: [], payment_statuses: [], payment_modes: [] }; this.searchField = 'NAME'; this.loadStatement(); }
+  searchPlaceholder(): string {
+    switch (this.searchField) {
+      case 'BILL_NO': return 'Search by bill no...';
+      case 'MOBILE': return 'Search by mobile no...';
+      case 'PATIENT_ID': return 'Search by patient ID...';
+      default: return 'Search by patient name...';
+    }
+  }
+  onSearchFieldChange() { this.searchSuggestionsOpen = true; this.page.set(1); if (String(this.filters.q || '').trim()) this.loadStatement(); }
+  scheduleCloseSearchSuggestions() {
+    clearTimeout(this.searchSuggestionsCloseTimer);
+    this.searchSuggestionsCloseTimer = setTimeout(() => { this.searchSuggestionsOpen = false; }, 160);
+  }
+  applySearchSuggestion(value: string) {
+    clearTimeout(this.searchSuggestionsCloseTimer);
+    this.filters.q = String(value || '');
+    this.searchSuggestionsOpen = false;
+    this.loadStatement();
+  }
+  billSearchValue(b: any): string {
+    switch (this.searchField) {
+      case 'BILL_NO': return String(b?.bill_no || '').trim();
+      case 'MOBILE': return String(b?.mobile || b?.patient_mobile || '').trim();
+      case 'PATIENT_ID': return String(b?.patient_no || '').trim();
+      default: return String(b?.patient_name || b?.name || '').trim();
+    }
+  }
+  searchSuggestions(): { value: string; label: string; meta: string }[] {
+    const q = String(this.filters.q || '').trim().toLowerCase();
+    if (q.length < 1) return [];
+    const seen = new Set<string>();
+    const out: { value: string; label: string; meta: string }[] = [];
+    for (const b of this.rawBills()) {
+      const value = this.billSearchValue(b);
+      if (!value || !value.toLowerCase().includes(q)) continue;
+      const key = value.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const meta = [b?.bill_no, b?.patient_name, b?.patient_no, b?.mobile].filter(Boolean).filter((v: any) => String(v).trim() !== value).slice(0, 3).join(' · ');
+      out.push({ value, label: value, meta });
+      if (out.length >= 12) break;
+    }
+    return out;
+  }
   async statementExcel() { if (!this.validateDates()) return; window.limsApi.openPath(await window.limsApi.statementExcel(this.filters)); }
   async statementPdf(action: StatementAction) { if (!this.validateDates()) return; if (this.selectedDays() > 1) { this.statementTypeModal.set({ action }); return; } await this.runStatementPdf(action, 'detailed'); }
   async confirmStatementPdf(type: StatementKind) { const action = this.statementTypeModal()?.action || 'download'; this.statementTypeModal.set(null); await this.runStatementPdf(action, type); }

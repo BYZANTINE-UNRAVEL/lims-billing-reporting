@@ -115,7 +115,7 @@ type TransformOperator = 'NONE' | '+' | '-' | '*' | '/';
                 <h4>Tests used by this equipment</h4>
               </div>
               <div class="mapping-tools">
-                <label class="compact-search test-search"><span>Add test</span><input [(ngModel)]="testSearch" placeholder="Search test code/name"></label>
+                <label class="compact-search test-search"><span>Add test</span><input [(ngModel)]="testSearch" (ngModelChange)="onTestSearchChange()" placeholder="Search test code/name"></label>
                 <button class="ux-btn" type="button" (click)="addFirstMatchedTest()">Add</button>
               </div>
             </div>
@@ -124,6 +124,8 @@ type TransformOperator = 'NONE' | '+' | '-' | '*' | '/';
               <button type="button" *ngFor="let t of testSuggestions().slice(0, 10)" (click)="addMapping(t)">
                 <strong>{{ t.code || '-' }}</strong><span>{{ t.display_name || t.name }}</span><small>{{ t.department_name || 'No department' }}</small>
               </button>
+              <span class="empty-mini" *ngIf="testSearchLoading">Searching…</span>
+              <span class="empty-mini" *ngIf="!testSearchLoading && !testSuggestions().length">No matching tests</span>
             </div>
 
             <div class="mapping-table-wrap">
@@ -162,9 +164,14 @@ type TransformOperator = 'NONE' | '+' | '-' | '*' | '/';
 export class EquipmentMasterComponent implements OnInit {
   @Output() changed = new EventEmitter<void>();
   equipment: any[] = [];
-  tests: any[] = [];
+  /** Small cache of searched/selected tests only — never the full master catalog. */
+  testCache = new Map<number, any>();
+  testPickerResults: any[] = [];
   equipmentSearch = '';
   testSearch = '';
+  testSearchLoading = false;
+  private testSearchSeq = 0;
+  private testSearchTimer: any = null;
   listMode: 'ALL' | 'ACTIVE' | 'INACTIVE' = 'ALL';
   viewMode: 'list' | 'editor' = 'list';
   form: any = this.blankForm();
@@ -174,7 +181,7 @@ export class EquipmentMasterComponent implements OnInit {
   async load() {
     const api = window.limsApi;
     this.equipment = api.listEquipment ? await api.listEquipment(false) : [];
-    this.tests = await api.listTests(true);
+    // Do NOT call listTests here — stress masters (~80k) hang/crash the app.
   }
 
   blankForm() {
@@ -203,12 +210,14 @@ export class EquipmentMasterComponent implements OnInit {
   newEquipment() {
     this.form = this.blankForm();
     this.testSearch = '';
+    this.testPickerResults = [];
     this.viewMode = 'editor';
   }
 
   backToList() {
     this.viewMode = 'list';
     this.testSearch = '';
+    this.testPickerResults = [];
   }
 
   editEquipment(e: any) {
@@ -228,6 +237,14 @@ export class EquipmentMasterComponent implements OnInit {
         sort_order: +m.sort_order || (index + 1) * 1000
       }))
     };
+    for (const m of this.form.mappings || []) {
+      if (+m.test_id) this.testCache.set(+m.test_id, {
+        id: +m.test_id,
+        name: m.test_name,
+        display_name: m.test_name,
+        code: m.lis_code || m.analyzer_code || ''
+      });
+    }
     this.viewMode = 'editor';
   }
 
@@ -248,10 +265,39 @@ export class EquipmentMasterComponent implements OnInit {
     this.changed.emit();
   }
 
+  onTestSearchChange() {
+    if (this.testSearchTimer) clearTimeout(this.testSearchTimer);
+    const q = this.testSearch.trim();
+    if (!q) {
+      this.testPickerResults = [];
+      this.testSearchLoading = false;
+      return;
+    }
+    this.testSearchTimer = setTimeout(() => { void this.runTestSearch(q); }, 160);
+  }
+
+  private async runTestSearch(q: string) {
+    const api: any = window.limsApi;
+    const seq = ++this.testSearchSeq;
+    this.testSearchLoading = true;
+    try {
+      if (!api.searchMastersTests) {
+        this.testPickerResults = [];
+        return;
+      }
+      const result = await api.searchMastersTests({ q, state: 'ACTIVE', status: 'ALL', page: 1, pageSize: 25 });
+      if (seq !== this.testSearchSeq) return;
+      const rows = Array.isArray(result?.rows) ? result.rows : [];
+      for (const t of rows) this.testCache.set(+t.id, t);
+      this.testPickerResults = rows;
+    } finally {
+      if (seq === this.testSearchSeq) this.testSearchLoading = false;
+    }
+  }
+
   testSuggestions() {
-    const q = this.testSearch.trim().toLowerCase();
     const existing = new Set((this.form.mappings || []).map((m: any) => +m.test_id));
-    return this.tests.filter(t => !existing.has(+t.id) && (!q || [t.code, t.name, t.display_name, t.department_name].some(x => String(x || '').toLowerCase().includes(q))));
+    return this.testPickerResults.filter(t => !existing.has(+t.id));
   }
 
   addFirstMatchedTest() {
@@ -262,6 +308,7 @@ export class EquipmentMasterComponent implements OnInit {
   addMapping(t: any) {
     if (!t?.id) return;
     if ((this.form.mappings || []).some((m: any) => +m.test_id === +t.id)) return;
+    this.testCache.set(+t.id, t);
     const code = this.cleanCode(t.code || this.shortCode(t.display_name || t.name));
     this.form.mappings = [
       ...(this.form.mappings || []),
@@ -280,6 +327,7 @@ export class EquipmentMasterComponent implements OnInit {
       }
     ];
     this.testSearch = '';
+    this.testPickerResults = [];
   }
 
   shortCode(name: string) {
@@ -289,7 +337,7 @@ export class EquipmentMasterComponent implements OnInit {
   removeMapping(index: number) { this.form.mappings.splice(index, 1); this.form.mappings = [...this.form.mappings]; }
 
   testMeta(testId: number) {
-    const t = this.tests.find(x => +x.id === +testId);
+    const t = this.testCache.get(+testId);
     const bits = [t?.code, t?.department_name, t?.unit_name].filter(Boolean);
     return bits.length ? bits.join(' · ') : 'Mapped test';
   }

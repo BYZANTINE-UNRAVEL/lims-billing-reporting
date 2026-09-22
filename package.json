@@ -16,7 +16,8 @@
     "test:e2e:codegen": "npm run build:electron && playwright codegen http://127.0.0.1:4500",
     "serve:e2e": "ng serve --host 127.0.0.1 --port 4500",
     "build:electron": "tsc -p tsconfig.electron.json",
-    "install:report-fonts": "node tools/install-report-fonts.mjs"
+    "install:report-fonts": "node tools/install-report-fonts.mjs",
+    "stress-seed": "node tools/run-stress-seed.cjs"
   },
   "dependencies": {
     "@angular/animations": "^18.2.13",

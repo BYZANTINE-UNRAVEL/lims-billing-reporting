@@ -294,4 +294,97 @@ export class AnalyticsPdfService extends ReportCoreService {
     fs.writeFileSync(result.filePath, output as any);
     return { file: result.filePath, cancelled: false };
   }
+
+  /**
+   * Streams every analytics detail row into one Excel file in the main process.
+   * Used when the user needs the full bill list for a large period (not daily summary).
+   */
+  async exportAllDetailsExcel(
+    payload: any = {},
+    onProgress?: (progress: { fetched: number; total: number; message: string }) => void
+  ): Promise<{ file: string; cancelled: boolean; total: number; exported: number }> {
+    const title = String(payload?.title || 'Analytics Details').trim() || 'Analytics Details';
+    const subtitle = String(payload?.subtitle || '').trim();
+    const generatedAt = String(payload?.generatedAt || '').trim() || new Date().toLocaleString();
+    const columns = Array.isArray(payload?.columns) ? payload.columns : [];
+    if (!columns.length) throw new Error('No columns are available for this Excel export.');
+
+    const filters = {
+      from: String(payload?.from || '').slice(0, 10),
+      to: String(payload?.to || '').slice(0, 10),
+      kind: String(payload?.kind || 'bills'),
+      ...(payload?.extra && typeof payload.extra === 'object' ? payload.extra : {})
+    };
+    const pageSize = 5000;
+    const probe = this.db.analyticsDetails({ ...filters, page: 1, pageSize: 1 });
+    const total = Math.max(0, Number(probe?.total || 0));
+    onProgress?.({ fetched: 0, total, message: `Preparing ${total.toLocaleString('en-IN')} bill rows…` });
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'LIMS';
+    workbook.created = new Date();
+    const sheet = workbook.addWorksheet(title.slice(0, 31) || 'Analytics');
+    sheet.addRow([title]);
+    sheet.mergeCells(1, 1, 1, Math.max(1, columns.length));
+    sheet.getCell(1, 1).font = { bold: true, size: 16 };
+    sheet.addRow([subtitle || `Selected period: ${filters.from} to ${filters.to}`]);
+    sheet.mergeCells(2, 1, 2, Math.max(1, columns.length));
+    sheet.addRow([`Generated: ${generatedAt}`, `Records: ${total}`]);
+    sheet.addRow([]);
+    const headerRowNumber = sheet.rowCount + 1;
+    const header = sheet.addRow(columns.map((c: any) => String(c.label || c.key || '')));
+    header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
+
+    let exported = 0;
+    const moneyKeys = new Set(columns.filter((c: any) => c?.money).map((c: any) => String(c.key)));
+    const maxPages = Math.max(1, Math.ceil(total / pageSize) || 1);
+    for (let page = 1; page <= maxPages; page++) {
+      const batch = this.db.analyticsDetails({ ...filters, page, pageSize });
+      const rows = Array.isArray(batch?.rows) ? batch.rows : [];
+      for (const row of rows) {
+        const values = columns.map((c: any) => {
+          const key = String(c?.key || '');
+          const raw = row?.[key];
+          if (moneyKeys.has(key)) {
+            const n = Number(raw);
+            return Number.isFinite(n) ? n : raw ?? '';
+          }
+          return raw ?? '';
+        });
+        sheet.addRow(values);
+      }
+      exported += rows.length;
+      onProgress?.({
+        fetched: exported,
+        total,
+        message: `Writing bill rows ${exported.toLocaleString('en-IN')} / ${total.toLocaleString('en-IN')}…`
+      });
+      if (rows.length < pageSize) break;
+    }
+
+    columns.forEach((c: any, index: number) => {
+      const key = String(c?.key || '');
+      sheet.getColumn(index + 1).width = this.isNumericColumn(key) ? 14 : this.isDateColumn(key) ? 22 : this.isWideTextColumn(key) ? 28 : 18;
+      if (moneyKeys.has(key)) sheet.getColumn(index + 1).numFmt = '₹#,##0.00';
+    });
+    sheet.views = [{ state: 'frozen', ySplit: headerRowNumber }];
+    sheet.autoFilter = { from: { row: headerRowNumber, column: 1 }, to: { row: headerRowNumber, column: Math.max(1, columns.length) } };
+
+    onProgress?.({ fetched: exported, total, message: 'Saving Excel file…' });
+    const output = await workbook.xlsx.writeBuffer();
+    const defaultDir = path.join(app.getPath('documents'), 'LIMS Analytics');
+    fs.mkdirSync(defaultDir, { recursive: true });
+    const result = await dialog.showSaveDialog({
+      title: 'Save Full Bill Detail Excel',
+      defaultPath: path.join(defaultDir, `${this.safeName(title)}-full-${Date.now()}.xlsx`),
+      filters: [{ name: 'Excel Workbook', extensions: ['xlsx'] }],
+      properties: ['createDirectory', 'showOverwriteConfirmation']
+    });
+    if (result.canceled || !result.filePath) return { file: '', cancelled: true, total, exported };
+
+    fs.writeFileSync(result.filePath, Buffer.from(output as ArrayBuffer));
+    try { await shell.showItemInFolder(result.filePath); } catch {}
+    return { file: result.filePath, cancelled: false, total, exported };
+  }
 }

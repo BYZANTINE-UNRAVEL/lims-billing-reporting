@@ -104,10 +104,24 @@ export class ReportDocumentService extends ReportContentService {  async createR
     const flagStylesEnabled = flagsEnabled && (flagMode === 'flag_abnormal' || flagMode === 'critical_flag_abnormal');
     const criticalEnabled = flagsEnabled && flagMode === 'critical_flag_abnormal';
 
-    const pageBreakTestIds = new Set((this.db.listTests ? this.db.listTests(false) : []).filter((x:any)=>Number(x.start_new_page||0)===1).map((x:any)=>+x.id));
-    const pageBreakAfterProfileIds = new Set((this.db.listProfiles ? this.db.listProfiles(false) : [])
-      .filter((x:any)=>Number(x.break_page_after || x.start_new_page || 0)===1)
-      .map((x:any)=>+x.id));
+    // Never listTests/listProfiles here — stress masters (~80k+) OOM the process during print.
+    const pageBreakTestIds = new Set<number>();
+    const pageBreakAfterProfileIds = new Set<number>();
+    try {
+      const rawDb = (this.db as any)?.db;
+      if (rawDb?.prepare) {
+        for (const row of rawDb.prepare('SELECT id FROM tests WHERE COALESCE(start_new_page,0)=1').all() as any[]) {
+          const id = +row.id || 0;
+          if (id) pageBreakTestIds.add(id);
+        }
+        for (const row of rawDb.prepare(
+          'SELECT id FROM profiles WHERE COALESCE(break_page_after,0)=1 OR COALESCE(start_new_page,0)=1'
+        ).all() as any[]) {
+          const id = +row.id || 0;
+          if (id) pageBreakAfterProfileIds.add(id);
+        }
+      }
+    } catch { /* older schemas may lack page-break columns */ }
     const departmentRows:any[] = this.db.listDepartments ? this.db.listDepartments() : [];
     const pageBreakAfterDepartmentIds = new Set(departmentRows.filter((x:any)=>Number(x.page_break_after || 0)===1).map((x:any)=>+x.id));
     const pageBreakAfterDepartmentNames = new Set(departmentRows.filter((x:any)=>Number(x.page_break_after || 0)===1).map((x:any)=>String(x.name || '').trim().toLowerCase()).filter(Boolean));

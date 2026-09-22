@@ -261,7 +261,8 @@
       <div class="collection-content" *ngIf="workflowStep()!=='reporting' && mode()!=='collect'" [ngSwitch]="tab()">
         <div *ngSwitchCase="'pending'" class="panel">
           <div *ngIf="mode()==='list'" class="master-card">
-            <div class="filter-row"><input placeholder="Search bill / patient / mobile..." [(ngModel)]="pendingSearch" name="pendingSearch"><input type="date" [(ngModel)]="fromDate" name="pendingFromDate"><input type="date" [(ngModel)]="toDate" name="pendingToDate"></div>
+            <div class="filter-row"><input placeholder="Search bill / patient / mobile..." [(ngModel)]="pendingSearch" name="pendingSearch"><input type="date" [(ngModel)]="fromDate" name="pendingFromDate" (ngModelChange)="load()"><input type="date" [(ngModel)]="toDate" name="pendingToDate" (ngModelChange)="load()"></div>
+            <p class="date-range-error" *ngIf="dateError">{{dateError}}</p>
             <table class="master-table">
               <thead><tr><th>Bill</th><th>Patient</th><th>Billed date</th><th>Collection time</th><th>Action</th></tr></thead>
               <tbody>
@@ -297,7 +298,8 @@
 
         <div *ngSwitchCase="'collectionpending'" class="panel">
           <div *ngIf="mode()==='list'" class="master-card">
-            <div class="filter-row"><input placeholder="Search bill / patient / mobile..." [(ngModel)]="pendingSearch" name="acceptedPendingSearch"><input type="date" [(ngModel)]="fromDate" name="acceptedPendingFromDate"><input type="date" [(ngModel)]="toDate" name="acceptedPendingToDate"></div>
+            <div class="filter-row"><input placeholder="Search bill / patient / mobile..." [(ngModel)]="pendingSearch" name="acceptedPendingSearch"><input type="date" [(ngModel)]="fromDate" name="acceptedPendingFromDate" (ngModelChange)="load()"><input type="date" [(ngModel)]="toDate" name="acceptedPendingToDate" (ngModelChange)="load()"></div>
+            <p class="date-range-error" *ngIf="dateError">{{dateError}}</p>
             <table class="master-table">
               <thead><tr><th>Bill</th><th>Patient</th><th>Billed date</th><th>Collection time</th><th>Action</th></tr></thead>
               <tbody>
@@ -337,7 +339,8 @@
         <div *ngSwitchCase="'log'" class="panel">
           <div class="master-card">
             <div class="section-title"><div><h3>Collection Log</h3><p>Audit trail for rejected, recollected, cancelled, outsource dispatch and internal check actions.</p></div></div>
-            <div class="filter-row log-filter-row"><input placeholder="Search bill / patient / specimen / action..." [(ngModel)]="logSearch" name="logSearch"><select [(ngModel)]="logFilter" name="logFilter"><option value="ALL">All actions</option><option value="REJECTED">Rejected</option><option value="RECOLLECTED">Recollected</option><option value="CANCELLED">Cancelled</option><option value="OUTSOURCE">Outsource</option><option value="INTERNAL">Internal check</option><option value="DISPATCH">Dispatch</option></select><input type="date" [(ngModel)]="fromDate" name="logFromDate"><input type="date" [(ngModel)]="toDate" name="logToDate"></div>
+            <div class="filter-row log-filter-row"><input placeholder="Search bill / patient / specimen / action..." [(ngModel)]="logSearch" name="logSearch"><select [(ngModel)]="logFilter" name="logFilter"><option value="ALL">All actions</option><option value="REJECTED">Rejected</option><option value="RECOLLECTED">Recollected</option><option value="CANCELLED">Cancelled</option><option value="OUTSOURCE">Outsource</option><option value="INTERNAL">Internal check</option><option value="DISPATCH">Dispatch</option></select><input type="date" [(ngModel)]="fromDate" name="logFromDate" (ngModelChange)="load()"><input type="date" [(ngModel)]="toDate" name="logToDate" (ngModelChange)="load()"></div>
+            <p class="date-range-error" *ngIf="dateError">{{dateError}}</p>
             <table class="master-table"><thead><tr><th>Date & time</th><th>Action</th><th>Bill / Patient</th><th>Specimen</th><th>Details</th></tr></thead><tbody><tr *ngFor="let l of filteredCollectionLogs()"><td><b>{{dateTime(l.created_at)}}</b></td><td><span class="status-pill">{{logActionLabel(l.action)}}</span></td><td><b>{{l.bill_no || '—'}}</b><small>{{l.patient_name || '—'}}</small></td><td><b>{{l.specimen_id || '—'}}</b><small>{{l.specimen_name || '—'}}</small></td><td>{{l.details || '—'}}</td></tr></tbody></table>
             <div class="empty" *ngIf="!filteredCollectionLogs().length">No collection log records found.</div>
           </div>
@@ -347,7 +350,8 @@
         <div *ngSwitchDefault class="panel">
           <div class="master-card">
             <div class="section-title"><div><h3>{{currentListTitle()}}</h3><p>{{tabStatusText()}}</p></div></div>
-            <div class="filter-row collection-filter-row"><input placeholder="Search specimen / bill / patient / test..." [(ngModel)]="collectionSearch" name="collectionSearch"><select [(ngModel)]="collectionGroupMode" name="collectionGroupMode"><option value="SPECIMEN">Show specimens</option><option value="BILL">Group by bill</option></select><input type="date" [(ngModel)]="fromDate" name="fromDate"><input type="date" [(ngModel)]="toDate" name="toDate"></div>
+            <div class="filter-row collection-filter-row"><input placeholder="Search specimen / bill / patient / test..." [(ngModel)]="collectionSearch" name="collectionSearch"><select [(ngModel)]="collectionGroupMode" name="collectionGroupMode"><option value="SPECIMEN">Show specimens</option><option value="BILL">Group by bill</option></select><input type="date" [(ngModel)]="fromDate" name="fromDate" (ngModelChange)="load()"><input type="date" [(ngModel)]="toDate" name="toDate" (ngModelChange)="load()"></div>
+            <p class="date-range-error" *ngIf="dateError">{{dateError}}</p>
 
             <div class="bill-worklist" *ngIf="collectionGroupMode==='BILL' && collectionBillGroups().length; else specimenCollectionList">
               <article class="bill-work-card" *ngFor="let g of collectionBillGroups()" [class.expanded]="isBillExpanded(g)">

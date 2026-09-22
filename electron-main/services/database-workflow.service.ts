@@ -73,36 +73,315 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
     }
     return this.attachProfileRemarks({...r, items});
   }
-  protected listQuickReports(status='') {
-    this.ensureQuickReportingSchema();
-    const rows:any[] = [];
-    const bills = this.db.prepare(`SELECT b.id bill_id,b.bill_no,b.bill_date,b.patient_snapshot_json,p.title patient_title,p.name patient_name,p.mobile patient_mobile,p.patient_no,p.age,p.age_value,p.age_unit,p.gender,c.name consultant_name
-      FROM bills b JOIN patients p ON p.id=b.patient_id LEFT JOIN consultants c ON c.id=b.consultant_id
-      WHERE COALESCE(b.status,'BILLED') NOT IN ('CANCELLED','DELETED')
-      ORDER BY b.id DESC LIMIT 300`).all() as any[];
-    for (const b of bills) {
-      const patient = this.applyPatientSnapshotToRow(b);
-      const items = this.quickBuildBillItems(+b.bill_id, false, 0).filter((x:any)=>x.test_id);
-      if (items.length) { const bc = this.quickBarcodeSvc().buildState(+b.bill_id, items); rows.push({ id: -Number(b.bill_id), bill_id:+b.bill_id, status:'DRAFT', queue_status:'DRAFT', report_scope:'QUICK', report_title:'Quick Report Pending', item_count:items.length, pending_count:items.length, approved_count:0, entered_count:0, ready_for_entry_count:items.length, entry_locked:0, quick_barcode_status:bc.status, quick_barcode_generated_count:bc.generated_count, quick_barcode_pending_count:bc.pending_count, ...patient }); }
+  /** Always date-filter report lists in SQL (bill_date). Never rely on LIMIT + in-memory date filtering. */
+  protected normalizeReportListDateRange(filters: { from?: string; to?: string } = {}) {
+    const ok = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+    let from = String(filters?.from || '').trim().slice(0, 10);
+    let to = String(filters?.to || '').trim().slice(0, 10);
+    if (!ok(from) || !ok(to)) {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      from = `${y}-${m}-01`;
+      to = `${y}-${m}-${day}`;
     }
-    const finished = this.db.prepare(`SELECT qr.id,qr.bill_id,qr.report_no,qr.created_at,qr.updated_at,qr.status raw_quick_status,b.bill_no,b.bill_date,b.patient_snapshot_json,p.title patient_title,p.name patient_name,p.mobile patient_mobile,p.patient_no,p.age,p.age_value,p.age_unit,p.gender,c.name consultant_name,COUNT(qri.id) item_count
-      FROM quick_reports qr JOIN bills b ON b.id=qr.bill_id JOIN patients p ON p.id=qr.patient_id LEFT JOIN consultants c ON c.id=b.consultant_id LEFT JOIN quick_report_items qri ON qri.quick_report_id=qr.id AND qri.test_id IS NOT NULL
-      WHERE UPPER(COALESCE(qr.status,'FINISHED'))='FINISHED'
-      GROUP BY qr.id ORDER BY qr.id DESC LIMIT 300`).all() as any[];
-    for (const r of finished) {
-      const patient = this.applyPatientSnapshotToRow(r);
-      rows.push({ ...patient, status:'APPROVED', queue_status:'APPROVED', report_scope:'QUICK', report_title:r.report_no || 'Quick Report', pending_count:0, entered_count:0, approved_count:+r.item_count || 0, ready_for_entry_count:+r.item_count || 0, entry_locked:0 });
-    }
-    const wanted = String(status || '').toUpperCase();
-    return wanted ? rows.filter(r => String(r.status).toUpperCase() === wanted) : rows;
+    if (from > to) [from, to] = [to, from];
+    this.assertFilterDateRange(from, to);
+    return { from, to };
   }
 
-  listReports(status='') {
-    if (this.isQuickReportingEnabled()) return this.listQuickReports(status);
-    const baseRows = this.db.prepare(`SELECT r.id FROM reports r JOIN bills b ON b.id=r.bill_id WHERE COALESCE(r.report_scope,'COLLECTION')<>'STAGING' AND COALESCE(r.status,'')<>'COLLECTION_STAGING' ORDER BY r.id DESC LIMIT 300`).all() as any[];
-    for (const row of baseRows) {
+  /** Index-friendly bill_date predicate (avoids substr() which blocks idx_bills_date). */
+  protected billDateRangeSql(alias = 'b') {
+    return `${alias}.bill_date >= ? AND ${alias}.bill_date < date(?, '+1 day')`;
+  }
+
+  protected normalizeReportListPaging(filters: { page?: number; pageSize?: number; all?: boolean } = {}) {
+    const rawPageSize = Number(filters?.pageSize ?? NaN);
+    const rawPage = Number(filters?.page ?? NaN);
+    const all = !!filters?.all || rawPageSize === 0;
+    const pageSize = all ? 0 : ([10, 25, 50, 100].includes(rawPageSize) ? rawPageSize : 25);
+    const page = Math.max(1, Math.floor(Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1));
+    return { page, pageSize, all, offset: all ? 0 : (page - 1) * pageSize };
+  }
+
+  protected reportListSearchSql(filters: { search?: string; searchField?: string; searchExact?: boolean } = {}) {
+    const search = String(filters?.search || '').trim();
+    if (!search) return { sql: '', args: [] as string[] };
+    const field = String(filters?.searchField || 'NAME').toUpperCase();
+    const exact = !!filters?.searchExact;
+    if (exact) {
+      if (field === 'BILL_NO') return { sql: ' AND TRIM(b.bill_no) = ?', args: [search] };
+      if (field === 'MOBILE') return { sql: ' AND TRIM(COALESCE(p.mobile,\'\')) = ?', args: [search] };
+      if (field === 'PATIENT_ID') return { sql: ' AND TRIM(COALESCE(p.patient_no,\'\')) = ?', args: [search] };
+      return { sql: ' AND LOWER(TRIM(COALESCE(p.name,\'\'))) = LOWER(?)', args: [search] };
+    }
+    const like = `%${search}%`;
+    if (field === 'BILL_NO') return { sql: ' AND b.bill_no LIKE ?', args: [like] };
+    if (field === 'MOBILE') return { sql: ' AND COALESCE(p.mobile,\'\') LIKE ?', args: [like] };
+    if (field === 'PATIENT_ID') return { sql: ' AND COALESCE(p.patient_no,\'\') LIKE ?', args: [like] };
+    return { sql: ' AND COALESCE(p.name,\'\') LIKE ?', args: [like] };
+  }
+
+  /**
+   * Fast pending predicate (index-backed). Uses bill_items + quick_report_items(bill_id,test_id).
+   * Nested profile_items paths are rare; opening a bill still expands via quickBuildBillItems.
+   */
+  protected quickPendingBillExistsSql(billAlias = 'b') {
+    const finishedTest = (testExpr: string) => `
+      EXISTS (
+        SELECT 1 FROM quick_report_items qri
+        JOIN quick_reports qr ON qr.id=qri.quick_report_id
+        WHERE qri.bill_id=${billAlias}.id
+          AND qri.test_id=${testExpr}
+          AND UPPER(COALESCE(qr.status,'FINISHED'))='FINISHED'
+      )`;
+    return `(
+      EXISTS (
+        SELECT 1 FROM bill_items bi
+        WHERE bi.bill_id=${billAlias}.id AND UPPER(COALESCE(bi.item_type,''))='TEST'
+          AND NOT ${finishedTest('bi.item_id')}
+      )
+      OR EXISTS (
+        SELECT 1 FROM bill_items bi
+        JOIN profile_tests pt ON pt.profile_id=bi.item_id
+        WHERE bi.bill_id=${billAlias}.id AND UPPER(COALESCE(bi.item_type,''))='PROFILE'
+          AND NOT ${finishedTest('pt.test_id')}
+      )
+      OR EXISTS (
+        SELECT 1 FROM bill_items bi
+        JOIN profile_items pi ON pi.profile_id=bi.item_id AND UPPER(COALESCE(pi.item_type,'TEST'))='TEST' AND pi.test_id IS NOT NULL
+        WHERE bi.bill_id=${billAlias}.id AND UPPER(COALESCE(bi.item_type,''))='PROFILE'
+          AND NOT ${finishedTest('pi.test_id')}
+      )
+    )`;
+  }
+
+  protected countQuickPendingBills(from: string, to: string, searchSql: string, searchArgs: string[]) {
+    // Cap exact counting — full month EXISTS over stress volume can still be slow.
+    // Return at least page-nav friendly totals; badge uses this when under the cap.
+    const cap = 5000;
+    const rows = this.db.prepare(`SELECT b.id
+      FROM bills b JOIN patients p ON p.id=b.patient_id
+      WHERE COALESCE(b.status,'BILLED') NOT IN ('CANCELLED','DELETED')
+        AND ${this.billDateRangeSql('b')}${searchSql}
+        AND ${this.quickPendingBillExistsSql('b')}
+      LIMIT ?`).all(from, to, ...searchArgs, cap + 1) as any[];
+    const n = rows.length;
+    return n > cap ? cap + 1 : n;
+  }
+
+  protected listQuickPendingBillPage(from: string, to: string, searchSql: string, searchArgs: string[], all: boolean, pageSize: number, offset: number) {
+    const limitSql = all ? '' : ' LIMIT ? OFFSET ?';
+    const args = all ? [from, to, ...searchArgs] : [from, to, ...searchArgs, pageSize, offset];
+    return this.db.prepare(`SELECT b.id bill_id,b.bill_no,b.bill_date,b.patient_snapshot_json,p.title patient_title,p.name patient_name,p.mobile patient_mobile,p.patient_no,p.age,p.age_value,p.age_unit,p.gender,c.name consultant_name
+      FROM bills b JOIN patients p ON p.id=b.patient_id LEFT JOIN consultants c ON c.id=b.consultant_id
+      WHERE COALESCE(b.status,'BILLED') NOT IN ('CANCELLED','DELETED')
+        AND ${this.billDateRangeSql('b')}${searchSql}
+        AND ${this.quickPendingBillExistsSql('b')}
+      ORDER BY b.id DESC${limitSql}`).all(...args) as any[];
+  }
+
+  protected listQuickReports(filters: {
+    status?: string; from?: string; to?: string; page?: number; pageSize?: number; all?: boolean;
+    search?: string; searchField?: string; searchExact?: boolean; view?: string;
+  } = {}) {
+    this.ensureQuickReportingSchema();
+    const { from, to } = this.normalizeReportListDateRange(filters);
+    const { page, pageSize, all, offset } = this.normalizeReportListPaging(filters);
+    const search = this.reportListSearchSql(filters);
+    const dateSearchArgs = [from, to, ...search.args];
+    const wantedRaw = String(filters?.status || '').toUpperCase();
+    const wanted = wantedRaw === 'FINISHED' ? 'APPROVED' : wantedRaw;
+    const groupByBill = String(filters?.view || 'REPORT').toUpperCase() === 'BILL';
+
+    // Only count the active tab. Pending EXISTS over a year-wide stress DB is too heavy
+    // to run on every Finished-tab load; the UI keeps the other badge until that tab loads.
+    const finishedCount = (wanted === 'APPROVED' || !wanted)
+      ? +((this.db.prepare(`SELECT COUNT(*) c FROM (
+        SELECT qr.id FROM quick_reports qr
+        JOIN bills b ON b.id=qr.bill_id JOIN patients p ON p.id=qr.patient_id
+        WHERE UPPER(COALESCE(qr.status,'FINISHED'))='FINISHED'
+          AND ${this.billDateRangeSql('b')}${search.sql}
+        GROUP BY qr.id
+      )`).get(...dateSearchArgs) as any)?.c || 0)
+      : null;
+
+    const finishedBillCount = (wanted === 'APPROVED' && groupByBill)
+      ? +((this.db.prepare(`SELECT COUNT(*) c FROM (
+        SELECT b.id FROM quick_reports qr
+        JOIN bills b ON b.id=qr.bill_id JOIN patients p ON p.id=qr.patient_id
+        WHERE UPPER(COALESCE(qr.status,'FINISHED'))='FINISHED'
+          AND ${this.billDateRangeSql('b')}${search.sql}
+        GROUP BY b.id
+      )`).get(...dateSearchArgs) as any)?.c || 0)
+      : finishedCount;
+
+    // Defer pending count to DRAFT branch (page first).
+    let pendingCount: number | null = null;
+    const counts: any = {};
+    if (finishedCount != null) counts.APPROVED = groupByBill ? finishedBillCount : finishedCount;
+
+    const mapFinished = (r: any) => {
+      const patient = this.applyPatientSnapshotToRow(r);
+      return {
+        ...patient, status: 'APPROVED', queue_status: 'APPROVED', report_scope: 'QUICK',
+        report_title: r.report_no || 'Quick Report', pending_count: 0, entered_count: 0,
+        approved_count: +r.item_count || 0, ready_for_entry_count: +r.item_count || 0, entry_locked: 0
+      };
+    };
+
+    const buildPendingRows = (bills: any[]) => {
+      const out: any[] = [];
+      for (const b of bills) {
+        // Lightweight queue row: count unfinished tests without expanding full typing payload.
+        const items = this.quickPendingQueueSummary(+b.bill_id);
+        if (!items.item_count) continue;
+        const patient = this.applyPatientSnapshotToRow(b);
+        out.push({
+          id: -Number(b.bill_id), bill_id: +b.bill_id, status: 'DRAFT', queue_status: 'DRAFT', report_scope: 'QUICK',
+          report_title: 'Quick Report Pending', item_count: items.item_count, pending_count: items.item_count, approved_count: 0,
+          entered_count: 0, ready_for_entry_count: items.item_count, entry_locked: 0,
+          quick_barcode_status: items.quick_barcode_status,
+          quick_barcode_generated_count: items.quick_barcode_generated_count,
+          quick_barcode_pending_count: items.quick_barcode_pending_count,
+          ...patient
+        });
+      }
+      return out;
+    };
+
+    const finishedSelectSql = `SELECT qr.id,qr.bill_id,qr.report_no,qr.created_at,qr.updated_at,qr.status raw_quick_status,b.bill_no,b.bill_date,b.patient_snapshot_json,p.title patient_title,p.name patient_name,p.mobile patient_mobile,p.patient_no,p.age,p.age_value,p.age_unit,p.gender,c.name consultant_name,COUNT(qri.id) item_count
+      FROM quick_reports qr JOIN bills b ON b.id=qr.bill_id JOIN patients p ON p.id=qr.patient_id LEFT JOIN consultants c ON c.id=b.consultant_id LEFT JOIN quick_report_items qri ON qri.quick_report_id=qr.id AND qri.test_id IS NOT NULL
+      WHERE UPPER(COALESCE(qr.status,'FINISHED'))='FINISHED'
+        AND ${this.billDateRangeSql('b')}${search.sql}`;
+
+    if (wanted === 'DRAFT') {
+      // Page first — never block the UI on a full-range pending COUNT.
+      const fetchSize = all ? 0 : pageSize + 10;
+      const bills = this.listQuickPendingBillPage(from, to, search.sql, search.args, all, fetchSize || pageSize, offset);
+      const built = buildPendingRows(bills);
+      const rows = all ? built : built.slice(0, pageSize);
+      const hasMore = !all && (bills.length > pageSize || built.length > pageSize);
+      const total = all
+        ? rows.length
+        : (hasMore ? offset + pageSize + 1 : offset + rows.length);
+      counts.DRAFT = total;
+      return { rows, total, page, pageSize: all ? total : pageSize, counts };
+    }
+
+    if (wanted === 'APPROVED') {
+      if (groupByBill) {
+        const billIdsSql = `SELECT b.id bill_id FROM quick_reports qr
+          JOIN bills b ON b.id=qr.bill_id JOIN patients p ON p.id=qr.patient_id
+          WHERE UPPER(COALESCE(qr.status,'FINISHED'))='FINISHED'
+            AND ${this.billDateRangeSql('b')}${search.sql}
+          GROUP BY b.id ORDER BY MAX(qr.id) DESC` + (all ? '' : ' LIMIT ? OFFSET ?');
+        const billIdArgs = all ? dateSearchArgs : [...dateSearchArgs, pageSize, offset];
+        const billIds = (this.db.prepare(billIdsSql).all(...billIdArgs) as any[]).map((r) => +r.bill_id).filter(Boolean);
+        let rows: any[] = [];
+        if (billIds.length) {
+          const placeholders = billIds.map(() => '?').join(',');
+          const finished = this.db.prepare(`${finishedSelectSql} AND qr.bill_id IN (${placeholders}) GROUP BY qr.id ORDER BY qr.id DESC`)
+            .all(...dateSearchArgs, ...billIds) as any[];
+          rows = finished.map(mapFinished);
+        }
+        const total = finishedBillCount ?? rows.length;
+        return { rows, total, page, pageSize: all ? total : pageSize, counts };
+      }
+      const finishedSql = `${finishedSelectSql} GROUP BY qr.id ORDER BY qr.id DESC` + (all ? '' : ' LIMIT ? OFFSET ?');
+      const finishedArgs = all ? dateSearchArgs : [...dateSearchArgs, pageSize, offset];
+      const finished = this.db.prepare(finishedSql).all(...finishedArgs) as any[];
+      const total = finishedCount ?? finished.length;
+      return { rows: finished.map(mapFinished), total, page, pageSize: all ? total : pageSize, counts };
+    }
+
+    // No status filter (analytics): page-scoped or full range.
+    pendingCount = this.countQuickPendingBills(from, to, search.sql, search.args);
+    counts.DRAFT = pendingCount;
+    const pendingBills = this.listQuickPendingBillPage(from, to, search.sql, search.args, true, 0, 0);
+    const pendingRows = buildPendingRows(pendingBills);
+    const finished = this.db.prepare(`${finishedSelectSql} GROUP BY qr.id ORDER BY qr.id DESC`).all(...dateSearchArgs) as any[];
+    const rows = [...pendingRows, ...finished.map(mapFinished)];
+    const total = rows.length;
+    const pageRows = all ? rows : rows.slice(offset, offset + pageSize);
+    return { rows: pageRows, total, page, pageSize: all ? total : pageSize, counts };
+  }
+
+  listReports(statusOrFilters: any = '', filters: any = {}) {
+    const opts = (statusOrFilters && typeof statusOrFilters === 'object' && !Array.isArray(statusOrFilters))
+      ? { ...statusOrFilters }
+      : { ...(filters || {}), status: statusOrFilters };
+    if (this.isQuickReportingEnabled()) return this.listQuickReports(opts);
+
+    const { from, to } = this.normalizeReportListDateRange(opts);
+    const { page, pageSize, all, offset } = this.normalizeReportListPaging(opts);
+    const search = this.reportListSearchSql(opts);
+    const dateSearchArgs = [from, to, ...search.args];
+    const status = String(opts?.status || '').toUpperCase();
+
+    const baseSelect = `SELECT r.id,
+        SUM(CASE WHEN COALESCE(ri.result_status,'PENDING')='PENDING' OR TRIM(COALESCE(ri.result_value,''))='' THEN 1 ELSE 0 END) pending_count,
+        SUM(CASE WHEN COALESCE(ri.result_status,'PENDING')='ENTERED' AND TRIM(COALESCE(ri.result_value,''))<>'' THEN 1 ELSE 0 END) entered_count,
+        SUM(CASE WHEN COALESCE(ri.result_status,'PENDING')='APPROVED' AND TRIM(COALESCE(ri.result_value,''))<>'' THEN 1 ELSE 0 END) approved_count,
+        SUM(CASE WHEN UPPER(COALESCE(ri.recheck_mode,'NONE')) <> 'NONE'
+          AND COALESCE(ri.selected_for_reporting,1)=1
+          AND COALESCE(ri.excluded_from_approval,0)=0
+          AND COALESCE(ri.moved_to_recheck_report_id,0)=0
+          AND UPPER(COALESCE(ri.result_status,'PENDING')) NOT IN ('CANCELLED','APPROVED','FINALIZED')
+          AND UPPER(COALESCE(ri.recheck_status,'REQUESTED')) NOT IN ('DONE','REVERTED','RECHECK_REVERTED','RECHECK_REJECTED','CANCELLED','RECHECK_CANCELLED','APPROVED','FINALIZED')
+          THEN 1 ELSE 0 END) recheck_count,
+        COUNT(ri.id) item_count,
+        UPPER(COALESCE(r.status,'')) raw_status,
+        UPPER(COALESCE(r.report_scope,'COLLECTION')) scope,
+        UPPER(COALESCE(r.report_kind,'')) kind
+      FROM reports r
+      JOIN bills b ON b.id=r.bill_id
+      JOIN patients p ON p.id=b.patient_id
+      LEFT JOIN report_items ri ON ri.report_id=r.id AND ri.test_id IS NOT NULL AND COALESCE(ri.selected_for_reporting,1)=1 AND NOT (COALESCE(ri.excluded_from_approval,0)=1 OR COALESCE(ri.moved_to_recheck_report_id,0)>0)
+      WHERE COALESCE(r.report_scope,'COLLECTION')<>'STAGING' AND COALESCE(r.status,'')<>'COLLECTION_STAGING'
+        AND substr(COALESCE(b.bill_date,''),1,10) BETWEEN ? AND ?${search.sql}
+      GROUP BY r.id
+      HAVING COUNT(ri.id) > 0`;
+
+    const stats = this.db.prepare(`${baseSelect} ORDER BY r.id DESC`).all(...dateSearchArgs) as any[];
+    const withQueue = stats.map((row: any) => {
+      const pending = +row.pending_count || 0;
+      const totalItems = +row.item_count || 0;
+      const isRecheckReport = String(row.scope || '') === 'RECHECK' || String(row.kind || '') === 'RECHECK';
+      const activeRecheckCount = +row.recheck_count || 0;
+      if (isRecheckReport && activeRecheckCount <= 0) return null;
+      let queue_status = 'DRAFT';
+      if (String(row.raw_status || '').includes('CANCEL')) queue_status = 'CANCELLED';
+      else if ((+row.approved_count || 0) > 0 && pending === 0 && (+row.entered_count || 0) === 0) queue_status = 'APPROVED';
+      else queue_status = pending > 0 || totalItems === 0 ? 'DRAFT' : 'TYPED';
+      return { ...row, queue_status, is_recheck_report: isRecheckReport ? 1 : 0 };
+    }).filter(Boolean) as any[];
+
+    const counts = {
+      DRAFT: withQueue.filter(r => r.queue_status === 'DRAFT' && !(+r.recheck_count || 0)).length,
+      APPROVED: withQueue.filter(r => r.queue_status === 'APPROVED').length,
+      TYPED: withQueue.filter(r => r.queue_status === 'TYPED').length,
+      CANCELLED: withQueue.filter(r => r.queue_status === 'CANCELLED').length,
+      RECHECK: withQueue.filter(r => (+r.recheck_count || 0) > 0).length
+    };
+
+    let filtered = status === 'RECHECK'
+      ? withQueue.filter(r => (+r.recheck_count || 0) > 0)
+      : status
+        ? withQueue.filter(r => r.queue_status === status && !(+r.recheck_count || 0))
+        : withQueue;
+    const total = filtered.length;
+    if (!all) filtered = filtered.slice(offset, offset + pageSize);
+
+    for (const row of filtered) {
       try { this.ensureReportReady(+row.id); } catch (err) { console.error('Unable to prepare report', row.id, err); }
     }
+
+    const idList = filtered.map(r => +r.id).filter(Boolean);
+    if (!idList.length) return { rows: [], total, page, pageSize: all ? total : pageSize, counts };
+
+    const placeholders = idList.map(() => '?').join(',');
     const rows = this.db.prepare(`SELECT r.*,b.bill_no,b.bill_date,b.patient_snapshot_json,p.title patient_title,p.name patient_name,p.mobile patient_mobile,p.patient_no,p.age,p.age_value,p.age_unit,p.gender,c.name consultant_name,
         MIN(sc.collected_at) collected_at,
         CASE WHEN COUNT(DISTINCT COALESCE(sc.id,0)) > 1 THEN 'MULTI_SAMPLE' ELSE COALESCE(NULLIF(TRIM(MAX(ri.specimen_id)),''), NULLIF(TRIM(MAX(ri.specimen_name)),''), 'NO_SAMPLE') END specimen_group_key,
@@ -133,35 +412,22 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
       LEFT JOIN report_items ri ON ri.report_id=r.id AND ri.test_id IS NOT NULL AND COALESCE(ri.selected_for_reporting,1)=1 AND NOT (COALESCE(ri.excluded_from_approval,0)=1 OR COALESCE(ri.moved_to_recheck_report_id,0)>0)
       LEFT JOIN specimen_collection_tests sct ON sct.report_item_id=ri.id
       LEFT JOIN specimen_collections sc ON sc.id=sct.collection_id
-      WHERE COALESCE(r.report_scope,'COLLECTION')<>'STAGING' AND COALESCE(r.status,'')<>'COLLECTION_STAGING'
+      WHERE r.id IN (${placeholders})
       GROUP BY r.id
-      HAVING COUNT(ri.id) > 0
-      ORDER BY r.id DESC LIMIT 300`).all() as any[];
-    const visibleRows:any[] = [];
+      ORDER BY r.id DESC`).all(...idList) as any[];
+
+    const queueById = new Map(filtered.map(r => [+r.id, r]));
+    const visibleRows: any[] = [];
     for (const row of rows) {
-      const pending = +row.pending_count || 0;
-      const total = +row.item_count || 0;
-      const rawStatus = String(row.status || '').toUpperCase();
-      const scope = String(row.report_scope || '').toUpperCase();
-      const kind = String(row.report_kind || '').toUpperCase();
-      const isRecheckReport = scope === 'RECHECK' || kind === 'RECHECK';
-      const activeRecheckCount = +row.recheck_count || 0;
-
-      // Child RECHECK reports must never fall back into normal Pending Results.
-      // They are visible only in Pending Rechecks while active. After reject/revert/cancel,
-      // activeRecheckCount becomes 0 and the child report is hidden from all normal queues.
-      if (isRecheckReport && activeRecheckCount <= 0) continue;
-
-      if (rawStatus.includes('CANCEL')) row.queue_status = 'CANCELLED';
-      else if ((+row.approved_count || 0) > 0 && pending === 0 && (+row.entered_count || 0) === 0) row.queue_status = 'APPROVED';
-      else row.queue_status = pending > 0 || total === 0 ? 'DRAFT' : 'TYPED';
+      const meta = queueById.get(+row.id);
+      row.queue_status = meta?.queue_status || 'DRAFT';
       row.ready_for_entry_count = +row.ready_for_entry_count || 0;
       row.entry_locked = row.ready_for_entry_count <= 0;
-      row.is_recheck_report = isRecheckReport ? 1 : 0;
+      row.is_recheck_report = meta?.is_recheck_report || 0;
       row.status = row.queue_status;
       visibleRows.push(this.applyPatientSnapshotToRow(row));
     }
-    return status ? visibleRows.filter(r => r.status === status) : visibleRows;
+    return { rows: visibleRows, total, page, pageSize: all ? total : pageSize, counts };
   }
 
   protected calculateReportFormulaValue(testId: number, reportItems: any[]) {
@@ -277,9 +543,57 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
     return this.applyPatientSnapshotToRow(row);
   }
 
-  protected quickActiveItemKeys() {
-    const rows = this.db.prepare(`SELECT qri.item_key FROM quick_report_items qri JOIN quick_reports qr ON qr.id=qri.quick_report_id WHERE UPPER(COALESCE(qr.status,'FINISHED'))='FINISHED'`).all() as any[];
-    return new Set(rows.map(r => String(r.item_key || '')));
+  protected quickActiveItemKeys(billId?: number) {
+    // Bill-scoped only — never load every finished item_key in the DB (crashes at stress volume).
+    const id = Number(billId || 0);
+    if (!id) return new Set<string>();
+    const rows = this.db.prepare(`SELECT qri.item_key
+      FROM quick_report_items qri
+      JOIN quick_reports qr ON qr.id=qri.quick_report_id
+      WHERE qr.bill_id=?
+        AND UPPER(COALESCE(qr.status,'FINISHED'))='FINISHED'`).all(id) as any[];
+    return new Set(rows.map(r => String(r.item_key || '')).filter(Boolean));
+  }
+
+  /** Lightweight pending queue row stats — avoids full quickBuildBillItems expansion. */
+  protected quickPendingQueueSummary(billId: number) {
+    const finished = this.finishedQuickTestIdsForBill(billId);
+    const pendingIds = new Set<number>();
+    const add = (id: number) => { if (id && !finished.has(id)) pendingIds.add(id); };
+
+    const tests = this.db.prepare(`SELECT item_id FROM bill_items WHERE bill_id=? AND UPPER(COALESCE(item_type,''))='TEST'`).all(billId) as any[];
+    for (const t of tests) add(+t.item_id);
+
+    const profiles = this.db.prepare(`SELECT item_id FROM bill_items WHERE bill_id=? AND UPPER(COALESCE(item_type,''))='PROFILE'`).all(billId) as any[];
+    for (const p of profiles) {
+      const pid = +p.item_id || 0;
+      if (!pid) continue;
+      const pts = this.db.prepare('SELECT test_id FROM profile_tests WHERE profile_id=?').all(pid) as any[];
+      for (const pt of pts) add(+pt.test_id);
+      try {
+        const pis = this.db.prepare(`SELECT test_id FROM profile_items
+          WHERE profile_id=? AND UPPER(COALESCE(item_type,'TEST'))='TEST' AND test_id IS NOT NULL`).all(pid) as any[];
+        for (const pi of pis) add(+pi.test_id);
+      } catch { /* profile_items may be absent on older DBs */ }
+    }
+
+    const item_count = pendingIds.size;
+    let generated = 0;
+    try {
+      const rows = this.db.prepare(`SELECT DISTINCT test_id FROM quick_reporting_barcode_items
+        WHERE bill_id=? AND COALESCE(barcode_generated,0)=1 AND test_id IS NOT NULL`).all(billId) as any[];
+      for (const r of rows) if (pendingIds.has(+r.test_id)) generated += 1;
+    } catch { generated = 0; }
+    const pendingBc = Math.max(0, item_count - generated);
+    const quick_barcode_status = item_count > 0 && generated >= item_count
+      ? 'GENERATED'
+      : generated > 0 ? 'PARTIAL' : 'PENDING';
+    return {
+      item_count,
+      quick_barcode_status,
+      quick_barcode_generated_count: generated,
+      quick_barcode_pending_count: pendingBc
+    };
   }
 
   /**
@@ -364,7 +678,7 @@ export abstract class DatabaseWorkflowService extends DatabaseBillingService {  
     // item_key is bill_item_id:test_id. Updating a bill replaces bill_items (new ids), so
     // finished keys alone would miss and re-show finished tests in Pending. Also block by
     // finished test_id for this bill so only newly added unfinished work remains pending.
-    const blocked = includeFinished ? new Set<string>() : this.quickActiveItemKeys();
+    const blocked = includeFinished ? new Set<string>() : this.quickActiveItemKeys(billId);
     const finishedTestIds = includeFinished ? new Set<number>() : this.finishedQuickTestIdsForBill(billId);
     const isBlockedTest = (billItemId:any, testId:any) => {
       const tid = +testId || 0;
@@ -1985,6 +2299,7 @@ CREATE INDEX IF NOT EXISTS idx_specimen_collection_tests_report ON specimen_coll
 
   listCollections(filters: any = {}) {
     this.ensureCollectionSchema();
+    this.assertFilterDateRange(filters?.from, filters?.to);
     const from = filters.from || '1900-01-01';
     const to = filters.to || '2999-12-31';
     return this.db.prepare(`SELECT sc.*,b.bill_no,p.title patient_title,p.name patient_name,p.patient_no,p.age,p.gender,p.mobile,ov.name outsource_vendor_name,
@@ -2317,6 +2632,7 @@ CREATE INDEX IF NOT EXISTS idx_specimen_collection_tests_report ON specimen_coll
   }
 
   listCollectionLogs(filters: any = {}) {
+    this.assertFilterDateRange(filters?.from, filters?.to);
     const from = filters.from || '1900-01-01';
     const to = filters.to || '2999-12-31';
     return this.db.prepare(`SELECT a.*, sc.specimen_id, sc.specimen_name, b.bill_no, p.title patient_title,p.name patient_name
@@ -2331,7 +2647,12 @@ CREATE INDEX IF NOT EXISTS idx_specimen_collection_tests_report ON specimen_coll
   }
 
 
-  statement(filters:any={}) { const bills=this.listBills(filters) as any[]; const totals=bills.reduce((a,b)=>({subtotal:a.subtotal+b.subtotal,discount:a.discount+b.discount,total:a.total+b.total,paid:a.paid+b.paid,due:a.due+b.due}),{subtotal:0,discount:0,total:0,paid:0,due:0}); return { bills, totals }; }
+  statement(filters:any={}) {
+    this.assertFilterDateRange(filters?.from, filters?.to, { required: true });
+    const bills=this.listBills(filters) as any[];
+    const totals=bills.reduce((a,b)=>({subtotal:a.subtotal+b.subtotal,discount:a.discount+b.discount,total:a.total+b.total,paid:a.paid+b.paid,due:a.due+b.due}),{subtotal:0,discount:0,total:0,paid:0,due:0});
+    return { bills, totals };
+  }
 
 
   removePendingReport(reportId: number, payload: any = {}) {
@@ -2816,6 +3137,7 @@ CREATE INDEX IF NOT EXISTS idx_specimen_collection_tests_report ON specimen_coll
   }
 
   listReportLogs(filters: any = {}) {
+    this.assertFilterDateRange(filters?.from, filters?.to);
     const from = filters.from || '1900-01-01';
     const to = filters.to || '2999-12-31';
     return this.db.prepare(`SELECT a.id,a.action,a.details,a.created_at,r.id report_id,r.status,b.bill_no,p.title patient_title,p.name patient_name,p.mobile patient_mobile,

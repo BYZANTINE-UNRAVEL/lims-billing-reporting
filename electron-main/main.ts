@@ -442,6 +442,10 @@ function registerIpc() {
   safeIpcHandle('masters:units', () => db.listUnits());
   safeIpcHandle('masters:unit:save', (_e, x) => db.saveUnit(x));
   safeIpcHandle('masters:tests', (_e, activeOnly=false) => db.listTests(activeOnly));
+  safeIpcHandle('masters:tests:search', (_e, filters={}) => db.searchMastersTests(filters || {}));
+  safeIpcHandle('masters:test:get', (_e, id) => db.getTest(Number(id)));
+  safeIpcHandle('masters:billing-catalog:search', (_e, filters={}) => db.searchBillingCatalog(filters || {}));
+  safeIpcHandle('masters:billing-catalog:get', (_e, type, id) => db.getBillingCatalogItem(String(type || ''), Number(id)));
   safeIpcHandle('masters:test:save', (_e, x) => db.saveTest(x));
   safeIpcHandle('masters:test:delete', (_e, id) => db.deleteTest(id));
   safeIpcHandle('masters:tests:reorder', (_e, items) => db.reorderTests(items));
@@ -449,6 +453,8 @@ function registerIpc() {
   safeIpcHandle('masters:specimen:save', (_e, x) => db.saveSpecimenType(x));
   safeIpcHandle('masters:methods', () => db.listTestMethods());
   safeIpcHandle('masters:profiles', (_e, activeOnly=false) => db.listProfiles(activeOnly));
+  safeIpcHandle('masters:profiles:search', (_e, filters={}) => db.searchMastersProfiles(filters || {}));
+  safeIpcHandle('masters:profile:get', (_e, id) => db.getProfile(Number(id)));
   safeIpcHandle('masters:profile:save', (_e, x) => db.saveProfile(x));
   safeIpcHandle('masters:profiles:reorder', (_e, items) => db.reorderProfiles(items));
   safeIpcHandle('masters:equipment:list', (_e, activeOnly=false) => db.listEquipmentMasters(activeOnly));
@@ -456,13 +462,44 @@ function registerIpc() {
   safeIpcHandle('masters:equipment:delete', (_e, id) => db.deleteEquipmentMaster(Number(id)));
   safeIpcHandle('masters:profile:delete', (_e, id) => db.deleteProfile(id));
   safeIpcHandle('consultants:list', () => db.listConsultants());
+  safeIpcHandle('consultants:search', (_e, filters={}) => db.searchConsultants(filters || {}));
+  safeIpcHandle('consultants:get', (_e, id) => db.getConsultant(Number(id)));
   safeIpcHandle('consultants:save', (_e, x) => db.saveConsultant(x));
   safeIpcHandle('consultants:delete', (_e, id) => db.deleteConsultant(Number(id)));
   safeIpcHandle('consultants:commission:calculate', (_e, payload={}) => db.calculateBillCommission(payload));
+  safeIpcHandle('consultants:commission-config:save', (_e, payload={}) => db.saveConsultantCommissionConfig(payload));
+  safeIpcHandle('consultants:item-rates:list', (_e, consultantId) => db.listConsultantItemRates(Number(consultantId)));
+  safeIpcHandle('consultants:item-rates:save', (_e, payload={}) => db.saveConsultantItemRates(payload));
   safeIpcHandle('commissions:list', (_e, filters={}) => db.listCommissionEntries(filters));
+  safeIpcHandle('commissions:statement:list', (_e, filters={}) => db.listCommissionStatementBills(filters));
+  safeIpcHandle('commissions:statement:period-info', (_e, filters={}) => db.commissionStatementPeriodInfo(filters));
+  safeIpcHandle('commissions:statement:reset', (_e, filters={}) => db.resetCommissionStatementPeriod(filters));
+  safeIpcHandle('commissions:overrides:apply', (_e, payload={}) => db.applyCommissionOverrides(payload));
+  safeIpcHandle('commissions:statement:settle', (_e, payload={}) => db.settleCommissionStatement(payload));
   safeIpcHandle('commissions:status', (_e, payload={}) => db.updateCommissionStatus(payload));
   safeIpcHandle('commissions:settle', (_e, payload={}) => db.createCommissionSettlement(payload));
   safeIpcHandle('commissions:settlements', (_e, filters={}) => db.listCommissionSettlements(filters));
+  safeIpcHandle('commissions:settlement:get', (_e, id) => db.getCommissionSettlement(Number(id)));
+  safeIpcHandle('commissions:statement:excel', async (_e, payload={}) => {
+    const file = await reports.createCommissionStatementExport(payload, 'excel');
+    if (payload?.open !== false) await shell.openPath(file);
+    return file;
+  });
+  safeIpcHandle('commissions:statement:pdf', async (_e, payload={}) => {
+    const file = await reports.createCommissionStatementExport(payload, 'pdf');
+    if (payload?.open !== false) await shell.openPath(file);
+    return file;
+  });
+  safeIpcHandle('commissions:settlement:pdf', async (_e, id, open=true) => {
+    const file = await reports.createCommissionSettlementPdf(Number(id));
+    if (open !== false) await shell.openPath(file);
+    return file;
+  });
+  safeIpcHandle('commissions:settlement:excel', async (_e, id, open=true) => {
+    const file = await reports.createCommissionSettlementExcel(Number(id));
+    if (open !== false) await shell.openPath(file);
+    return file;
+  });
   safeIpcHandle('commissions:groups:list', () => db.listCommissionGroups());
   safeIpcHandle('commissions:groups:save', (_e,payload={}) => db.saveCommissionGroup(payload));
   safeIpcHandle('commissions:groups:delete', (_e,id) => db.deleteCommissionGroup(Number(id)));
@@ -538,6 +575,7 @@ function registerIpc() {
     });
   }));
   safeIpcHandle('patients:list', (_e, q='') => db.listPatients(q));
+  safeIpcHandle('patients:search', (_e, filters={}) => db.searchPatients(filters || {}));
   safeIpcHandle('patients:save', (_e, x) => {
     const id = db.savePatient(x);
     if (x?.apply_scope) return { id, scope: db.lastPatientScopeResult() };
@@ -550,12 +588,13 @@ function registerIpc() {
   safeIpcHandle('billing:update', (_e, payload) => db.updateBill(payload));
   safeIpcHandle('billing:list', (_e, filters={}) => db.listBills(filters));
   safeIpcHandle('billing:analytics', (_e, filters={}) => db.analytics(filters));
+  safeIpcHandle('billing:analytics-details', (_e, filters={}) => db.analyticsDetails(filters));
   safeIpcHandle('billing:get', (_e, id) => db.getBill(Number(id)));
   safeIpcHandle('billing:cancel', (_e, billId, payload={}) => db.cancelBill(Number(billId), payload));
   safeIpcHandle('billing:delete', (_e, billId) => db.deleteBill(Number(billId)));
   safeIpcHandle('receipts:add', (_e, billId, amount, mode) => db.addReceipt(Number(billId), Number(amount), String(mode || 'Cash')));
   safeIpcHandle('receipts:delete', (_e, billId, receiptId) => db.deleteReceipt(Number(billId), Number(receiptId)));
-  safeIpcHandle('reports:list', (_e, status='') => db.listReports(status));
+  safeIpcHandle('reports:list', (_e, statusOrFilters: any = '', filters: any = {}) => db.listReports(statusOrFilters, filters || {}));
   safeIpcHandle('reports:logs', (_e, f={}) => db.listReportLogs(f));
   safeIpcHandle('reports:get', (_e, id) => db.getReport(Number(id)));
   safeIpcHandle('reports:save', (_e, payload) => db.saveReport(payload));
@@ -604,6 +643,10 @@ function registerIpc() {
   safeIpcHandle('print:html-pdf-open', async (_e, payload={}) => createHtmlPdfFile({ ...(payload || {}), open: true }));
   safeIpcHandle('analytics:pdf-open', async (_e, payload={}) => analyticsPdf.createAndOpen(payload || {}));
   safeIpcHandle('analytics:xlsx-open', async (_e, payload={}) => analyticsPdf.createExcelAndSave(payload || {}));
+  safeIpcHandle('analytics:xlsx-export-all', async (_e, payload={}) => {
+    const reportProgress = (progress: any) => { try { _e.sender.send('analytics-export-progress', progress); } catch {} };
+    return analyticsPdf.exportAllDetailsExcel(payload || {}, reportProgress);
+  });
 
   safeIpcHandle('reports:approved-pdf-export', async (_e, id, options={}) => {
     const reportProgress = (payload:any) => { try { _e.sender.send('report-progress', payload); } catch {} };

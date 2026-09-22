@@ -119,14 +119,36 @@
 .billing-stepper.pro-billing .patient-entry-head { display: none !important; }
 .billing-stepper.pro-billing .patient-lookup-row {
   display: grid !important;
-  grid-template-columns: minmax(360px, 0.95fr) minmax(330px, 0.7fr) auto !important;
+  grid-template-columns: minmax(420px, 1.15fr) minmax(300px, 0.65fr) auto !important;
   align-items: center !important;
   gap: 18px !important;
   min-height: 48px !important;
 }
+.billing-stepper.pro-billing .patient-lookup-search-bar {
+  display: flex !important;
+  align-items: stretch !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+  width: 100% !important;
+}
+.billing-stepper.pro-billing .patient-search-field {
+  width: 132px !important;
+  min-width: 118px !important;
+  flex: 0 0 auto !important;
+  height: 46px !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 999px !important;
+  background: var(--input, var(--panel)) !important;
+  color: var(--text) !important;
+  padding: 0 10px !important;
+  font-weight: 850 !important;
+}
 .billing-stepper.pro-billing .top-patient-search.patient-lookup-field {
   height: 46px !important;
   min-height: 46px !important;
+  flex: 1 1 auto !important;
+  width: auto !important;
+  max-width: none !important;
   display: flex !important;
   align-items: center !important;
   gap: 12px !important;

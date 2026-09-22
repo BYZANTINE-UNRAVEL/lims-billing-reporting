@@ -1,162 +1,309 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, OnInit, Output, signal } from '@angular/core';
+import { Component, EventEmitter, OnDestroy, OnInit, Output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { MatCardModule } from '@angular/material/card';
 
 @Component({
   selector: 'app-consultants-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatCardModule],
+  imports: [CommonModule, FormsModule],
   template: `
-    <section class="consultants-page commission-page">
-      <mat-card class="commission-card">
-        <div class="panel-title"><h3>Consultant Master</h3><span class="status-pill">Commission profiles</span></div>
-        <div class="consultant-basic-grid">
-          <label><span>Name</span><input [(ngModel)]="consultant.name" placeholder="Consultant name"></label>
-          <label><span>Phone</span><input [(ngModel)]="consultant.phone" placeholder="Phone"></label>
-          <label><span>Clinic</span><input [(ngModel)]="consultant.clinic" placeholder="Clinic / hospital"></label>
-          <label class="check-line"><input type="checkbox" [(ngModel)]="consultant.active"> Active</label>
-        </div>
-        <div class="predefined-group-panel" *ngIf="activeCommissionGroups().length; else noCommissionGroups">
-          <div class="group-panel-head">
-            <div><b>Use predefined commission groups</b><small>Select groups this consultant should use for billing commission.</small></div>
-            <span class="status-pill">{{(consultant.commission_group_ids || []).length}} selected</span>
+    <section class="masters-shell">
+      <section class="master-panel">
+        <div class="panel-heading">
+          <div class="panel-heading-left">
+            <div class="panel-icon">◎</div>
+            <div>
+              <h2>Consultant Master</h2>
+              <p>Name, phone and clinic. Commission rates are configured in Commission Config.</p>
+            </div>
           </div>
-          <div class="group-check-grid">
-            <label class="group-check" *ngFor="let g of activeCommissionGroups()" [class.active]="consultantGroupSelected(g.id)">
-              <input type="checkbox" [checked]="consultantGroupSelected(g.id)" (change)="toggleConsultantGroup(g.id,$event)">
-              <span><b>{{g.name}}</b><small>{{groupMethodLabel(g)}} | {{g.items?.length || 0}} items</small></span>
+          <span class="info-pill">{{ listTotal }} consultants</span>
+        </div>
+
+        <div class="entry-card consultant-entry" *ngIf="formOpen">
+          <label class="master-field"><span>Name</span><input [(ngModel)]="consultant.name" placeholder="Consultant name"></label>
+          <label class="master-field"><span>Phone</span><input [(ngModel)]="consultant.phone" placeholder="Phone"></label>
+          <label class="master-field"><span>Clinic</span><input [(ngModel)]="consultant.clinic" placeholder="Clinic / hospital"></label>
+          <label class="switch-field">
+            <span>Active</span>
+            <span class="switch-line">
+              <input type="checkbox" [(ngModel)]="consultant.active">
+              <span class="switch-visual"></span>
+              <b>{{ consultant.active ? 'Yes' : 'No' }}</b>
+            </span>
+          </label>
+          <div class="form-actions">
+            <button class="action-btn primary" type="button" (click)="saveConsultant()">{{ consultant.id ? 'Save changes' : 'Save' }}</button>
+            <button class="action-btn ghost" type="button" (click)="closeForm()">Cancel</button>
+          </div>
+        </div>
+
+        <div class="test-list-toolbar">
+          <div class="test-list-search">
+            <span>Search</span>
+            <input [(ngModel)]="listSearch" (ngModelChange)="onSearchChange()" placeholder="Search by name, phone, clinic">
+          </div>
+          <label class="test-list-filter">
+            <span>Status</span>
+            <select [(ngModel)]="listStatus" (ngModelChange)="onFilterChange()">
+              <option value="ALL">All</option>
+              <option value="ACTIVE">Active</option>
+              <option value="ARCHIVED">Archived</option>
+            </select>
+          </label>
+          <div class="test-list-actions">
+            <button class="action-btn primary" type="button" (click)="openCreate()">+ Add Consultant</button>
+          </div>
+        </div>
+
+        <div class="masters-fetch-banner" *ngIf="loading" aria-live="polite">
+          <span class="masters-fetch-spinner" aria-hidden="true"></span>
+          <b>Loading consultants…</b>
+          <small>Fetching from database with current filters</small>
+        </div>
+
+        <div class="action-message" *ngIf="actionMessage">{{ actionMessage }}</div>
+
+        <div class="table-card" [class.is-loading]="loading">
+          <table class="masters-table">
+            <thead>
+              <tr><th>Name</th><th>Phone</th><th>Clinic</th><th>Status</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let c of consultants(); trackBy: trackById">
+                <td><strong class="entity-name">{{ c.name || '(unnamed)' }}</strong></td>
+                <td>{{ c.phone || '—' }}</td>
+                <td>{{ c.clinic || '—' }}</td>
+                <td><span class="status-badge" [class.inactive]="!isActive(c)"><i></i>{{ isActive(c) ? 'Active' : 'Archived' }}</span></td>
+                <td class="row-actions">
+                  <button class="edit-btn" type="button" (click)="editConsultant(c)">Edit</button>
+                  <button class="icon-action delete" type="button" title="Delete or archive" aria-label="Delete consultant" (click)="deleteConsultant(c)">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M6 6l1 15h10l1-15"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>
+                  </button>
+                </td>
+              </tr>
+              <tr *ngIf="!loading && !consultants().length">
+                <td colspan="5" class="empty-cell">No consultants found</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="table-footer">
+            <span>Showing <b>{{ consultants().length }}</b> of <b>{{ listTotal }}</b> consultants</span>
+            <span>Archive keeps bill history when a consultant is already used.</span>
+          </div>
+          <div class="masters-pager" *ngIf="listTotal > 0">
+            <label>Rows
+              <select [ngModel]="pageSize" (ngModelChange)="setPageSize(+$event)">
+                <option [ngValue]="25">25</option>
+                <option [ngValue]="50">50</option>
+                <option [ngValue]="100">100</option>
+              </select>
             </label>
+            <button type="button" title="First page" (click)="setPage(1)" [disabled]="page <= 1">«</button>
+            <button type="button" title="Previous page" (click)="setPage(page - 1)" [disabled]="page <= 1">‹</button>
+            <b>{{ page }} / {{ totalPages() }}</b>
+            <button type="button" title="Next page" (click)="setPage(page + 1)" [disabled]="page >= totalPages()">›</button>
+            <button type="button" title="Last page" (click)="setPage(totalPages())" [disabled]="page >= totalPages()">»</button>
           </div>
         </div>
-        <ng-template #noCommissionGroups><div class="commission-note">No predefined commission groups available. Create them first in Commission Profiles.</div></ng-template>
-        <div class="actions"><button class="btn primary" (click)="saveConsultant()">Save Consultant</button><button class="btn secondary" (click)="reset()">Clear</button></div>
-      </mat-card>
-
-      <mat-card class="commission-card" *ngIf="consultant.id || consultant.name">
-        <div class="panel-title"><h3>Custom Consultant Profiles</h3><span class="status-pill">{{consultant.commission_profiles?.length || 0}} custom</span></div>
-        <div class="commission-note">Use predefined commission groups above by default. Add a custom profile only when this consultant needs a personal fallback or exception profile.</div>
-        <div class="empty-custom-profile" *ngIf="!consultant.commission_profiles?.length">No custom consultant profile added.</div>
-        <div class="commission-profile-list" *ngIf="consultant.commission_profiles?.length">
-          <div class="commission-profile-row" *ngFor="let p of consultant.commission_profiles; let idx = index">
-            <div class="profile-title-line">
-              <label class="default-radio"><input type="radio" name="defaultProfile" [checked]="p.is_default" (change)="setDefaultProfile(idx)"> Default</label>
-              <button class="icon-danger" type="button" title="Remove profile" (click)="removeProfile(idx)">x</button>
-            </div>
-            <div class="commission-grid">
-              <label><span>Profile name</span><input [(ngModel)]="p.profile_name" placeholder="Standard 20%"></label>
-              <label><span>Type</span><select [(ngModel)]="p.commission_type"><option value="PERCENT">Percentage</option><option value="FIXED">Fixed amount</option><option value="NONE">None</option></select></label>
-              <label><span>Value</span><input type="number" [(ngModel)]="p.commission_value" placeholder="0"></label>
-              <label><span>Calculation base</span><select [(ngModel)]="p.calculation_base"><option value="GROSS">Gross item amount</option><option value="NET_AFTER_COST">Net after test cost</option><option value="NET_AFTER_COST_DEDUCTION">Net after cost + deduction</option></select></label>
-              <label><span>Extra deduction</span><select [(ngModel)]="p.extra_deduction_type"><option value="NONE">None</option><option value="AMOUNT">Amount</option><option value="PERCENT">Percentage</option></select></label>
-              <label><span>Deduction value</span><input type="number" [(ngModel)]="p.extra_deduction_value" placeholder="0"></label>
-              <label class="check-line"><input type="checkbox" [(ngModel)]="p.min_enabled"> Minimum limit</label>
-              <label *ngIf="p.min_enabled"><span>Minimum commission</span><input type="number" [(ngModel)]="p.min_commission" placeholder="0"></label>
-              <label class="check-line"><input type="checkbox" [(ngModel)]="p.max_enabled"> Maximum limit</label>
-              <label *ngIf="p.max_enabled"><span>Maximum commission</span><input type="number" [(ngModel)]="p.max_commission" placeholder="0"></label>
-              <label class="wide"><span>Description</span><input [(ngModel)]="p.description" placeholder="Optional note"></label>
-              <label class="check-line"><input type="checkbox" [(ngModel)]="p.active"> Active</label>
-            </div>
-          </div>
-        </div>
-        <button class="btn secondary" type="button" (click)="addProfile()">+ Add Custom Commission Profile</button>
-      </mat-card>
-
-      <mat-card class="commission-card" *ngIf="consultant.id || consultant.name">
-        <div class="panel-title"><h3>Test / Profile Exceptions</h3><span class="status-pill">{{consultant.commission_rules?.length || 0}} rules</span></div>
-        <div class="commission-note">Item rules beat commission groups and the default profile. Use Special commission for fixed/percent overrides (e.g. CBC ₹30). Use No commission to force zero (e.g. HIV).</div>
-        <div class="rule-search-grid">
-          <label><span>Search test/profile</span><input [(ngModel)]="ruleSearch" placeholder="Search by code/name"></label>
-          <button class="btn secondary" type="button" (click)="ruleSearch=''">Clear</button>
-        </div>
-        <div class="rule-suggestions" *ngIf="ruleSearch.trim().length >= 1">
-          <button type="button" *ngFor="let s of ruleSuggestions()" (click)="addRule(s)"><b>{{s.name}}</b><small>{{s.item_type}} · ₹{{s.price || 0}}</small></button>
-          <span *ngIf="ruleSuggestions().length === 0">No item found.</span>
-        </div>
-        <div class="commission-table" *ngIf="consultant.commission_rules?.length; else noRules">
-          <div class="commission-table-head"><span>Item</span><span>Action</span><span>Commission profile</span><span></span></div>
-          <div class="commission-rule-row" *ngFor="let r of consultant.commission_rules; let i = index">
-            <div><b>{{r.item_name}}</b><small>{{r.item_type}}</small></div>
-            <select [(ngModel)]="r.action"><option value="USE_PROFILE">Special commission (use profile)</option><option value="NO_COMMISSION">No commission</option></select>
-            <select [(ngModel)]="r.profile_temp_id" [disabled]="r.action === 'NO_COMMISSION'"><option [ngValue]="null">Select profile</option><option *ngFor="let p of consultant.commission_profiles" [ngValue]="p.temp_id || p.id || p.profile_name">{{p.profile_name}}</option></select>
-            <button class="icon-danger" type="button" title="Remove rule" (click)="removeRule(i)">×</button>
-          </div>
-        </div>
-        <ng-template #noRules><div class="commission-note">No exceptions added. Default commission profile will apply to all billable tests and profiles.</div></ng-template>
-      </mat-card>
-
-      <mat-card class="commission-card">
-        <div class="panel-title"><h3>Consultants</h3><span class="status-pill">{{consultants().length}}</span></div>
-        <div class="action-message" *ngIf="actionMessage">{{actionMessage}}</div><table><tr><th>Name</th><th>Status</th><th>Commission groups</th><th>Custom default</th><th>Rules</th><th></th></tr><tr *ngFor="let c of consultants()"><td>{{c.name}}<br><small>{{c.clinic}}</small></td><td><span class="status-pill" [class.inactive]="!c.active">{{c.active ? 'Active' : 'Archived'}}</span></td><td><div class="group-chip-list" *ngIf="consultantGroupNames(c).length; else noConsultantGroups"><span *ngFor="let name of consultantGroupNames(c)">{{name}}</span></div><ng-template #noConsultantGroups><small>No group</small></ng-template></td><td>{{defaultProfileName(c)}}</td><td>{{c.commission_rules?.length || 0}}</td><td><div class="row-actions"><button class="icon-btn" title="Edit" (click)="editConsultant(c)">Edit</button><button class="icon-danger" title="Delete or archive" (click)="deleteConsultant(c)">x</button></div></td></tr></table>
-      </mat-card>
+      </section>
     </section>
   `,
   styles: [`
-    .predefined-group-panel{margin-top:14px;border:1px solid var(--border);border-radius:16px;background:color-mix(in srgb,var(--surface) 92%,transparent);padding:12px}.group-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}.group-panel-head b,.group-panel-head small{display:block}.group-panel-head small{margin-top:3px;color:var(--muted);font-weight:750}.group-check-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.group-check{display:flex!important;align-items:flex-start;gap:9px;border:1px solid var(--border);border-radius:13px;background:var(--surface-2);padding:10px;color:var(--text)!important;cursor:pointer}.group-check.active{border-color:color-mix(in srgb,var(--accent) 58%,var(--border));background:var(--accent-soft)}.group-check input{width:17px;height:17px;margin-top:2px;accent-color:var(--accent)}.group-check b,.group-check small{display:block}.group-check small{margin-top:3px;color:var(--muted);font-size:10.5px}.empty-custom-profile{border:1px dashed var(--border);border-radius:14px;padding:13px;color:var(--muted);font-weight:800;margin-bottom:12px;background:color-mix(in srgb,var(--surface-2) 64%,transparent)}.group-chip-list{display:flex;gap:5px;flex-wrap:wrap}.group-chip-list span{border:1px solid color-mix(in srgb,var(--accent) 42%,var(--border));border-radius:999px;background:color-mix(in srgb,var(--accent) 10%,var(--surface));color:var(--text);padding:4px 8px;font-size:10.5px;font-weight:850}
-    .commission-page{display:grid;gap:18px}.commission-card{padding:16px;border-radius:20px}.consultant-basic-grid,.commission-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end}.consultant-basic-grid label,.commission-grid label,.rule-search-grid label{display:grid;gap:6px;color:var(--muted);font-size:12px;font-weight:900}.consultant-basic-grid input,.commission-grid input,.commission-grid select,.rule-search-grid input,.commission-rule-row select{height:40px;border-radius:12px;border:1px solid var(--border);background:var(--input,var(--surface-2));color:var(--text);padding:0 11px;font-weight:800}.check-line{display:flex!important;align-items:center;gap:8px;color:var(--text)!important}.check-line input{width:16px;height:16px}.commission-note{border:1px dashed var(--border);border-radius:14px;padding:10px 12px;color:var(--muted);font-weight:750;margin-bottom:12px}.commission-profile-list{display:grid;gap:12px;margin-bottom:12px}.commission-profile-row{border:1px solid var(--border);border-radius:16px;padding:12px;background:color-mix(in srgb,var(--surface) 92%,transparent)}.profile-title-line{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.default-radio{display:flex;gap:8px;align-items:center;font-weight:900;color:var(--text)}.commission-grid .wide{grid-column:span 2}.rule-search-grid{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end}.rule-suggestions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0}.rule-suggestions button{border:1px solid var(--border);border-radius:13px;background:var(--surface-2);color:var(--text);padding:10px;text-align:left;cursor:pointer}.rule-suggestions small,.commission-rule-row small{display:block;color:var(--muted);font-weight:750}.commission-table{display:grid;gap:6px}.commission-table-head,.commission-rule-row{display:grid;grid-template-columns:1.2fr .9fr .9fr 42px;gap:10px;align-items:center}.commission-table-head{color:var(--muted);font-size:11px;font-weight:1000;text-transform:uppercase}.commission-rule-row{border:1px solid var(--border);border-radius:14px;padding:8px}.row-actions{display:flex;justify-content:flex-end;gap:7px}.action-message{margin-bottom:10px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2);font-weight:800}.status-pill.inactive{opacity:.65}.icon-btn,.icon-danger{height:34px;width:34px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);cursor:pointer}.icon-danger{color:#ef4444}.actions{display:flex;gap:10px;margin-top:14px}@media(max-width:900px){.consultant-basic-grid,.commission-grid,.rule-suggestions{grid-template-columns:1fr}.commission-table-head,.commission-rule-row{grid-template-columns:1fr}.commission-grid .wide{grid-column:auto}}
+    :host{display:block;min-width:0}
+    .masters-shell{padding:4px 20px 18px;color:var(--text);--accent:#3b82f6;--accent-soft:color-mix(in srgb,var(--accent) 10%,transparent)}
+    .master-panel{border:1px solid var(--border);border-radius:18px;background:color-mix(in srgb,var(--panel) 92%,transparent);box-shadow:var(--shadow);padding:14px 16px 16px}
+    .panel-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+    .panel-heading-left{display:flex;align-items:center;gap:10px;min-width:0}
+    .panel-icon{width:34px;height:34px;border-radius:12px;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);font-weight:950}
+    .panel-heading h2{margin:0;font-size:16px;line-height:1.15;font-weight:950;letter-spacing:-.02em}
+    .panel-heading p{margin:3px 0 0;color:var(--muted);font-size:12px;font-weight:700}
+    .info-pill{display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:0 12px;border-radius:12px;border:1px solid color-mix(in srgb,var(--accent) 40%,var(--border));background:color-mix(in srgb,var(--accent) 10%,var(--panel));color:color-mix(in srgb,var(--accent) 76%,var(--text));font-size:12px;font-weight:850;white-space:nowrap}
+    .entry-card{border:1px solid var(--border);border-radius:14px;background:color-mix(in srgb,var(--row) 62%,transparent);padding:10px;margin-bottom:10px}
+    .consultant-entry{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;align-items:end}
+    .master-field{display:grid;gap:6px;min-width:0}
+    .master-field span{font-size:11px;font-weight:950;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+    .master-field input{height:34px;border-radius:10px;border:1px solid var(--border);background:var(--input);color:var(--text);padding:0 11px;font-size:12.5px;font-weight:750;outline:0}
+    .master-field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent)}
+    .switch-field{display:grid;gap:6px}
+    .switch-field>span{font-size:11px;font-weight:950;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+    .switch-line{height:34px;display:inline-flex;align-items:center;gap:8px}
+    .switch-line input{width:16px;height:16px;accent-color:var(--accent)}
+    .switch-visual{display:none}
+    .form-actions{display:flex;gap:8px;align-items:center;grid-column:1/-1;justify-content:flex-end}
+    .action-btn,.edit-btn{height:34px;border-radius:10px;border:1px solid var(--border);padding:0 15px;color:var(--text);font-size:12px;font-weight:850;background:color-mix(in srgb,var(--row) 74%,transparent);cursor:pointer}
+    .action-btn.primary{border-color:transparent;background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;box-shadow:0 10px 20px rgba(37,99,235,.20)}
+    .action-btn.ghost:hover,.edit-btn:hover{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+    .test-list-toolbar{display:grid;grid-template-columns:1.35fr .55fr auto;gap:10px;align-items:end;margin-bottom:10px}
+    .test-list-search,.test-list-filter{display:flex;flex-direction:column;gap:6px}
+    .test-list-search span,.test-list-filter span{font-size:11px;font-weight:950;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+    .test-list-search input,.test-list-filter select{height:34px;border-radius:10px;border:1px solid var(--border);background:var(--input);color:var(--text);padding:0 11px;font-size:12.5px;font-weight:750;outline:0}
+    .test-list-search input:focus,.test-list-filter select:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent)}
+    .test-list-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center}
+    .masters-fetch-banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border));border-radius:14px;background:color-mix(in srgb,var(--accent-soft) 70%,var(--panel))}
+    .masters-fetch-banner b{font-size:13px;font-weight:900}.masters-fetch-banner small{color:var(--muted);font-size:11px;font-weight:750}
+    .masters-fetch-spinner{width:16px;height:16px;border-radius:50%;border:2px solid color-mix(in srgb,var(--accent) 30%,transparent);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .action-message{margin-bottom:10px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2,var(--row));font-weight:800;font-size:12.5px}
+    .table-card{border:1px solid var(--border);border-radius:16px;overflow:hidden;background:color-mix(in srgb,var(--row) 52%,transparent)}
+    .table-card.is-loading{opacity:.72}
+    .masters-table{width:100%;border-collapse:collapse}
+    .masters-table th{height:34px;text-align:left;padding:0 12px;color:var(--text);font-size:12.5px;font-weight:900;background:color-mix(in srgb,var(--panel) 50%,transparent);border-bottom:1px solid var(--border)}
+    .masters-table td{height:36px;padding:0 12px;border-bottom:1px solid var(--border);font-size:12.5px;color:var(--text);vertical-align:middle}
+    .masters-table tbody tr:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+    .entity-name{font-weight:900}
+    .empty-cell{text-align:center;color:var(--muted);font-weight:800;padding:18px 12px!important;height:auto!important}
+    .status-badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:850}
+    .status-badge i{width:7px;height:7px;border-radius:50%;background:#22c55e;display:inline-block}
+    .status-badge.inactive i{background:#94a3b8}
+    .row-actions{display:flex;align-items:center;gap:7px}
+    .icon-action{width:30px;height:30px;border-radius:10px;border:1px solid var(--border);background:color-mix(in srgb,var(--input) 86%,transparent);color:var(--muted);display:inline-flex;align-items:center;justify-content:center;padding:0;cursor:pointer}
+    .icon-action svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    .icon-action.delete:hover{border-color:color-mix(in srgb,#ef4444 50%,var(--border));background:color-mix(in srgb,#ef4444 12%,var(--input));color:#ef4444}
+    .table-footer{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 12px;color:var(--muted);font-size:12px;font-weight:750;border-top:1px solid var(--border)}
+    .table-footer b{color:var(--text)}
+    .masters-pager{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;padding:8px 12px 12px;color:var(--muted);font-size:12px;font-weight:800}
+    .masters-pager label{display:inline-flex;align-items:center;gap:6px}
+    .masters-pager select{width:78px;height:32px;padding:0 8px;font-weight:850;border-radius:10px;border:1px solid var(--border);background:var(--input);color:var(--text)}
+    .masters-pager button{width:32px;height:32px;border:1px solid var(--border);border-radius:10px;background:var(--input);color:var(--text);font-weight:950;cursor:pointer}
+    .masters-pager button:disabled{opacity:.45;cursor:not-allowed}
+    .masters-pager b{min-width:64px;text-align:center;color:var(--text)}
+    @media (max-width:900px){.consultant-entry,.test-list-toolbar{grid-template-columns:1fr}.test-list-actions,.form-actions{justify-content:flex-start}}
   `]
 })
-export class ConsultantsPageComponent implements OnInit {
+export class ConsultantsPageComponent implements OnInit, OnDestroy {
   @Output() changed = new EventEmitter<void>();
   consultants = signal<any[]>([]);
-  tests:any[] = [];
-  profiles:any[] = [];
-  commissionGroups:any[] = [];
-  ruleSearch = '';
   actionMessage = '';
-  consultant:any = this.emptyConsultant();
+  consultant: any = this.emptyConsultant();
+  formOpen = false;
+  loading = false;
+  listSearch = '';
+  listStatus: 'ALL' | 'ACTIVE' | 'ARCHIVED' = 'ALL';
+  page = 1;
+  pageSize = 50;
+  listTotal = 0;
+  private loadSeq = 0;
+  private searchTimer: any = null;
 
-  async ngOnInit(){ await this.reload(); }
-  async reload(){
-    this.consultants.set(await window.limsApi.listConsultants());
-    this.tests = await window.limsApi.listTests(true);
-    this.profiles = await window.limsApi.listProfiles(true);
-    this.commissionGroups = await window.limsApi.listCommissionGroups?.() || [];
+  async ngOnInit() { await this.reload(); }
+  ngOnDestroy() { if (this.searchTimer) clearTimeout(this.searchTimer); }
+
+  emptyConsultant() { return { active: true, name: '', phone: '', clinic: '' }; }
+  trackById = (_: number, c: any) => c?.id;
+  isActive(c: any) { return c?.active !== false && c?.active !== 0; }
+  totalPages() { return Math.max(1, Math.ceil(this.listTotal / Math.max(1, this.pageSize))); }
+
+  onSearchChange() {
+    if (this.searchTimer) clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => {
+      this.page = 1;
+      void this.reload();
+    }, 220);
   }
-  emptyProfile(){ return { temp_id:'tmp_' + Date.now() + '_' + Math.random().toString(16).slice(2), profile_name:'Standard 20%', commission_type:'PERCENT', commission_value:20, calculation_base:'GROSS', extra_deduction_type:'NONE', extra_deduction_value:0, min_enabled:false, max_enabled:false, min_commission:0, max_commission:0, active:true, is_default:false, description:'' }; }
-  emptyConsultant(){ return { active:true, name:'', phone:'', clinic:'', commission_group_ids:[], commission_profiles:[], commission_rules:[] }; }
-  async saveConsultant(){
-    if(!String(this.consultant.name || '').trim()) return;
-    const profiles = this.consultant.commission_profiles || [];
-    if(profiles.length && !profiles.some((p:any)=>p.is_default)) profiles[0].is_default = true;
-    const payload={...this.consultant,commission_group_ids:(this.consultant.commission_group_ids||[]).map((id:any)=>Number(id)).filter((id:number)=>id>0),commission_profiles:profiles.map((p:any)=>({...p,min_commission:p.min_enabled?Number(p.min_commission||0):0,max_commission:p.max_enabled?Number(p.max_commission||0):0}))};
+  onFilterChange() { this.page = 1; void this.reload(); }
+  setPage(p: number) {
+    const next = Math.max(1, Math.min(this.totalPages(), Math.floor(+p || 1)));
+    if (next === this.page) return;
+    this.page = next;
+    void this.reload();
+  }
+  setPageSize(size: number) {
+    this.pageSize = Math.min(100, Math.max(1, Number(size) || 50));
+    this.page = 1;
+    void this.reload();
+  }
+
+  async reload() {
+    const api: any = window.limsApi;
+    const seq = ++this.loadSeq;
+    this.loading = true;
+    try {
+      if (!api.searchConsultants) {
+        const all = await api.listConsultants();
+        if (seq !== this.loadSeq) return;
+        let rows = Array.isArray(all) ? all : [];
+        const q = this.listSearch.trim().toLowerCase();
+        if (q) {
+          rows = rows.filter((c: any) =>
+            String(c.name || '').toLowerCase().includes(q)
+            || String(c.phone || '').toLowerCase().includes(q)
+            || String(c.clinic || '').toLowerCase().includes(q));
+        }
+        if (this.listStatus === 'ACTIVE') rows = rows.filter((c: any) => this.isActive(c));
+        if (this.listStatus === 'ARCHIVED') rows = rows.filter((c: any) => !this.isActive(c));
+        this.listTotal = rows.length;
+        const start = (this.page - 1) * this.pageSize;
+        this.consultants.set(rows.slice(start, start + this.pageSize));
+        return;
+      }
+      const result = await api.searchConsultants({
+        q: this.listSearch,
+        status: this.listStatus,
+        page: this.page,
+        pageSize: this.pageSize
+      });
+      if (seq !== this.loadSeq) return;
+      const rows = Array.isArray(result?.rows) ? result.rows : [];
+      this.consultants.set(rows);
+      this.listTotal = Math.max(0, +result?.total || rows.length);
+      this.page = Math.max(1, +result?.page || this.page);
+      this.pageSize = +result?.pageSize || this.pageSize;
+      const maxPage = this.totalPages();
+      if (this.page > maxPage) {
+        this.page = maxPage;
+        await this.reload();
+      }
+    } finally {
+      if (seq === this.loadSeq) this.loading = false;
+    }
+  }
+
+  openCreate() {
+    this.consultant = this.emptyConsultant();
+    this.formOpen = true;
+    this.actionMessage = '';
+  }
+  closeForm() {
+    this.formOpen = false;
+    this.consultant = this.emptyConsultant();
+  }
+  editConsultant(c: any) {
+    this.consultant = {
+      id: c.id,
+      name: c.name,
+      phone: c.phone || '',
+      clinic: c.clinic || '',
+      active: this.isActive(c)
+    };
+    this.formOpen = true;
+    this.actionMessage = '';
+  }
+  async saveConsultant() {
+    if (!String(this.consultant.name || '').trim()) return;
+    const payload = {
+      id: this.consultant.id,
+      name: this.consultant.name,
+      phone: this.consultant.phone || '',
+      clinic: this.consultant.clinic || '',
+      active: this.consultant.active !== false
+    };
     await window.limsApi.saveConsultant(payload);
-    this.reset(); await this.reload(); this.changed.emit();
+    this.closeForm();
+    await this.reload();
+    this.changed.emit();
   }
-  editConsultant(c:any){
-    const copy = JSON.parse(JSON.stringify(c));
-    copy.commission_group_ids = (copy.commission_group_ids || (copy.commission_groups || []).map((g:any)=>g.group_id)).map((id:any)=>Number(id)).filter((id:number)=>id>0);
-    copy.commission_profiles = (copy.commission_profiles || []).map((p:any)=>({...p, temp_id:p.temp_id || String(p.id || p.profile_name), active:p.active !== false && p.active !== 0, is_default:!!p.is_default, min_enabled:Number(p.min_commission||0)>0, max_enabled:Number(p.max_commission||0)>0}));
-    copy.commission_rules = (copy.commission_rules || []).map((r:any)=>({...r, profile_temp_id:r.commission_profile_id ? String(r.commission_profile_id) : null, item_name:this.itemName(r.item_type, r.item_id)}));
-    this.consultant = copy;
-  }
-  async deleteConsultant(c:any){
+  async deleteConsultant(c: any) {
     const name = String(c?.name || 'this consultant');
     const ok = window.confirm(`Delete ${name}? If the consultant is already used in bills, it will be archived to preserve old records.`);
-    if(!ok) return;
+    if (!ok) return;
     const result = await window.limsApi.deleteConsultant?.(Number(c.id));
-    if(!result) return;
-    this.consultants.set(result.consultants || []);
+    if (!result) return;
     this.actionMessage = result.action === 'archived'
       ? `${name} is used in existing bills, so it was archived instead of permanently deleted.`
       : result.action === 'deleted' ? `${name} was deleted.` : `${name} was not found.`;
-    if(Number(this.consultant?.id) === Number(c.id)) this.reset();
+    if (Number(this.consultant?.id) === Number(c.id)) this.closeForm();
+    await this.reload();
     this.changed.emit();
   }
-  reset(){ this.consultant=this.emptyConsultant(); this.ruleSearch=''; }
-  addProfile(){ const p=this.emptyProfile(); if(!(this.consultant.commission_profiles||[]).length)p.is_default=true; this.consultant.commission_profiles=this.consultant.commission_profiles||[]; this.consultant.commission_profiles.push(p); }
-  removeProfile(i:number){ this.consultant.commission_profiles.splice(i,1); if(!this.consultant.commission_profiles.some((p:any)=>p.is_default) && this.consultant.commission_profiles[0]) this.consultant.commission_profiles[0].is_default = true; }
-  setDefaultProfile(i:number){ this.consultant.commission_profiles.forEach((p:any,idx:number)=>p.is_default = idx === i); }
-  defaultProfileName(c:any){ return (c.commission_profiles || []).find((p:any)=>p.is_default)?.profile_name || (c.default_commission_value ? `${c.default_commission_value} ${c.default_commission_type}` : 'No custom default'); }
-  activeCommissionGroups(){return this.commissionGroups.filter((g:any)=>Number(g?.active??1)===1);}
-  consultantGroupSelected(id:any){return (this.consultant.commission_group_ids||[]).map(Number).includes(Number(id));}
-  toggleConsultantGroup(id:any,e:any){const ids=new Set((this.consultant.commission_group_ids||[]).map(Number));e.target.checked?ids.add(Number(id)):ids.delete(Number(id));this.consultant.commission_group_ids=[...ids];}
-  consultantGroupNames(c:any){return (c.commission_groups||[]).map((g:any)=>String(g.group_name||g.name||'Commission group'));}
-  groupMethodLabel(g:any){const x=String(g.calculation_type||'');return ({PERCENT_NET:`${g.rate||0}% net`,PERCENT_PROFIT:`${g.rate||0}% profit`,PERCENT_GROSS:`${g.rate||0}% selling`,FIXED:`${g.fixed_amount||0} fixed`,FORMULA:'Formula'} as any)[x]||x;}
-  allItems(){ return [...this.tests.map(t=>({item_type:'TEST', item_id:t.id, name:t.display_name || t.name, price:t.price, code:t.code})), ...this.profiles.map(p=>({item_type:'PROFILE', item_id:p.id, name:p.display_name || p.name, price:p.price, code:p.code}))]; }
-  ruleSuggestions(){ const q = this.ruleSearch.trim().toLowerCase(); if(!q) return []; const used = new Set((this.consultant.commission_rules || []).map((r:any)=>`${r.item_type}:${r.item_id}`)); return this.allItems().filter(x=>!used.has(`${x.item_type}:${x.item_id}`)).map(x=>({...x, score:this.scoreItem(x,q)})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score || a.name.localeCompare(b.name)).slice(0,9); }
-  scoreItem(x:any,q:string){ const name=String(x.name||'').toLowerCase(), code=String(x.code||'').toLowerCase(); let s=0; if(code===q)s+=100; if(name===q)s+=90; if(code.startsWith(q))s+=60; if(name.startsWith(q))s+=50; if(name.includes(q))s+=25; if(code.includes(q))s+=25; return s; }
-  addRule(x:any){ const def = (this.consultant.commission_profiles || []).find((p:any)=>p.is_default) || this.consultant.commission_profiles?.[0]; this.consultant.commission_rules.push({ item_type:x.item_type, item_id:x.item_id, item_name:x.name, action:'USE_PROFILE', profile_temp_id:def?.temp_id || String(def?.id || def?.profile_name || '') }); this.ruleSearch=''; }
-  removeRule(i:number){ this.consultant.commission_rules.splice(i,1); }
-  itemName(type:any,id:any){ const list = String(type).toUpperCase() === 'PROFILE' ? this.profiles : this.tests; const found = list.find((x:any)=>+x.id===+id); return found ? (found.display_name || found.name) : `${type} #${id}`; }
 }

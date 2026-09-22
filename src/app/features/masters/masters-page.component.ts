@@ -145,11 +145,11 @@ import { MatTabsModule } from '@angular/material/tabs';
           <div class="test-list-toolbar">
             <div class="test-list-search">
               <span>Search</span>
-              <input [(ngModel)]="testListSearch" placeholder="Search by code, test, report name, method, specimen">
+              <input [(ngModel)]="testListSearch" (ngModelChange)="onTestListSearchChange()" placeholder="Search by code, test, report name, method, specimen">
             </div>
             <label class="test-list-filter">
               <span>Status</span>
-              <select [(ngModel)]="testListStatus">
+              <select [(ngModel)]="testListStatus" (ngModelChange)="onTestListFilterChange()">
                 <option value="ALL">All</option>
                 <option value="ACTIVE">Active</option>
                 <option value="INACTIVE">Inactive</option>
@@ -182,7 +182,12 @@ import { MatTabsModule } from '@angular/material/tabs';
             </button>
           </div>
 
-          <div class="table-card test-list-card" *ngIf="testListGroupMode === 'NONE'; else groupedTestList">
+          <div class="masters-fetch-banner" *ngIf="testsLoading" aria-live="polite">
+            <span class="masters-fetch-spinner" aria-hidden="true"></span>
+            <b>Loading tests…</b>
+            <small>Fetching from database with current filters</small>
+          </div>
+          <div class="table-card test-list-card" [class.is-loading]="testsLoading" *ngIf="testListGroupMode === 'NONE'; else groupedTestList">
             <table class="masters-table test-master-list-table">
               <thead><tr><th class="drag-col">Order</th><th>Code</th><th>Test Name</th><th>Department</th><th>Result</th><th>Specimen</th><th>Method</th><th>Price</th><th>Actions</th></tr></thead>
               <tbody>
@@ -199,7 +204,24 @@ import { MatTabsModule } from '@angular/material/tabs';
                 </tr>
               </tbody>
             </table>
-            <div class="table-footer"><span>Total Tests: <b>{{ filteredTests().length }}</b></span><span>Drag rows to update report order using safe gaps.</span></div>
+            <div class="table-footer">
+              <span>Showing <b>{{ tests().length }}</b> of <b>{{ testListTotal }}</b> tests</span>
+              <span>Drag rows to update report order using safe gaps.</span>
+            </div>
+            <div class="masters-pager" *ngIf="testListTotal > 0">
+              <label>Rows
+                <select [ngModel]="testPageSize" (ngModelChange)="setTestPageSize(+$event)">
+                  <option [ngValue]="25">25</option>
+                  <option [ngValue]="50">50</option>
+                  <option [ngValue]="100">100</option>
+                </select>
+              </label>
+              <button type="button" title="First page" (click)="setTestPage(1)" [disabled]="testPage <= 1">«</button>
+              <button type="button" title="Previous page" (click)="setTestPage(testPage - 1)" [disabled]="testPage <= 1">‹</button>
+              <b>{{ testPage }} / {{ testTotalPages() }}</b>
+              <button type="button" title="Next page" (click)="setTestPage(testPage + 1)" [disabled]="testPage >= testTotalPages()">›</button>
+              <button type="button" title="Last page" (click)="setTestPage(testTotalPages())" [disabled]="testPage >= testTotalPages()">»</button>
+            </div>
           </div>
 
           <ng-template #groupedTestList>
@@ -649,11 +671,11 @@ Pregnancy: 11.0 - 14.0"></textarea><button class="reference-format-btn" type="bu
           <div class="test-list-toolbar profile-list-toolbar">
             <div class="test-list-search">
               <span>Search</span>
-              <input [(ngModel)]="profileListSearch" placeholder="Search profile code, name, keywords, side header">
+              <input [(ngModel)]="profileListSearch" (ngModelChange)="onProfileListSearchChange()" placeholder="Search profile code, name, keywords, side header">
             </div>
             <label class="test-list-filter">
               <span>Status</span>
-              <select [(ngModel)]="profileListStatus">
+              <select [(ngModel)]="profileListStatus" (ngModelChange)="onProfileListFilterChange()">
                 <option value="ALL">All</option>
                 <option value="ACTIVE">Active</option>
                 <option value="INACTIVE">Inactive</option>
@@ -667,7 +689,12 @@ Pregnancy: 11.0 - 14.0"></textarea><button class="reference-format-btn" type="bu
             </div>
           </div>
 
-          <div class="table-card profile-list-card">
+          <div class="masters-fetch-banner" *ngIf="profilesLoading" aria-live="polite">
+            <span class="masters-fetch-spinner" aria-hidden="true"></span>
+            <b>Loading profiles…</b>
+            <small>Fetching from database with current filters</small>
+          </div>
+          <div class="table-card profile-list-card" [class.is-loading]="profilesLoading">
             <table class="masters-table">
               <thead><tr><th>Order</th><th>Billing</th><th>Report</th><th>Profile</th><th>Items</th><th>Ordering</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>
@@ -683,7 +710,24 @@ Pregnancy: 11.0 - 14.0"></textarea><button class="reference-format-btn" type="bu
                 </tr>
               </tbody>
             </table>
-            <div class="table-footer"><span>Total Profiles: <b>{{ filteredProfiles().length }}</b></span><span>Drag rows to update order using safe gaps.</span></div>
+            <div class="table-footer">
+              <span>Showing <b>{{ profiles().length }}</b> of <b>{{ profileListTotal }}</b> profiles</span>
+              <span>Drag rows to update order using safe gaps.</span>
+            </div>
+            <div class="masters-pager" *ngIf="profileListTotal > 0">
+              <label>Rows
+                <select [ngModel]="profilePageSize" (ngModelChange)="setProfilePageSize(+$event)">
+                  <option [ngValue]="25">25</option>
+                  <option [ngValue]="50">50</option>
+                  <option [ngValue]="100">100</option>
+                </select>
+              </label>
+              <button type="button" title="First page" (click)="setProfilePage(1)" [disabled]="profilePage <= 1">«</button>
+              <button type="button" title="Previous page" (click)="setProfilePage(profilePage - 1)" [disabled]="profilePage <= 1">‹</button>
+              <b>{{ profilePage }} / {{ profileTotalPages() }}</b>
+              <button type="button" title="Next page" (click)="setProfilePage(profilePage + 1)" [disabled]="profilePage >= profileTotalPages()">›</button>
+              <button type="button" title="Last page" (click)="setProfilePage(profileTotalPages())" [disabled]="profilePage >= profileTotalPages()">»</button>
+            </div>
           </div>
         </ng-container>
 
@@ -749,18 +793,18 @@ Pregnancy: 11.0 - 14.0"></textarea><button class="reference-format-btn" type="bu
                 <div class="builder-title"><h3>Profile layout</h3><span>Search and select tests, nested profiles, or manual side headers. Nothing is shown by default.</span><button class="formula-chip-action" type="button" (click)="autoArrangeProfileItems()">Auto arrange by priority</button></div>
                 <div class="profile-search-grid">
                   <div class="profile-search-card">
-                    <label class="master-field"><span>Search tests</span><input [(ngModel)]="profileTestSearch" placeholder="Type test code or name to add"></label>
+                    <label class="master-field"><span>Search tests</span><input [(ngModel)]="profileTestSearch" (ngModelChange)="onProfileTestPickerSearch()" placeholder="Type test code or name to add"></label>
                     <div class="search-select-list" *ngIf="profileTestSearch.trim()">
-                      <button type="button" *ngFor="let t of profileTestSearchResults()" (click)="addProfileTest(t); profileTestSearch=''">
+                      <button type="button" *ngFor="let t of profileTestSearchResults()" (click)="addProfileTest(t); profileTestSearch=''; profileTestPickerResults=[]">
                         <strong>{{t.display_name || t.name}}</strong><small>{{t.code || 'No code'}} · {{t.department_name || 'No department'}} · {{t.report_order || t.priority || 0}}</small>
                       </button>
                       <span class="empty-inline" *ngIf="!profileTestSearchResults().length">No matching tests</span>
                     </div>
                   </div>
                   <div class="profile-search-card">
-                    <label class="master-field"><span>Search profiles</span><input [(ngModel)]="profileNestedSearch" placeholder="Type profile code or name to add"></label>
+                    <label class="master-field"><span>Search profiles</span><input [(ngModel)]="profileNestedSearch" (ngModelChange)="onProfileNestedPickerSearch()" placeholder="Type profile code or name to add"></label>
                     <div class="search-select-list" *ngIf="profileNestedSearch.trim()">
-                      <button type="button" *ngFor="let p of profileSearchResults()" (click)="addProfileProfile(p); profileNestedSearch=''">
+                      <button type="button" *ngFor="let p of profileSearchResults()" (click)="addProfileProfile(p); profileNestedSearch=''; profileNestedPickerResults=[]">
                         <strong>{{p.display_name || p.name}}</strong><small>{{p.code || 'No code'}} · {{p.name || 'Profile'}} · {{profileSummary(p)}} · {{p.report_order || p.priority || 0}}</small>
                       </button>
                       <span class="empty-inline" *ngIf="!profileSearchResults().length">No matching profiles</span>
@@ -1046,6 +1090,19 @@ Pregnancy: 11.0 - 14.0"></textarea><button class="reference-format-btn" type="bu
     @media (max-width:1100px){.test-stepper-head,.profile-stepper-head{grid-template-columns:repeat(4,minmax(0,1fr))}.test-step-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.department-entry,.compact-entry,.test-entry,.profile-entry{grid-template-columns:repeat(2,minmax(0,1fr))}.span-actions,.test-entry .wide,.profile-entry .wide{grid-column:auto}.form-actions{justify-content:flex-start}.masters-table{min-width:720px}.table-card{overflow:auto}}
     @media (max-width:920px){.profile-search-grid,.profile-chip{grid-template-columns:1fr}.profile-chip.profile-chip-head{display:none}.chip-move{justify-content:flex-start}}
     @media (max-width:720px){.masters-shell{padding:12px}.test-stepper-head,.profile-stepper-head,.test-step-grid,.compact-grid,.profile-basic-grid{grid-template-columns:1fr}.test-stepper-step{height:58px}.test-step-actions{justify-content:stretch;flex-wrap:wrap}.test-step-actions .action-btn{flex:1}.masters-tabs{grid-template-columns:1fr 1fr}.panel-heading{align-items:flex-start;flex-direction:column}.department-entry,.compact-entry,.test-entry,.profile-entry,.profile-chip{grid-template-columns:1fr}.info-pill{white-space:normal}.masters-tabs button{height:36px}}
+    .queue-pager .pager button:disabled{opacity:.45;cursor:not-allowed}
+    .masters-pager{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:10px;padding:4px 2px;color:var(--muted);font-size:12px;font-weight:800}
+    .masters-pager label{display:inline-flex;align-items:center;gap:6px}
+    .masters-pager select{width:78px;height:32px;padding:0 8px;font-weight:850}
+    .masters-pager button{width:32px;height:32px;border:1px solid var(--border);border-radius:10px;background:var(--input);color:var(--text);font-weight:950;cursor:pointer}
+    .masters-pager button:disabled{opacity:.45;cursor:not-allowed}
+    .masters-pager b{min-width:64px;text-align:center;color:var(--text)}
+    .masters-fetch-banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border));border-radius:14px;background:color-mix(in srgb,var(--accent-soft) 70%,var(--panel))}
+    .masters-fetch-banner b{font-size:13px;font-weight:900;color:var(--text)}
+    .masters-fetch-banner small{color:var(--muted);font-size:11px;font-weight:750}
+    .masters-fetch-spinner{width:16px;height:16px;border-radius:50%;border:2px solid color-mix(in srgb,var(--accent) 30%,transparent);border-top-color:var(--accent);animation:mastersSpin .7s linear infinite;flex:0 0 auto}
+    .table-card.is-loading{opacity:.55;pointer-events:none}
+    @keyframes mastersSpin{to{transform:rotate(360deg)}}
 `]
 })
 export class MastersPageComponent implements OnInit, AfterViewChecked {
@@ -1059,12 +1116,31 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
   testListState: 'ACTIVE' | 'DEACTIVATED' = 'ACTIVE';
   testListStatus: 'ALL' | 'ACTIVE' | 'INACTIVE' | 'BILLABLE' | 'NON_BILLABLE' = 'ALL';
   testListGroupMode: 'DEPARTMENT' | 'NONE' = 'NONE';
+  testPage = 1;
+  testPageSize = 50;
+  testListTotal = 0;
+  testCounts: { ACTIVE: number; DEACTIVATED: number; activeFiltered: number; byDepartment: Record<string, number> } = {
+    ACTIVE: 0, DEACTIVATED: 0, activeFiltered: 0, byDepartment: {}
+  };
+  testsLoading = false;
+  private testListLoadSeq = 0;
+  private testListSearchTimer: any = null;
   profileMasterView: 'list' | 'form' = 'list';
   profileFormMode: 'create' | 'edit' = 'create';
   profileListSearch = '';
   profileListStatus: 'ALL' | 'ACTIVE' | 'INACTIVE' | 'BILLABLE' | 'NON_BILLABLE' | 'REPORTING' = 'ALL';
+  profilePage = 1;
+  profilePageSize = 50;
+  profileListTotal = 0;
+  profilesLoading = false;
+  private profileListLoadSeq = 0;
+  private profileListSearchTimer: any = null;
+  private formulaSearchTimer: any = null;
+  private profilePickerSearchTimer: any = null;
   profileTestSearch = '';
   profileNestedSearch = '';
+  profileTestPickerResults: any[] = [];
+  profileNestedPickerResults: any[] = [];
   draggedTest: any = null;
   draggedDepartment: any = null;
   draggedProfile: any = null;
@@ -1185,7 +1261,138 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
   profile:any = { break_page_after:false, active:true, billable:true, active_for_reporting:true, show_profile_name:true, ordering_mode:'MANUAL', price:0, running_cost:0, running_cost_mode:'AUTO', priority:0, billing_order:0, report_order:0, search_keywords:'', display_name:'', department_id:0, interpretation_enabled:false, interpretation_text:'', items:[] };
   async ngOnInit(){ await this.reload(); }
   ngAfterViewChecked(){ this.syncInterpretationEditorIfNeeded(); this.syncProfileInterpretationEditorIfNeeded(); }
-  async reload(){ const api=window.limsApi; this.departments.set(await api.listDepartments()); this.units.set(await api.listUnits()); this.tests.set(await api.listTests()); this.profiles.set(await api.listProfiles()); this.specimens.set(api.listSpecimens ? await api.listSpecimens() : []); this.methods.set(api.listMethods ? await api.listMethods() : []); }
+  async reload(){
+    const api = window.limsApi;
+    this.departments.set(await api.listDepartments());
+    this.units.set(await api.listUnits());
+    this.specimens.set(api.listSpecimens ? await api.listSpecimens() : []);
+    this.methods.set(api.listMethods ? await api.listMethods() : []);
+    // Never load full test/profile graphs into Masters list — paged search only.
+    await Promise.all([this.loadTestsPage(), this.loadProfilesPage()]);
+  }
+
+  private mastersSearchApi() {
+    const api: any = window.limsApi;
+    return api;
+  }
+
+  async loadTestsPage(){
+    const api = this.mastersSearchApi();
+    const seq = ++this.testListLoadSeq;
+    this.testsLoading = true;
+    try {
+      if (!api.searchMastersTests) {
+        // Legacy fallback — avoid on stress DBs.
+        const all = await api.listTests();
+        if (seq !== this.testListLoadSeq) return;
+        this.tests.set(Array.isArray(all) ? all : []);
+        this.testListTotal = this.tests().length;
+        return;
+      }
+      const result = await api.searchMastersTests({
+        q: this.testListSearch,
+        state: this.testListState,
+        status: this.testListStatus,
+        departmentId: this.testListDepartment || 0,
+        page: this.testPage,
+        pageSize: this.testPageSize
+      });
+      if (seq !== this.testListLoadSeq) return;
+      const rows = Array.isArray(result?.rows) ? result.rows : [];
+      this.tests.set(rows);
+      this.testListTotal = Math.max(0, +result?.total || rows.length);
+      this.testPage = Math.max(1, +result?.page || this.testPage);
+      this.testPageSize = +result?.pageSize || this.testPageSize;
+      this.testCounts = {
+        ACTIVE: Math.max(0, +result?.counts?.ACTIVE || 0),
+        DEACTIVATED: Math.max(0, +result?.counts?.DEACTIVATED || 0),
+        activeFiltered: Math.max(0, +result?.counts?.activeFiltered || 0),
+        byDepartment: result?.counts?.byDepartment || {}
+      };
+      const maxPage = Math.max(1, Math.ceil(this.testListTotal / Math.max(1, this.testPageSize)));
+      if (this.testPage > maxPage) {
+        this.testPage = maxPage;
+        await this.loadTestsPage();
+      }
+    } finally {
+      if (seq === this.testListLoadSeq) this.testsLoading = false;
+    }
+  }
+
+  async loadProfilesPage(){
+    const api = this.mastersSearchApi();
+    const seq = ++this.profileListLoadSeq;
+    this.profilesLoading = true;
+    try {
+      if (!api.searchMastersProfiles) {
+        const all = await api.listProfiles();
+        if (seq !== this.profileListLoadSeq) return;
+        this.profiles.set(Array.isArray(all) ? all : []);
+        this.profileListTotal = this.profiles().length;
+        return;
+      }
+      const result = await api.searchMastersProfiles({
+        q: this.profileListSearch,
+        status: this.profileListStatus,
+        page: this.profilePage,
+        pageSize: this.profilePageSize
+      });
+      if (seq !== this.profileListLoadSeq) return;
+      const rows = Array.isArray(result?.rows) ? result.rows : [];
+      this.profiles.set(rows);
+      this.profileListTotal = Math.max(0, +result?.total || rows.length);
+      this.profilePage = Math.max(1, +result?.page || this.profilePage);
+      this.profilePageSize = +result?.pageSize || this.profilePageSize;
+      const maxPage = Math.max(1, Math.ceil(this.profileListTotal / Math.max(1, this.profilePageSize)));
+      if (this.profilePage > maxPage) {
+        this.profilePage = maxPage;
+        await this.loadProfilesPage();
+      }
+    } finally {
+      if (seq === this.profileListLoadSeq) this.profilesLoading = false;
+    }
+  }
+
+  onTestListSearchChange(){
+    if (this.testListSearchTimer) clearTimeout(this.testListSearchTimer);
+    this.testListSearchTimer = setTimeout(() => {
+      this.testPage = 1;
+      void this.loadTestsPage();
+    }, 180);
+  }
+  onTestListFilterChange(){ this.testPage = 1; void this.loadTestsPage(); }
+  onProfileListSearchChange(){
+    if (this.profileListSearchTimer) clearTimeout(this.profileListSearchTimer);
+    this.profileListSearchTimer = setTimeout(() => {
+      this.profilePage = 1;
+      void this.loadProfilesPage();
+    }, 180);
+  }
+  onProfileListFilterChange(){ this.profilePage = 1; void this.loadProfilesPage(); }
+  setTestPage(page: number){
+    const next = Math.max(1, Math.min(this.testTotalPages(), Math.floor(+page || 1)));
+    if (next === this.testPage) return;
+    this.testPage = next;
+    void this.loadTestsPage();
+  }
+  setTestPageSize(size: number){
+    this.testPageSize = [25, 50, 100].includes(+size) ? +size : 50;
+    this.testPage = 1;
+    void this.loadTestsPage();
+  }
+  testTotalPages(){ return Math.max(1, Math.ceil(this.testListTotal / Math.max(1, this.testPageSize))); }
+  setProfilePage(page: number){
+    const next = Math.max(1, Math.min(this.profileTotalPages(), Math.floor(+page || 1)));
+    if (next === this.profilePage) return;
+    this.profilePage = next;
+    void this.loadProfilesPage();
+  }
+  setProfilePageSize(size: number){
+    this.profilePageSize = [25, 50, 100].includes(+size) ? +size : 50;
+    this.profilePage = 1;
+    void this.loadProfilesPage();
+  }
+  profileTotalPages(){ return Math.max(1, Math.ceil(this.profileListTotal / Math.max(1, this.profilePageSize))); }
   isDepartmentActive(d:any){ return !(d?.active === false || d?.active === 0 || d?.active === '0'); }
   activeDepartments(){ return this.departments().filter((d:any) => this.isDepartmentActive(d) && String(d?.name || '').trim()); }
   departmentsForSelect(currentId:any){
@@ -1690,10 +1897,23 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
     if(!this.test.rounding_mode) this.test.rounding_mode = 'NEAREST';
   }
   searchFormulaTests(){
-    const q = this.formulaTestQuery.trim().toLowerCase();
-    if(!q){ this.formulaTestResults.set([]); return; }
+    if (this.formulaSearchTimer) clearTimeout(this.formulaSearchTimer);
+    const q = this.formulaTestQuery.trim();
+    if (!q) { this.formulaTestResults.set([]); return; }
+    this.formulaSearchTimer = setTimeout(() => { void this.runFormulaTestSearch(q); }, 160);
+  }
+  private async runFormulaTestSearch(q: string){
+    const api: any = window.limsApi;
     const ownId = +this.test.id || 0;
-    this.formulaTestResults.set(this.tests().filter(t => +t.id !== ownId && (`${t.code || ''} ${t.name || ''} ${t.department_name || ''}`.toLowerCase().includes(q))).slice(0, 10));
+    try {
+      if (api.searchMastersTests) {
+        const result = await api.searchMastersTests({ q, state: 'ACTIVE', status: 'ALL', page: 1, pageSize: 25 });
+        const rows = (Array.isArray(result?.rows) ? result.rows : []).filter((t: any) => +t.id !== ownId).slice(0, 10);
+        this.formulaTestResults.set(rows);
+        return;
+      }
+    } catch { /* fall through */ }
+    this.formulaTestResults.set(this.tests().filter(t => +t.id !== ownId && (`${t.code || ''} ${t.name || ''} ${t.department_name || ''}`.toLowerCase().includes(q.toLowerCase()))).slice(0, 10));
   }
   variableKeyForTest(t:any){
     const raw = String(t.code || `T${t.id}`).toUpperCase().replace(/[^A-Z0-9_]/g, '_').replace(/^([0-9])/, 'T_$1');
@@ -1901,8 +2121,16 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
     this.testMasterStep = 0;
   }
   openEditTest(t:any){
+    void this.openEditTestAsync(t);
+  }
+  private async openEditTestAsync(t:any){
     this.testFormMode = 'edit';
-    this.editTest(t);
+    const api: any = window.limsApi;
+    let detail = t;
+    try {
+      if (api.getTest && +t?.id) detail = await api.getTest(+t.id) || t;
+    } catch { detail = t; }
+    this.editTest(detail);
     this.originalTestSnapshot = this.cloneComparableTest(this.test);
     this.testUpdateTargets = { master:true, profiles:false, billing:false, profileDate:'', billingDate:'' };
     this.testMasterView = 'form';
@@ -1926,12 +2154,19 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
     this.testListGroupMode = 'NONE';
     if(state === 'ACTIVE' && this.testListStatus === 'INACTIVE') this.testListStatus = 'ALL';
     if(state === 'DEACTIVATED') this.testListStatus = 'ALL';
+    this.testPage = 1;
+    void this.loadTestsPage();
   }
-  setTestListDepartment(id:any){ this.testListDepartment = id === '' || id === null || id === undefined ? '' : String(id); this.testListGroupMode = 'NONE'; }
-  activeTestCount(){ return this.tests().filter((t:any)=>!!t.active).length; }
-  deactivatedTestCount(){ return this.tests().filter((t:any)=>!t.active).length; }
-  testListTotalCount(){ return this.tests().filter((t:any)=>!!t.active && this.testMatchesStatus(t)).length; }
-  testCountForDepartment(id:any){ return this.tests().filter((t:any)=>!!t.active && +t.department_id === +id && this.testMatchesStatus(t)).length; }
+  setTestListDepartment(id:any){
+    this.testListDepartment = id === '' || id === null || id === undefined ? '' : String(id);
+    this.testListGroupMode = 'NONE';
+    this.testPage = 1;
+    void this.loadTestsPage();
+  }
+  activeTestCount(){ return this.testCounts.ACTIVE; }
+  deactivatedTestCount(){ return this.testCounts.DEACTIVATED; }
+  testListTotalCount(){ return this.testCounts.activeFiltered; }
+  testCountForDepartment(id:any){ return Math.max(0, +this.testCounts.byDepartment[String(id)] || 0); }
   isTestDepartmentSelected(id:any){ return this.testListDepartment === String(id); }
   testMatchesStatus(t:any){
     if(this.testListState === 'DEACTIVATED') return !t.active;
@@ -1947,14 +2182,8 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
     return this.tests().some((t:any) => +t.id !== currentId && String(t.code || '').trim().toUpperCase() === code);
   }
   filteredTests(){
-    const q = String(this.testListSearch || '').trim().toLowerCase();
-    const dept = this.testListState === 'ACTIVE' && this.testListDepartment ? +this.testListDepartment : 0;
-    return this.tests().filter((t:any) => {
-      if(dept && +t.department_id !== dept) return false;
-      if(!this.testMatchesStatus(t)) return false;
-      if(!q) return true;
-      return `${t.code || ''} ${t.name || ''} ${t.display_name || ''} ${t.department_name || ''} ${t.unit_name || ''} ${t.method || ''} ${t.specimen_names || ''} ${t.result_data_type || ''}`.toLowerCase().includes(q);
-    }).sort((a:any,b:any) => String(a.department_name||'').localeCompare(String(b.department_name||'')) || (+a.report_order || +a.priority || 0) - (+b.report_order || +b.priority || 0) || String(a.name||'').localeCompare(String(b.name||'')));
+    // Server already filtered/paged — keep sort stable for drag reorder.
+    return [...this.tests()].sort((a:any,b:any) => String(a.department_name||'').localeCompare(String(b.department_name||'')) || (+a.report_order || +a.priority || 0) - (+b.report_order || +b.priority || 0) || String(a.name||'').localeCompare(String(b.name||'')));
   }
   groupedTests(){
     const map = new Map<string, any[]>();
@@ -1973,7 +2202,10 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
     return all;
   }
   exportTestsCsv(){
-    const rows = this.filteredTests();
+    void this.exportTestsCsvAsync();
+  }
+  private async exportTestsCsvAsync(){
+    const rows = await this.fetchTestsForExportOrPrint();
     const headers = ['Code','Test Name','Report Name','Department','Unit','Result Type','Specimen','Method','Price','Billing Order','Report Order'];
     const csvRows = [headers, ...rows.map((t:any)=>[t.code,t.name,t.display_name||t.name,t.department_name,t.unit_name,t.result_data_type,t.specimen_names,t.method,t.price,t.billing_order,t.report_order])];
     const csv = csvRows.map(row => row.map(v => `"${String(v ?? '').replace(/"/g,'""')}"`).join(',')).join('\n');
@@ -1986,12 +2218,49 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
   async printTestsList(){
     const printMode = await this.showTestPrintModeDialog();
     if(!printMode) return;
-    const groups = printMode === 'GROUPED' ? this.groupedTestsForPrint() : [{ department: 'All Tests', tests: this.filteredTests() }];
+    const allRows = await this.fetchTestsForExportOrPrint();
+    const previousDept = this.testListDepartment;
+    const groups = printMode === 'GROUPED'
+      ? (() => {
+          const map = new Map<string, any[]>();
+          for (const t of allRows) {
+            const key = t.department_name || 'No Department';
+            if (!map.has(key)) map.set(key, []);
+            map.get(key)!.push(t);
+          }
+          return Array.from(map.entries()).map(([department, tests]) => ({ department, tests }));
+        })()
+      : [{ department: 'All Tests', tests: allRows }];
+    this.testListDepartment = previousDept;
     const esc = (v:any) => String(v ?? '').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'} as any)[ch]);
     const html = `<!doctype html><html><head><title>Tests</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#111827}h1{font-size:20px;margin:0 0 4px}p{margin:0 0 18px;color:#64748b;font-size:12px}.group{margin:16px 0 8px;font-weight:700;background:#eef4ff;padding:8px 10px;border-radius:8px}table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:14px}th,td{border:1px solid #cbd5e1;padding:6px 7px;text-align:left;vertical-align:top}th{background:#f8fafc}</style></head><body><h1>Tests</h1><p>${DateTimeSettingsService.dateTime(new Date())}</p>${groups.map(g=>`<div class="group">${esc(g.department)} (${g.tests.length})</div><table><thead><tr><th>Order</th><th>Code</th><th>Test</th><th>Result</th><th>Specimen</th><th>Method</th><th>Price</th></tr></thead><tbody>${g.tests.map((t:any)=>`<tr><td>${esc(t.report_order||t.priority)}</td><td>${esc(t.code)}</td><td><b>${esc(t.display_name||t.name)}</b></td><td>${esc(t.result_data_type)}</td><td>${esc(t.specimen_names||'-')}</td><td>${esc(t.method||'-')}</td><td>${esc(t.price)}</td></tr>`).join('')}</tbody></table>`).join('')}</body></html>`;
     const win = window.open('', '_blank');
     if(!win) return;
     win.document.write(html); win.document.close(); win.focus(); win.print();
+  }
+  private async fetchTestsForExportOrPrint(){
+    const api: any = window.limsApi;
+    if (!api.searchMastersTests) return this.filteredTests();
+    const out: any[] = [];
+    const pageSize = 100;
+    let page = 1;
+    const maxRows = 5000;
+    while (out.length < maxRows) {
+      const result = await api.searchMastersTests({
+        q: this.testListSearch,
+        state: this.testListState,
+        status: this.testListStatus,
+        departmentId: 0,
+        page,
+        pageSize
+      });
+      const rows = Array.isArray(result?.rows) ? result.rows : [];
+      out.push(...rows);
+      const total = Math.max(0, +result?.total || out.length);
+      if (!rows.length || out.length >= total || page * pageSize >= total) break;
+      page += 1;
+    }
+    return out;
   }
   onTestDragStart(t:any){ this.draggedTest = t; }
   onTestDragOver(event: DragEvent){ event.preventDefault(); }
@@ -2003,11 +2272,21 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
     const without = rows.filter((t:any)=>+t.id !== +moving.id);
     const targetIndex = without.findIndex((t:any)=>+t.id === +target.id);
     without.splice(Math.max(0,targetIndex), 0, moving);
-    const updates = without.map((t:any,i:number)=>({ id:t.id, report_order:(i+1)*1000, billing_order:t.billing_order || (i+1)*1000 }));
-    if(window.limsApi.reorderTests) await window.limsApi.reorderTests(updates);
-    else for(const u of updates){ const original = this.tests().find((t:any)=>+t.id===+u.id); if(original) await window.limsApi.saveTest({ ...original, ...u }); }
-    this.draggedTest = null;
-    await this.reload();
+    const updates = this.buildGapOrderUpdates(without, 'report_order', 'billing_order');
+    try {
+      if(window.limsApi.reorderTests) await window.limsApi.reorderTests(updates);
+      else {
+        await this.showMasterAlert('Restart required', 'Test reorder needs an app restart to load the new API.');
+        return;
+      }
+      // Refresh current page only — never reload full masters.
+      await this.loadTestsPage();
+      this.changed.emit();
+    } catch (err:any) {
+      await this.showMasterAlert('Reorder failed', String(err?.message || err || 'Could not update test order.').replace(/^Error:\s*/i, ''));
+    } finally {
+      this.draggedTest = null;
+    }
   }
   onDepartmentDragStart(d:any){ this.draggedDepartment = d; }
   onDepartmentDragOver(event: DragEvent){ event.preventDefault(); }
@@ -2022,7 +2301,7 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
     try {
       if(window.limsApi.reorderDepartments) await window.limsApi.reorderDepartments(updates);
       else for(const u of updates){ const original = this.departments().find((d:any)=>+d.id===+u.id); if(original) await window.limsApi.saveDepartment({ ...original, ...u }); }
-      await this.reload();
+      this.departments.set(await window.limsApi.listDepartments());
       this.changed.emit();
     } catch (err:any) {
       await this.showMasterAlert('Reorder failed', String(err?.message || err || 'Could not update department order.').replace(/^Error:\s*/i, ''));
@@ -2039,21 +2318,36 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
     const without = rows.filter((p:any)=>+p.id !== +moving.id);
     const targetIndex = without.findIndex((p:any)=>+p.id === +target.id);
     without.splice(Math.max(0, targetIndex), 0, moving);
-    const updates = without.map((p:any, i:number)=>({ id:+p.id, report_order:(i+1)*1000, billing_order:(i+1)*1000 })).filter((u:any)=>Number.isFinite(u.id) && u.id > 0);
+    const updates = this.buildGapOrderUpdates(without, 'report_order', 'billing_order');
     try {
-      // Prefer bulk reorder API only — saveProfile fallback can wipe profile_items on conflict/empty payloads.
       if(!window.limsApi.reorderProfiles) {
         await this.showMasterAlert('Restart required', 'Profile reorder needs an app restart to load the new API. Please restart LIMS and try again.');
         return;
       }
       await window.limsApi.reorderProfiles(updates);
-      await this.reload();
+      await this.loadProfilesPage();
       this.changed.emit();
     } catch (err:any) {
       await this.showMasterAlert('Reorder failed', String(err?.message || err || 'Could not update profile order.').replace(/^Error:\s*/i, ''));
     } finally {
       this.draggedProfile = null;
     }
+  }
+
+  /** Keep existing order scale on the current page; avoid resetting everything to 1000,2000,... */
+  private buildGapOrderUpdates(ordered: any[], reportKey: string, billingKey: string) {
+    const orders = ordered.map((row: any) => Math.max(0, +row?.[reportKey] || +row?.priority || 0));
+    const minOrder = orders.length ? Math.min(...orders.filter((n) => n > 0).concat([1000])) : 1000;
+    const step = 1000;
+    return ordered
+      .map((row: any, i: number) => {
+        const id = +row.id;
+        if (!Number.isFinite(id) || id <= 0) return null;
+        const reportOrder = minOrder + i * step;
+        const billingOrder = Math.max(0, +row?.[billingKey] || 0) || reportOrder;
+        return { id, report_order: reportOrder, billing_order: billingOrder };
+      })
+      .filter(Boolean) as any[];
   }
   async deactivateTest(t:any){
     const ok = await this.showMasterConfirm(
@@ -2119,10 +2413,8 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
       if (action === 'deactivated') {
         await this.showMasterAlert('Profile deactivated', 'This profile was already used, so it was deactivated instead of deleted. Historical bills and reports were not changed.');
       }
-      // Prefer returned list when available; otherwise reload.
-      if (Array.isArray(result?.list)) this.profiles.set(result.list);
-      else if (Array.isArray(result)) this.profiles.set(result);
-      else await this.reload();
+      // Always refresh paged list — never hydrate full profile graphs into the UI.
+      await this.loadProfilesPage();
       this.changed.emit();
     } catch (err:any) {
       await this.showMasterAlert('Profile remove failed', String(err?.message || err || 'Could not remove profile.').replace(/^Error:\s*/i, ''));
@@ -2139,12 +2431,7 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
     return true;
   }
   filteredProfiles(){
-    const q = String(this.profileListSearch || '').trim().toLowerCase();
-    return this.profiles().filter((p:any) => {
-      if(!this.profileMatchesStatus(p)) return false;
-      if(!q) return true;
-      return `${p.code || ''} ${p.name || ''} ${p.display_name || ''} ${p.search_keywords || ''} ${p.side_header || ''} ${p.department_name || ''}`.toLowerCase().includes(q);
-    }).sort((a:any,b:any) => (+a.billing_order || +a.priority || 0) - (+b.billing_order || +b.priority || 0) || (+a.report_order || 0) - (+b.report_order || 0) || String(a.name||'').localeCompare(String(b.name||'')));
+    return [...this.profiles()].sort((a:any,b:any) => (+a.billing_order || +a.priority || 0) - (+b.billing_order || +b.priority || 0) || (+a.report_order || 0) - (+b.report_order || 0) || String(a.name||'').localeCompare(String(b.name||'')));
   }
   openCreateProfile(){
     this.profileFormMode = 'create';
@@ -2152,15 +2439,27 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
     this.profileMasterView = 'form';
     this.profileTestSearch = '';
     this.profileNestedSearch = '';
+    this.profileTestPickerResults = [];
+    this.profileNestedPickerResults = [];
     this.profileMasterStep = 0;
   }
   openEditProfile(p:any){
+    void this.openEditProfileAsync(p);
+  }
+  private async openEditProfileAsync(p:any){
     this.profileFormMode = 'edit';
     this.profileUpdateTargets = { master:true, linkedProfiles:true, billing:false, billingFromDate:this.todayIso(), billingToDate:this.todayIso() };
-    this.editProfile(p);
+    const api: any = window.limsApi;
+    let detail = p;
+    try {
+      if (api.getProfile && +p?.id) detail = await api.getProfile(+p.id) || p;
+    } catch { detail = p; }
+    this.editProfile(detail);
     this.profileMasterView = 'form';
     this.profileTestSearch = '';
     this.profileNestedSearch = '';
+    this.profileTestPickerResults = [];
+    this.profileNestedPickerResults = [];
     this.profileMasterStep = 0;
     this.profileInterpretationEditorNeedsSync = true;
   }
@@ -2178,23 +2477,57 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
   }
   goToProfileStep(index:number){ this.profileMasterStep = Math.max(0, Math.min(index, this.profileMasterSteps.length - 1)); if(this.profileMasterStep === 2) this.profileInterpretationEditorNeedsSync = true; }
   profileTestSearchResults(){
-    const q = String(this.profileTestSearch || '').trim().toLowerCase();
-    if(!q) return [];
-    const selected = new Set(this.profileItems().filter((x:any)=>x.item_type==='TEST').map((x:any)=>+x.test_id));
-    return this.tests().filter((t:any) => {
-      if(selected.has(+t.id)) return false;
-      return `${t.code || ''} ${t.name || ''} ${t.display_name || ''} ${t.search_keywords || ''} ${t.department_name || ''}`.toLowerCase().includes(q);
-    }).sort((a:any,b:any) => (+a.report_order || +a.priority || 0) - (+b.report_order || +b.priority || 0) || String(a.name||'').localeCompare(String(b.name||''))).slice(0, 30);
+    return this.profileTestPickerResults;
   }
   profileSearchResults(){
-    const q = String(this.profileNestedSearch || '').trim().toLowerCase();
-    if(!q) return [];
+    return this.profileNestedPickerResults;
+  }
+  onProfileTestPickerSearch(){
+    if (this.profilePickerSearchTimer) clearTimeout(this.profilePickerSearchTimer);
+    this.profilePickerSearchTimer = setTimeout(() => { void this.refreshProfileTestPicker(); }, 160);
+  }
+  onProfileNestedPickerSearch(){
+    if (this.profilePickerSearchTimer) clearTimeout(this.profilePickerSearchTimer);
+    this.profilePickerSearchTimer = setTimeout(() => { void this.refreshProfileNestedPicker(); }, 160);
+  }
+  private async refreshProfileTestPicker(){
+    const q = String(this.profileTestSearch || '').trim();
+    if (!q) { this.profileTestPickerResults = []; return; }
+    const selected = new Set(this.profileItems().filter((x:any)=>x.item_type==='TEST').map((x:any)=>+x.test_id));
+    const api: any = window.limsApi;
+    try {
+      if (api.searchMastersTests) {
+        const result = await api.searchMastersTests({ q, state: 'ACTIVE', status: 'ALL', page: 1, pageSize: 40 });
+        this.profileTestPickerResults = (Array.isArray(result?.rows) ? result.rows : [])
+          .filter((t: any) => !selected.has(+t.id))
+          .slice(0, 30);
+        return;
+      }
+    } catch { /* fall through */ }
+    this.profileTestPickerResults = this.tests().filter((t:any) => {
+      if(selected.has(+t.id)) return false;
+      return `${t.code || ''} ${t.name || ''} ${t.display_name || ''} ${t.search_keywords || ''} ${t.department_name || ''}`.toLowerCase().includes(q.toLowerCase());
+    }).slice(0, 30);
+  }
+  private async refreshProfileNestedPicker(){
+    const q = String(this.profileNestedSearch || '').trim();
+    if (!q) { this.profileNestedPickerResults = []; return; }
     const ownId = +this.profile.id || 0;
     const selected = new Set(this.profileItems().filter((x:any)=>x.item_type==='PROFILE').map((x:any)=>+x.profile_id));
-    return this.profiles().filter((p:any) => {
+    const api: any = window.limsApi;
+    try {
+      if (api.searchMastersProfiles) {
+        const result = await api.searchMastersProfiles({ q, status: 'ALL', page: 1, pageSize: 40 });
+        this.profileNestedPickerResults = (Array.isArray(result?.rows) ? result.rows : [])
+          .filter((p: any) => +p.id !== ownId && !selected.has(+p.id))
+          .slice(0, 30);
+        return;
+      }
+    } catch { /* fall through */ }
+    this.profileNestedPickerResults = this.profiles().filter((p:any) => {
       if(+p.id === ownId || selected.has(+p.id)) return false;
-      return `${p.code || ''} ${p.name || ''} ${p.display_name || ''} ${p.search_keywords || ''} ${p.side_header || ''} ${p.department_name || ''}`.toLowerCase().includes(q);
-    }).sort((a:any,b:any) => (+a.report_order || +a.priority || 0) - (+b.report_order || +b.priority || 0) || String(a.name||'').localeCompare(String(b.name||''))).slice(0, 30);
+      return `${p.code || ''} ${p.name || ''} ${p.display_name || ''} ${p.search_keywords || ''} ${p.side_header || ''} ${p.department_name || ''}`.toLowerCase().includes(q.toLowerCase());
+    }).slice(0, 30);
   }
 
 
@@ -2302,12 +2635,15 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
   profileEffectiveRunningCost(): number{
     return +(String(this.profile.running_cost_mode || 'AUTO').toUpperCase() === 'MANUAL' ? Math.max(0, +this.profile.running_cost || 0) : this.profileAutoRunningCost()).toFixed(2);
   }
-  profileItemCount(p:any): number{ return (p.items || p.tests || []).length || 0; }
+  profileItemCount(p:any): number{
+    return Math.max(0, +(p?.item_count ?? (p?.items || p?.tests || []).length) || 0);
+  }
   profileDepartmentName(p:any): string{
     if(!p || !+p.department_id) return 'Mixed';
     return p.department_name || this.departments().find((d:any)=>+d.id===+p.department_id)?.name || 'Mixed';
   }
   profileSummary(p:any): string{
+    if (p?.summary) return String(p.summary);
     const items = p.items || [];
     if(!items.length) return `${(p.tests || []).length || 0} tests`;
     const tests = items.filter((x:any)=>x.item_type==='TEST').length;
@@ -2369,7 +2705,10 @@ export class MastersPageComponent implements OnInit, AfterViewChecked {
         await window.limsApi.saveProfile({...payload, confirm_conflicts:true});
       } else { throw err; }
     }
-    this.profileMasterView = 'list'; this.profileFormMode = 'create'; this.resetProfile(); await this.reload(); this.changed.emit();
+    this.profileMasterView = 'list'; this.profileFormMode = 'create'; this.resetProfile();
+    this.profilePage = 1;
+    await this.loadProfilesPage();
+    this.changed.emit();
   }
   resetProfile(){ this.profile={active:true,billable:true,active_for_reporting:true,show_profile_name:true,ordering_mode:'MANUAL',price:0,running_cost:0,running_cost_mode:'AUTO',priority:0,billing_order:0,report_order:0,search_keywords:'',display_name:'',department_id:0,interpretation_enabled:false,interpretation_text:'',items:[]}; this.profileUpdateTargets = { master:true, linkedProfiles:true, billing:false, billingFromDate:this.todayIso(), billingToDate:this.todayIso() }; this.profileCodeTouched = false; this.profileDisplayNameTouched = false; this.profileMasterStep = 0; this.profileInterpretationEditorNeedsSync = true; this.closeProfileOrderHelper(); }
   editDepartment(d:any){

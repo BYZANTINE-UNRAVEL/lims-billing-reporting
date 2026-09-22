@@ -1,106 +1,200 @@
 import { CommonModule, DatePipe } from '@angular/common';
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, EventEmitter, OnDestroy, OnInit, Output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { MatCardModule } from '@angular/material/card';
-import { MatButtonModule } from '@angular/material/button';
-import { MatIconModule } from '@angular/material/icon';
+
+export type PatientQuickReportNav = {
+  billNo: string;
+  billId?: number;
+  reportNo?: string;
+  status?: string;
+  focusDate?: string;
+};
 
 @Component({
   selector: 'app-patient-history-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, DatePipe, MatCardModule, MatButtonModule, MatIconModule],
+  imports: [CommonModule, FormsModule, DatePipe],
   styles: [`
-    .patient-page { height: calc(100vh - 96px); padding: 14px; display: grid; grid-template-columns: 330px 1fr; gap: 14px; color: var(--text); overflow: hidden; }
-    mat-card { background: var(--panel); border: 1px solid var(--border); border-radius: 22px; box-shadow: var(--shadow); overflow: hidden; }
-    .left-card, .main-card { min-height: 0; display: flex; flex-direction: column; }
-    .panel-head { padding: 14px 14px 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border); }
-    .title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-    h2, h3, h4 { margin: 0; color: var(--text); }
-    h2 { font-size: 18px; letter-spacing: -0.01em; }
-    h3 { font-size: 15px; }
-    h4 { font-size: 13px; margin-bottom: 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
-    small, .muted { color: var(--muted); }
-    .pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 5px 9px; font-size: 12px; color: var(--accent); background: var(--accent-soft); white-space: nowrap; }
-    .search { margin: 12px; display: flex; align-items: center; gap: 8px; background: var(--input); border: 1px solid var(--border); border-radius: 16px; padding: 0 11px; }
-    .search input { width: 100%; height: 40px; border: 0; outline: 0; background: transparent; color: var(--text); }
-    .patient-list { padding: 0 10px 12px; overflow: auto; display: grid; gap: 8px; }
-    .patient-row { border: 1px solid var(--border); background: var(--row); color: var(--text); border-radius: 16px; padding: 10px; text-align: left; cursor: pointer; display: grid; gap: 4px; }
-    .patient-row:hover, .patient-row.active { border-color: var(--accent); background: var(--accent-soft); }
-    .patient-row b { font-size: 13px; }
-    .patient-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12px; }
-    .empty { margin: 16px; padding: 18px; border: 1px dashed var(--border); border-radius: 18px; color: var(--muted); text-align: center; }
-    .tabs { display: flex; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); overflow-x: auto; }
-    .tab { border: 1px solid var(--border); background: var(--row); color: var(--muted); border-radius: 999px; padding: 8px 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
-    .tab.active { color: white; border-color: transparent; background: var(--accent-gradient); box-shadow: var(--glow); }
-    .content { padding: 14px; overflow: auto; min-height: 0; }
-    .summary-grid { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 10px; margin-bottom: 14px; }
-    .stat { background: var(--row); border: 1px solid var(--border); border-radius: 18px; padding: 12px; }
-    .stat strong { display: block; font-size: 18px; color: var(--text); }
-    .form-grid { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 10px; }
-    label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; font-weight: 700; }
-    input, select, textarea { width: 100%; border: 1px solid var(--border); background: var(--input); color: var(--text); border-radius: 14px; padding: 10px 11px; outline: none; font: inherit; }
-    textarea { min-height: 74px; resize: vertical; }
-    .span-2 { grid-column: span 2; }
-    .span-4 { grid-column: 1 / -1; }
-    .check-inline { display: inline-flex !important; align-items: center; gap: 8px; grid-auto-flow: column; color: var(--text); }
-    .check-inline input { width: auto; height: auto; padding: 0; }
-    .age-split-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-    .age-split-row > span { display: grid; gap: 4px; min-width: 0; }
-    .age-split-row small { color: var(--muted); font-size: 10px; font-weight: 800; }
-    .age-split-row input { text-align: center; padding: 10px 8px; }
-    .age-split-row.years-only { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
-    .age-split-row.years-only em { font-style: normal; font-weight: 800; color: var(--muted); padding: 0 8px; }
-    .actions { margin-top: 12px; display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
-    .btn { border: 1px solid var(--border); border-radius: 14px; padding: 10px 14px; font-weight: 800; cursor: pointer; background: var(--row); color: var(--text); }
-    .btn.primary { border-color: transparent; background: var(--accent-gradient); color: white; box-shadow: var(--glow); }
-    .btn.warn { color: var(--danger); }
-    .history-table { width: 100%; border-collapse: separate; border-spacing: 0 8px; }
-    .history-table th { text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding: 0 10px; }
-    .history-table td { background: var(--row); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 10px; font-size: 13px; }
-    .history-table td:first-child { border-left: 1px solid var(--border); border-radius: 14px 0 0 14px; }
-    .history-table td:last-child { border-right: 1px solid var(--border); border-radius: 0 14px 14px 0; }
-    .scope-card { display: grid; gap: 12px; background: var(--row); border: 1px solid var(--border); border-radius: 18px; padding: 14px; }
-    .check-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
-    .check-row label { display: inline-flex; align-items: center; gap: 8px; color: var(--text); }
-    .note { background: var(--accent-soft); color: var(--text); border: 1px solid var(--border); border-radius: 16px; padding: 10px 12px; font-size: 13px; }
-    .snack { position: fixed; right: 24px; bottom: 22px; background: var(--panel); border: 1px solid var(--border); color: var(--text); box-shadow: var(--shadow); border-radius: 16px; padding: 12px 16px; z-index: 50; }
-    @media (max-width: 1100px) { .patient-page { grid-template-columns: 1fr; height: auto; overflow: auto; } .left-card { max-height: 360px; } .summary-grid, .form-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); } .span-4 { grid-column: 1 / -1; } }
+    :host{display:block;min-width:0}
+    .masters-shell{padding:4px 20px 18px;color:var(--text);--accent:#3b82f6;--accent-soft:color-mix(in srgb,var(--accent) 10%,transparent)}
+    .master-panel{border:1px solid var(--border);border-radius:18px;background:color-mix(in srgb,var(--panel) 92%,transparent);box-shadow:var(--shadow);padding:14px 16px 16px}
+    .panel-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+    .panel-heading-left{display:flex;align-items:center;gap:10px;min-width:0}
+    .panel-icon{width:34px;height:34px;border-radius:12px;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);font-weight:950}
+    .panel-heading h2{margin:0;font-size:16px;line-height:1.15;font-weight:950;letter-spacing:-.02em}
+    .panel-heading p{margin:3px 0 0;color:var(--muted);font-size:12px;font-weight:700}
+    .info-pill{display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:0 12px;border-radius:12px;border:1px solid color-mix(in srgb,var(--accent) 40%,var(--border));background:color-mix(in srgb,var(--accent) 10%,var(--panel));color:color-mix(in srgb,var(--accent) 76%,var(--text));font-size:12px;font-weight:850;white-space:nowrap}
+    .test-list-toolbar{display:grid;grid-template-columns:1.35fr .55fr auto;gap:10px;align-items:end;margin-bottom:10px}
+    .test-list-search,.test-list-filter{display:flex;flex-direction:column;gap:6px}
+    .test-list-search span,.test-list-filter span{font-size:11px;font-weight:950;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+    .test-list-search input,.test-list-filter select{height:34px;border-radius:10px;border:1px solid var(--border);background:var(--input);color:var(--text);padding:0 11px;font-size:12.5px;font-weight:750;outline:0}
+    .test-list-search input:focus,.test-list-filter select:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent)}
+    .test-list-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center}
+    .masters-fetch-banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border));border-radius:14px;background:color-mix(in srgb,var(--accent-soft) 70%,var(--panel))}
+    .masters-fetch-banner b{font-size:13px;font-weight:900}.masters-fetch-banner small{color:var(--muted);font-size:11px;font-weight:750}
+    .masters-fetch-spinner{width:16px;height:16px;border-radius:50%;border:2px solid color-mix(in srgb,var(--accent) 30%,transparent);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .table-card{border:1px solid var(--border);border-radius:16px;overflow:hidden;background:color-mix(in srgb,var(--row) 52%,transparent)}
+    .table-card.is-loading{opacity:.72}
+    .masters-table{width:100%;border-collapse:collapse}
+    .masters-table th{height:34px;text-align:left;padding:0 12px;color:var(--text);font-size:12.5px;font-weight:900;background:color-mix(in srgb,var(--panel) 50%,transparent);border-bottom:1px solid var(--border)}
+    .masters-table td{height:36px;padding:0 12px;border-bottom:1px solid var(--border);font-size:12.5px;color:var(--text);vertical-align:middle}
+    .masters-table tbody tr:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+    .entity-name{font-weight:900}
+    .empty-cell{text-align:center;color:var(--muted);font-weight:800;padding:18px 12px!important;height:auto!important}
+    .row-actions{display:flex;align-items:center;gap:7px}
+    .edit-btn,.action-btn{height:34px;border-radius:10px;border:1px solid var(--border);padding:0 15px;color:var(--text);font-size:12px;font-weight:850;background:color-mix(in srgb,var(--row) 74%,transparent);cursor:pointer}
+    .action-btn.primary,.btn.primary{border-color:transparent;background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;box-shadow:0 10px 20px rgba(37,99,235,.20)}
+    .action-btn.ghost:hover,.edit-btn:hover{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+    .table-footer{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 12px;color:var(--muted);font-size:12px;font-weight:750;border-top:1px solid var(--border)}
+    .table-footer b{color:var(--text)}
+    .masters-pager{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;padding:8px 12px 12px;color:var(--muted);font-size:12px;font-weight:800}
+    .masters-pager label{display:inline-flex;align-items:center;gap:6px}
+    .masters-pager select{width:78px;height:32px;padding:0 8px;font-weight:850;border-radius:10px;border:1px solid var(--border);background:var(--input);color:var(--text)}
+    .masters-pager button{width:32px;height:32px;border:1px solid var(--border);border-radius:10px;background:var(--input);color:var(--text);font-weight:950;cursor:pointer}
+    .masters-pager button:disabled{opacity:.45;cursor:not-allowed}
+    .masters-pager b{min-width:64px;text-align:center;color:var(--text)}
+
+    .detail-topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;padding:10px 12px;border:1px solid var(--border);border-radius:14px;background:color-mix(in srgb,var(--card,var(--panel)) 86%,transparent)}
+    .detail-topbar .title{display:flex;flex-direction:column;gap:2px;min-width:0}
+    .detail-topbar strong{font-size:14px;color:var(--text)}
+    .detail-topbar span{font-size:12px;color:var(--muted);font-weight:700}
+    .tabs{display:flex;gap:8px;padding:0 0 10px;overflow-x:auto}
+    .tab{border:1px solid var(--border);background:var(--row);color:var(--muted);border-radius:999px;padding:8px 12px;font-weight:800;cursor:pointer;white-space:nowrap;font-size:12px}
+    .tab.active{color:#fff;border-color:transparent;background:linear-gradient(135deg,#2563eb,#3b82f6);box-shadow:0 8px 16px rgba(37,99,235,.18)}
+    .content{padding:4px 2px 8px;min-height:0}
+    .summary-grid{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:10px;margin-bottom:14px}
+    .stat{background:var(--row);border:1px solid var(--border);border-radius:14px;padding:12px}
+    .stat strong{display:block;font-size:18px;color:var(--text)}
+    .stat small{color:var(--muted);font-weight:750}
+    h4{margin:0 0 8px;font-size:12px;font-weight:950;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+    .form-grid{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:10px}
+    label{display:grid;gap:5px;color:var(--muted);font-size:12px;font-weight:700}
+    input,select,textarea{width:100%;border:1px solid var(--border);background:var(--input);color:var(--text);border-radius:12px;padding:10px 11px;outline:none;font:inherit}
+    textarea{min-height:74px;resize:vertical}
+    .span-2{grid-column:span 2}.span-4{grid-column:1/-1}
+    .check-inline{display:inline-flex!important;align-items:center;gap:8px;grid-auto-flow:column;color:var(--text)}
+    .check-inline input{width:auto;height:auto;padding:0}
+    .age-split-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+    .age-split-row>span{display:grid;gap:4px;min-width:0}
+    .age-split-row small{color:var(--muted);font-size:10px;font-weight:800}
+    .age-split-row input{text-align:center;padding:10px 8px}
+    .age-split-row.years-only{grid-template-columns:minmax(0,1fr) auto;align-items:center}
+    .age-split-row.years-only em{font-style:normal;font-weight:800;color:var(--muted);padding:0 8px}
+    .actions{margin-top:12px;display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+    .btn{border:1px solid var(--border);border-radius:12px;padding:10px 14px;font-weight:800;cursor:pointer;background:var(--row);color:var(--text)}
+    .history-table{width:100%;border-collapse:separate;border-spacing:0 8px}
+    .history-table th{text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:0 10px}
+    .history-table td{background:var(--row);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:10px;font-size:13px}
+    .history-table td:first-child{border-left:1px solid var(--border);border-radius:14px 0 0 14px}
+    .history-table td:last-child{border-right:1px solid var(--border);border-radius:0 14px 14px 0}
+    .nav-link{border:0;background:transparent;padding:0;margin:0;color:var(--accent);font:inherit;font-weight:800;cursor:pointer;text-align:left;text-decoration:underline;text-underline-offset:2px}
+    .nav-link:disabled{opacity:.45;cursor:not-allowed;text-decoration:none}
+    .scope-card{display:grid;gap:12px;background:var(--row);border:1px solid var(--border);border-radius:18px;padding:14px}
+    .check-row{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+    .check-row label{display:inline-flex;align-items:center;gap:8px;color:var(--text)}
+    .note{background:var(--accent-soft);color:var(--text);border:1px solid var(--border);border-radius:16px;padding:10px 12px;font-size:13px}
+    .empty{margin:8px 0;padding:18px;border:1px dashed var(--border);border-radius:18px;color:var(--muted);text-align:center;font-weight:750}
+    .snack{position:fixed;right:24px;bottom:22px;background:var(--panel);border:1px solid var(--border);color:var(--text);box-shadow:var(--shadow);border-radius:16px;padding:12px 16px;z-index:50}
+    @media (max-width:1100px){.test-list-toolbar,.summary-grid,.form-grid{grid-template-columns:repeat(2,minmax(140px,1fr))}.span-4{grid-column:1/-1}.test-list-actions{justify-content:flex-start}}
+    @media (max-width:720px){.test-list-toolbar,.summary-grid,.form-grid{grid-template-columns:1fr}}
   `],
   template: `
-    <section class="patient-page">
-      <mat-card class="left-card">
-        <div class="panel-head">
-          <div class="title"><h2>Patient</h2><small>Search, edit and view history</small></div>
-          <span class="pill">{{ patients().length }} found</span>
-        </div>
-        <div class="search">
-          <span>⌕</span>
-          <input [(ngModel)]="patientQuery" (input)="loadPatients()" placeholder="Search name, mobile, patient no">
-        </div>
-        <div class="patient-list">
-          <button class="patient-row" type="button" *ngFor="let p of patients()" [class.active]="selectedId() === p.id" (click)="loadHistory(p.id)">
-            <b>{{ displayName(p) }}</b>
-            <div class="patient-meta"><span>{{ p.patient_no }}</span><span>{{ p.mobile || 'No mobile' }}</span></div>
-            <small>{{ p.gender || '-' }} · {{ ageDisplay(p) || p.age || '-' }}</small>
-          </button>
-          <div class="empty" *ngIf="!patients().length">No patients found</div>
-        </div>
-      </mat-card>
-
-      <mat-card class="main-card" *ngIf="history() as h; else noPatient">
-        <div class="panel-head">
-          <div class="title">
-            <h2>{{ displayName(h.patient) }}</h2>
-            <small>{{ h.patient?.patient_no }} · {{ h.patient?.mobile || 'No mobile' }} · Registered {{ h.patient?.created_at | date:'dd-MMM-yyyy' }}</small>
+    <section class="masters-shell">
+      <section class="master-panel" *ngIf="viewMode === 'list'">
+        <div class="panel-heading">
+          <div class="panel-heading-left">
+            <div class="panel-icon">⌕</div>
+            <div>
+              <h2>Patient Master</h2>
+              <p>Search, edit details, and open bill / report history.</p>
+            </div>
           </div>
-          <span class="pill">{{ h.patient?.gender || '-' }} · {{ ageDisplay(h.patient) || h.patient?.age || '-' }}</span>
+          <span class="info-pill">{{ listTotal }} patients</span>
+        </div>
+
+        <div class="test-list-toolbar">
+          <div class="test-list-search">
+            <span>Search</span>
+            <input [(ngModel)]="patientQuery" (ngModelChange)="onSearchChange()" placeholder="Search name, mobile, patient no">
+          </div>
+          <label class="test-list-filter">
+            <span>Field</span>
+            <select [(ngModel)]="searchField" (ngModelChange)="onFilterChange()">
+              <option value="">All fields</option>
+              <option value="NAME">Name</option>
+              <option value="MOBILE">Mobile</option>
+              <option value="PATIENT_ID">Patient ID</option>
+            </select>
+          </label>
+          <div class="test-list-actions"></div>
+        </div>
+
+        <div class="masters-fetch-banner" *ngIf="loading" aria-live="polite">
+          <span class="masters-fetch-spinner" aria-hidden="true"></span>
+          <b>Loading patients…</b>
+          <small>Fetching from database with current filters</small>
+        </div>
+
+        <div class="table-card" [class.is-loading]="loading">
+          <table class="masters-table">
+            <thead>
+              <tr><th>Patient No</th><th>Name</th><th>Mobile</th><th>Gender</th><th>Age</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let p of patients(); trackBy: trackById">
+                <td><strong>{{ p.patient_no || '—' }}</strong></td>
+                <td><strong class="entity-name">{{ displayName(p) }}</strong></td>
+                <td>{{ p.mobile || '—' }}</td>
+                <td>{{ p.gender || '—' }}</td>
+                <td>{{ ageDisplay(p) || p.age || '—' }}</td>
+                <td class="row-actions">
+                  <button class="edit-btn" type="button" (click)="openPatient(p.id)">Open</button>
+                </td>
+              </tr>
+              <tr *ngIf="!loading && !patients().length">
+                <td colspan="6" class="empty-cell">No patients found</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="table-footer">
+            <span>Showing <b>{{ patients().length }}</b> of <b>{{ listTotal }}</b> patients</span>
+            <span>Open a row to edit details and view history.</span>
+          </div>
+          <div class="masters-pager" *ngIf="listTotal > 0">
+            <label>Rows
+              <select [ngModel]="pageSize" (ngModelChange)="setPageSize(+$event)">
+                <option [ngValue]="25">25</option>
+                <option [ngValue]="50">50</option>
+                <option [ngValue]="100">100</option>
+              </select>
+            </label>
+            <button type="button" title="First page" (click)="setPage(1)" [disabled]="page <= 1">«</button>
+            <button type="button" title="Previous page" (click)="setPage(page - 1)" [disabled]="page <= 1">‹</button>
+            <b>{{ page }} / {{ totalPages() }}</b>
+            <button type="button" title="Next page" (click)="setPage(page + 1)" [disabled]="page >= totalPages()">›</button>
+            <button type="button" title="Last page" (click)="setPage(totalPages())" [disabled]="page >= totalPages()">»</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="master-panel" *ngIf="viewMode === 'detail' && history() as h">
+        <div class="detail-topbar">
+          <div class="title">
+            <strong>{{ displayName(h.patient) }}</strong>
+            <span>{{ h.patient?.patient_no }} · {{ h.patient?.mobile || 'No mobile' }} · Registered {{ h.patient?.created_at | date:'dd-MMM-yyyy' }}</span>
+          </div>
+          <div class="test-list-actions">
+            <span class="info-pill">{{ h.patient?.gender || '-' }} · {{ ageDisplay(h.patient) || h.patient?.age || '-' }}</span>
+            <button class="action-btn ghost" type="button" (click)="backToList()">← Back to list</button>
+          </div>
         </div>
 
         <div class="tabs">
-          <button class="tab" [class.active]="tab()==='details'" (click)="tab.set('details')">Details</button>
-          <button class="tab" [class.active]="tab()==='bills'" (click)="tab.set('bills')">Bills {{ h.bills?.length || 0 }}</button>
-          <button class="tab" [class.active]="tab()==='reports'" (click)="tab.set('reports')">Reports {{ reportCount(h) }}</button>
-          <button class="tab" [class.active]="tab()==='update'" (click)="tab.set('update')">Update Scope</button>
+          <button class="tab" type="button" [class.active]="tab()==='details'" (click)="tab.set('details')">Details</button>
+          <button class="tab" type="button" [class.active]="tab()==='bills'" (click)="tab.set('bills')">Bills {{ h.bills?.length || 0 }}</button>
+          <button class="tab" type="button" [class.active]="tab()==='reports'" (click)="tab.set('reports')">Reports {{ reportCount(h) }}</button>
+          <button class="tab" type="button" [class.active]="tab()==='update'" (click)="tab.set('update')">Update Scope</button>
         </div>
 
         <div class="content" *ngIf="tab()==='details'">
@@ -150,7 +244,15 @@ import { MatIconModule } from '@angular/material/icon';
           <h4>Bill history</h4>
           <table class="history-table">
             <tr><th>Bill No</th><th>Date</th><th>Items</th><th>Total</th><th>Paid</th><th>Due</th><th>Status</th></tr>
-            <tr *ngFor="let b of h.bills"><td><b>{{ b.bill_no }}</b></td><td>{{ b.bill_date | date:'dd-MMM-yyyy hh:mm a' }}</td><td>{{ b.item_count || 0 }}</td><td>₹{{ b.total || 0 }}</td><td>₹{{ b.paid || b.receipt_total || 0 }}</td><td>₹{{ b.due || 0 }}</td><td>{{ b.status || 'BILLED' }}</td></tr>
+            <tr *ngFor="let b of h.bills">
+              <td><button class="nav-link" type="button" [disabled]="!b.id" (click)="openBill(b)" title="Open bill in Billing">{{ b.bill_no }}</button></td>
+              <td>{{ b.bill_date | date:'dd-MMM-yyyy hh:mm a' }}</td>
+              <td>{{ b.item_count || 0 }}</td>
+              <td>₹{{ b.total || 0 }}</td>
+              <td>₹{{ b.paid || b.receipt_total || 0 }}</td>
+              <td>₹{{ b.due || 0 }}</td>
+              <td>{{ b.status || 'BILLED' }}</td>
+            </tr>
           </table>
           <div class="empty" *ngIf="!h.bills?.length">No bill history</div>
         </div>
@@ -159,21 +261,33 @@ import { MatIconModule } from '@angular/material/icon';
           <h4>Quick reports</h4>
           <table class="history-table">
             <tr><th>Report No</th><th>Bill</th><th>Date</th><th>Items</th><th>Status</th></tr>
-            <tr *ngFor="let r of h.quickReports"><td><b>{{ r.report_no || ('QR-' + r.id) }}</b></td><td>{{ r.bill_no }}</td><td>{{ r.created_at | date:'dd-MMM-yyyy hh:mm a' }}</td><td>{{ r.item_count || 0 }}</td><td>{{ r.status }}</td></tr>
+            <tr *ngFor="let r of h.quickReports">
+              <td><button class="nav-link" type="button" [disabled]="!r.bill_no" (click)="openQuickReport(r)" title="Open in Reports">{{ r.report_no || ('QR-' + r.id) }}</button></td>
+              <td><button class="nav-link" type="button" [disabled]="!(r.bill_id || r.bill_no)" (click)="openBillFromReport(r)" title="Open bill in Billing">{{ r.bill_no }}</button></td>
+              <td>{{ r.created_at | date:'dd-MMM-yyyy hh:mm a' }}</td>
+              <td>{{ r.item_count || 0 }}</td>
+              <td>{{ r.status }}</td>
+            </tr>
           </table>
           <div class="empty" *ngIf="!h.quickReports?.length">No quick report history</div>
 
           <h4 style="margin-top:16px">Lab workflow reports</h4>
           <table class="history-table">
             <tr><th>Report ID</th><th>Bill</th><th>Date</th><th>Items</th><th>Status</th></tr>
-            <tr *ngFor="let r of h.reports"><td><b>#{{ r.id }}</b></td><td>{{ r.bill_no }}</td><td>{{ r.updated_at || r.created_at | date:'dd-MMM-yyyy hh:mm a' }}</td><td>{{ r.item_count || 0 }}</td><td>{{ r.status }}</td></tr>
+            <tr *ngFor="let r of h.reports">
+              <td><b>#{{ r.id }}</b></td>
+              <td><button class="nav-link" type="button" [disabled]="!(r.bill_id || r.bill_no)" (click)="openBillFromReport(r)" title="Open bill in Billing">{{ r.bill_no }}</button></td>
+              <td>{{ r.updated_at || r.created_at | date:'dd-MMM-yyyy hh:mm a' }}</td>
+              <td>{{ r.item_count || 0 }}</td>
+              <td>{{ r.status }}</td>
+            </tr>
           </table>
           <div class="empty" *ngIf="!h.reports?.length">No lab workflow report history</div>
         </div>
 
         <div class="content" *ngIf="tab()==='update'">
           <div class="scope-card">
-            <h3>Controlled patient update</h3>
+            <h3 style="margin:0">Controlled patient update</h3>
             <div class="note">
               Patient master is always updated. Historical bill/report prints use a frozen patient snapshot per bill.
               Choose the scope below to rewrite those snapshots (Billing / Reporting) or leave older visits frozen.
@@ -202,21 +316,27 @@ import { MatIconModule } from '@angular/material/icon';
             <div class="actions"><button class="btn primary" type="button" (click)="savePatientWithScope()">Save with this scope</button></div>
           </div>
         </div>
-      </mat-card>
+      </section>
 
-      <ng-template #noPatient>
-        <mat-card class="main-card"><div class="empty">Select a patient to edit details and view bill/report history.</div></mat-card>
-      </ng-template>
       <div class="snack" *ngIf="snack()">{{ snack() }}</div>
     </section>
   `
 })
-export class PatientHistoryPageComponent implements OnInit {
+export class PatientHistoryPageComponent implements OnInit, OnDestroy {
+  @Output() editBill = new EventEmitter<number>();
+  @Output() openQuickReportNav = new EventEmitter<PatientQuickReportNav>();
+
   patients = signal<any[]>([]);
   history = signal<any>(null);
   selectedId = signal<number | null>(null);
   tab = signal<'details' | 'bills' | 'reports' | 'update'>('details');
+  viewMode: 'list' | 'detail' = 'list';
   patientQuery = '';
+  searchField = '';
+  loading = false;
+  page = 1;
+  pageSize = 50;
+  listTotal = 0;
   edit: any = {};
   snack = signal('');
   applyFrom = new Date().toISOString().slice(0, 10);
@@ -224,16 +344,118 @@ export class PatientHistoryPageComponent implements OnInit {
   updateBilling = true;
   updateReporting = true;
   updateReason = '';
+  private loadSeq = 0;
+  private searchTimer: any = null;
+
+  trackById = (_: number, p: any) => p?.id;
+  totalPages() { return Math.max(1, Math.ceil(this.listTotal / Math.max(1, this.pageSize))); }
 
   onApplyFromInteract() {
-    // Date picker was disabled unless mode was already fromDate — picking a date now activates that mode.
     if (this.updateMode !== 'fromDate') this.updateMode = 'fromDate';
   }
 
+  openBill(b: any) {
+    const id = Number(b?.id || 0);
+    if (!id) return;
+    this.editBill.emit(id);
+  }
+
+  openBillFromReport(r: any) {
+    const id = Number(r?.bill_id || 0);
+    if (id) { this.editBill.emit(id); return; }
+    const billNo = String(r?.bill_no || '').trim();
+    if (!billNo) return;
+    const match = (this.history()?.bills || []).find((b: any) => String(b?.bill_no || '').trim() === billNo);
+    if (match?.id) this.editBill.emit(Number(match.id));
+  }
+
+  openQuickReport(r: any) {
+    const billNo = String(r?.bill_no || '').trim();
+    if (!billNo) return;
+    this.openQuickReportNav.emit({
+      billNo,
+      billId: Number(r?.bill_id || 0) || undefined,
+      reportNo: String(r?.report_no || '').trim() || undefined,
+      status: String(r?.status || '').trim() || undefined,
+      focusDate: this.toInputDate(r?.created_at || r?.bill_date || r?.updated_at)
+    });
+  }
+
+  private toInputDate(value: any): string | undefined {
+    const raw = String(value || '').trim();
+    if (!raw) return undefined;
+    const m = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+    return m?.[1];
+  }
+
   async ngOnInit() { await this.loadPatients(); }
+  ngOnDestroy() { if (this.searchTimer) clearTimeout(this.searchTimer); }
+
+  onSearchChange() {
+    if (this.searchTimer) clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => {
+      this.page = 1;
+      void this.loadPatients();
+    }, 220);
+  }
+  onFilterChange() { this.page = 1; void this.loadPatients(); }
+  setPage(p: number) {
+    const next = Math.max(1, Math.min(this.totalPages(), Math.floor(+p || 1)));
+    if (next === this.page) return;
+    this.page = next;
+    void this.loadPatients();
+  }
+  setPageSize(size: number) {
+    this.pageSize = Math.min(100, Math.max(1, Number(size) || 50));
+    this.page = 1;
+    void this.loadPatients();
+  }
 
   async loadPatients() {
-    this.patients.set(await window.limsApi.listPatients(this.patientQuery));
+    const api: any = window.limsApi;
+    const seq = ++this.loadSeq;
+    this.loading = true;
+    try {
+      if (!api.searchPatients) {
+        const rows = await api.listPatients({ q: this.patientQuery, searchField: this.searchField || undefined });
+        if (seq !== this.loadSeq) return;
+        const list = Array.isArray(rows) ? rows : [];
+        this.patients.set(list);
+        this.listTotal = list.length;
+        return;
+      }
+      const result = await api.searchPatients({
+        q: this.patientQuery,
+        searchField: this.searchField || undefined,
+        page: this.page,
+        pageSize: this.pageSize
+      });
+      if (seq !== this.loadSeq) return;
+      const rows = Array.isArray(result?.rows) ? result.rows : [];
+      this.patients.set(rows);
+      this.listTotal = Math.max(0, +result?.total || rows.length);
+      this.page = Math.max(1, +result?.page || this.page);
+      this.pageSize = +result?.pageSize || this.pageSize;
+      const maxPage = this.totalPages();
+      if (this.page > maxPage) {
+        this.page = maxPage;
+        await this.loadPatients();
+      }
+    } finally {
+      if (seq === this.loadSeq) this.loading = false;
+    }
+  }
+
+  async openPatient(id: number) {
+    await this.loadHistory(id);
+    this.viewMode = 'detail';
+  }
+
+  backToList() {
+    this.viewMode = 'list';
+    this.history.set(null);
+    this.selectedId.set(null);
+    void this.loadPatients();
   }
 
   async loadHistory(id: number, keepTab = false) {
@@ -440,7 +662,7 @@ export class PatientHistoryPageComponent implements OnInit {
   ageDisplay(p: any) {
     const stored = String(p?.age || '').trim();
     if (stored && /month|day|week/i.test(stored)) return stored;
-    const split = p?.age_split === true || p?.age_split === 1 || p?.age_split === '1' || p?.age_split === true;
+    const split = p?.age_split === true || p?.age_split === 1 || p?.age_split === '1';
     if (split && p?.dob) return this.formatAgeFromParts(this.agePartsFromDob(p.dob), true);
     if (stored && !/^0\s*years?$/i.test(stored)) return stored;
     if (p?.age_value === '' || p?.age_value === undefined || p?.age_value === null) return stored || '';

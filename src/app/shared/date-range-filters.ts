@@ -1,6 +1,9 @@
 /** Shared Analytics-style from/to date range helpers for queue/filter bars. */
 export type DateRangeValue = { from: string; to: string };
 
+/** Inclusive calendar-day cap for list/filter ranges (allows a full leap year). */
+export const MAX_DATE_RANGE_DAYS = 366;
+
 export function isoDate(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -17,6 +20,38 @@ export function openNativeDatePicker(event: Event): void {
   } catch {
     input.focus();
   }
+}
+
+/** Inclusive day count between YYYY-MM-DD values (0 if invalid/missing). */
+export function dateRangeInclusiveDays(from?: string, to?: string): number {
+  const f = String(from || '').trim().slice(0, 10);
+  const t = String(to || '').trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f) || !/^\d{4}-\d{2}-\d{2}$/.test(t)) return 0;
+  const a = new Date(f + 'T00:00:00');
+  const b = new Date(t + 'T00:00:00');
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return 0;
+  return Math.round((b.getTime() - a.getTime()) / 86400000) + 1;
+}
+
+/**
+ * Validate a from/to filter range.
+ * @param required when true (default), empty from/to is an error.
+ */
+export function dateRangeFilterError(
+  from?: string,
+  to?: string,
+  opts?: { required?: boolean; maxDays?: number }
+): string {
+  const f = String(from || '').trim().slice(0, 10);
+  const t = String(to || '').trim().slice(0, 10);
+  const required = opts?.required !== false;
+  const maxDays = Math.max(1, Number(opts?.maxDays || MAX_DATE_RANGE_DAYS) || MAX_DATE_RANGE_DAYS);
+  if (!f || !t) return required ? 'From and To dates are required.' : '';
+  if (f > t) return 'From date must be on or before To date.';
+  if (dateRangeInclusiveDays(f, t) > maxDays) {
+    return `Date range cannot exceed ${maxDays} days (1 year). Narrow the From / To dates.`;
+  }
+  return '';
 }
 
 export function dateRangePresets() {
@@ -65,4 +100,5 @@ export const DATE_RANGE_FILTER_STYLES = `
 .date-range-filters input[type="date"]::-webkit-calendar-picker-indicator{opacity:0!important;cursor:pointer;width:42px;height:100%;margin-right:-8px}
 :host-context(.light) .date-range-filters input[type="date"],:host-context(.light-mode) .date-range-filters input[type="date"],:host-context(body.light) .date-range-filters input[type="date"]{background-color:#fff!important;color:#0f172a!important;color-scheme:light;background-image:${CAL_ICON_LIGHT}!important}
 :host-context(.light) .date-range-filters input[type="date"]::-webkit-datetime-edit,:host-context(.light) .date-range-filters input[type="date"]::-webkit-datetime-edit-fields-wrapper,:host-context(.light) .date-range-filters input[type="date"]::-webkit-datetime-edit-text,:host-context(.light) .date-range-filters input[type="date"]::-webkit-datetime-edit-month-field,:host-context(.light) .date-range-filters input[type="date"]::-webkit-datetime-edit-day-field,:host-context(.light) .date-range-filters input[type="date"]::-webkit-datetime-edit-year-field,:host-context(.light-mode) .date-range-filters input[type="date"]::-webkit-datetime-edit,:host-context(.light-mode) .date-range-filters input[type="date"]::-webkit-datetime-edit-fields-wrapper,:host-context(.light-mode) .date-range-filters input[type="date"]::-webkit-datetime-edit-text,:host-context(.light-mode) .date-range-filters input[type="date"]::-webkit-datetime-edit-month-field,:host-context(.light-mode) .date-range-filters input[type="date"]::-webkit-datetime-edit-day-field,:host-context(.light-mode) .date-range-filters input[type="date"]::-webkit-datetime-edit-year-field,:host-context(body.light) .date-range-filters input[type="date"]::-webkit-datetime-edit,:host-context(body.light) .date-range-filters input[type="date"]::-webkit-datetime-edit-fields-wrapper,:host-context(body.light) .date-range-filters input[type="date"]::-webkit-datetime-edit-text,:host-context(body.light) .date-range-filters input[type="date"]::-webkit-datetime-edit-month-field,:host-context(body.light) .date-range-filters input[type="date"]::-webkit-datetime-edit-day-field,:host-context(body.light) .date-range-filters input[type="date"]::-webkit-datetime-edit-year-field{color:#0f172a!important}
+.date-range-error{margin:8px 0 0;padding:8px 12px;border:1px solid rgba(239,68,68,.35);border-radius:12px;background:rgba(239,68,68,.08);color:#ef4444;font-size:12.5px;font-weight:800}
 `;

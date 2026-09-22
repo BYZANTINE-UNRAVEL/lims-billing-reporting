@@ -98,32 +98,37 @@
             </div>
 
             <div class="patient-lookup-row">
-              <div class="patient-search top-patient-search patient-lookup-field" [class.has-results]="billingPatientResults().length > 0">
-                <svg viewBox="0 0 24 24" class="lookup-search-icon" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
-                <input matInput
-                  [ngModel]="patientBillQuery"
-                  (ngModelChange)="onPatientLookupQueryChange($event)"
-                  [matAutocomplete]="patientLookupAuto"
-                  (keydown.enter)="$event.preventDefault(); searchPatientsForBilling()"
-                  (keydown.escape)="clearPatientSearchResults()"
-                  placeholder="Search by Patient ID, Name or Mobile">
-                <mat-autocomplete
-                  #patientLookupAuto="matAutocomplete"
-                  class="registration-reference-panel patient-lookup-panel"
-                  [displayWith]="displayPatientSearchOption"
+              <div class="patient-lookup-search-bar">
+                <select class="patient-search-field" [(ngModel)]="patientSearchField" (ngModelChange)="onPatientSearchFieldChange()" aria-label="Search by">
+                  <option *ngFor="let opt of patientSearchFieldOptions" [ngValue]="opt.value">{{ opt.label }}</option>
+                </select>
+                <div class="patient-search top-patient-search patient-lookup-field" [class.has-results]="billingPatientResults().length > 0">
+                  <svg viewBox="0 0 24 24" class="lookup-search-icon" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+                  <input matInput
+                    [ngModel]="patientBillQuery"
+                    (ngModelChange)="onPatientLookupQueryChange($event)"
+                    [matAutocomplete]="patientLookupAuto"
+                    (keydown.enter)="$event.preventDefault(); searchPatientsForBilling()"
+                    (keydown.escape)="clearPatientSearchResults()"
+                    [placeholder]="patientSearchPlaceholder()">
+                  <mat-autocomplete
+                    #patientLookupAuto="matAutocomplete"
+                    class="registration-reference-panel patient-lookup-panel"
+                    [displayWith]="displayPatientSearchOption"
 >
-                  <mat-option *ngFor="let p of billingPatientResults()" [value]="p" class="patient-lookup-option" (onSelectionChange)="onPatientAutocompleteSelection($event, p)">
-                    <div class="patient-option-content">
-                      <b [innerHTML]="highlightPatientMatch(p.patient_no)"></b>
-                      <span>
-                        <span [innerHTML]="highlightPatientMatch(displayPatientName(p))"></span>
-                         - {{ patientAgeLabel(p) || '-' }} / {{ p.gender || '-' }}
-                         - <span [innerHTML]="highlightPatientMatch(p.mobile || 'No mobile')"></span>
-                         - Reg: {{ formatIstDateTime(p.created_at || p.createdAt) }}
-                      </span>
-                    </div>
-                  </mat-option>
-                </mat-autocomplete>
+                    <mat-option *ngFor="let p of billingPatientResults()" [value]="p" class="patient-lookup-option" (onSelectionChange)="onPatientAutocompleteSelection($event, p)">
+                      <div class="patient-option-content">
+                        <b [innerHTML]="highlightPatientMatch(p.patient_no)"></b>
+                        <span>
+                          <span [innerHTML]="highlightPatientMatch(displayPatientName(p))"></span>
+                           - {{ patientAgeLabel(p) || '-' }} / {{ p.gender || '-' }}
+                           - <span [innerHTML]="highlightPatientMatch(p.mobile || 'No mobile')"></span>
+                           - Reg: {{ formatIstDateTime(p.created_at || p.createdAt) }}
+                        </span>
+                      </div>
+                    </mat-option>
+                  </mat-autocomplete>
+                </div>
               </div>
               <div class="patient-mode-toggle" aria-label="Patient billing mode">
                 <button type="button" [class.active]="!!bill.patient.id" (click)="focusPatientSearch()">Existing Patient</button>

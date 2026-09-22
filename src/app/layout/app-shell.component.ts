@@ -64,20 +64,25 @@ export interface NavItem { id: string; label: string; icon: string; }
 
           <div class="bill-top-tools" *ngIf="showBillTools">
             <div class="top-bill-search">
-              <svg viewBox="0 0 24 24" class="tool-ico"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
-              <input
-                [ngModel]="billSearchQuery"
-                (ngModelChange)="billSearchChange.emit($event)"
-                (focus)="openBillSearch()"
-                (blur)="scheduleBillSearchClose()"
-                (keydown.escape)="closeBillSearch()"
-                [ngClass]="activeBillPaymentClass"
-                placeholder="Search bill no, patient or mobile">
-              <div class="top-search-results" *ngIf="billSearchResults.length">
-                <button type="button" *ngFor="let b of billSearchResults" (pointerdown)="$event.preventDefault(); $event.stopPropagation(); billSearchSelect.emit(b)" (mousedown)="$event.preventDefault(); $event.stopPropagation()">
-                  <b [ngClass]="billPaymentClass(b)">{{ b.bill_no }}</b>
-                  <span>{{ b.patient_name }} · ₹{{ b.total }} · {{ b.mobile || 'No mobile' }}</span>
-                </button>
+              <select class="bill-search-field" [ngModel]="billSearchField" (ngModelChange)="onBillSearchFieldChange($event)" aria-label="Search by">
+                <option *ngFor="let opt of billSearchFieldOptions" [ngValue]="opt.value">{{ opt.label }}</option>
+              </select>
+              <div class="top-bill-search-input-wrap">
+                <svg viewBox="0 0 24 24" class="tool-ico"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+                <input
+                  [ngModel]="billSearchQuery"
+                  (ngModelChange)="billSearchChange.emit($event)"
+                  (focus)="openBillSearch()"
+                  (blur)="scheduleBillSearchClose()"
+                  (keydown.escape)="closeBillSearch()"
+                  [ngClass]="activeBillPaymentClass"
+                  [placeholder]="billSearchPlaceholder()">
+                <div class="top-search-results" *ngIf="billSearchResults.length">
+                  <button type="button" *ngFor="let b of billSearchResults" (pointerdown)="$event.preventDefault(); $event.stopPropagation(); billSearchSelect.emit(b)" (mousedown)="$event.preventDefault(); $event.stopPropagation()">
+                    <b [ngClass]="billPaymentClass(b)">{{ b.bill_no }}</b>
+                    <span>{{ b.patient_name }} · ₹{{ b.total }} · {{ b.mobile || 'No mobile' }}</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -147,6 +152,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   @Input() dashboard: any = null;
   @Input() showBillTools = false;
   @Input() billSearchQuery = '';
+  @Input() billSearchField: 'NAME' | 'BILL_NO' | 'MOBILE' | 'PATIENT_ID' = 'NAME';
   @Input() billSearchResults: any[] = [];
   @Input() activeBillNo = '';
   @Input() activeBillPaymentClass = '';
@@ -163,6 +169,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   @Output() refresh = new EventEmitter<void>();
   @Output() newBill = new EventEmitter<void>();
   @Output() billSearchChange = new EventEmitter<string>();
+  @Output() billSearchFieldChange = new EventEmitter<'NAME' | 'BILL_NO' | 'MOBILE' | 'PATIENT_ID'>();
   @Output() billSearchFocus = new EventEmitter<void>();
   @Output() billSearchClose = new EventEmitter<void>();
   @Output() billSearchSelect = new EventEmitter<any>();
@@ -170,6 +177,26 @@ export class AppShellComponent implements OnInit, OnDestroy {
   @Output() nextBill = new EventEmitter<void>();
   @Output() billingFooterPrimary = new EventEmitter<void>();
   @Output() billingFooterSecondary = new EventEmitter<void>();
+
+  readonly billSearchFieldOptions: { value: 'NAME' | 'BILL_NO' | 'MOBILE' | 'PATIENT_ID'; label: string }[] = [
+    { value: 'NAME', label: 'Name' },
+    { value: 'BILL_NO', label: 'Bill No' },
+    { value: 'MOBILE', label: 'Mobile No' },
+    { value: 'PATIENT_ID', label: 'Patient ID' },
+  ];
+
+  billSearchPlaceholder(): string {
+    switch (this.billSearchField) {
+      case 'BILL_NO': return 'Search by bill no...';
+      case 'MOBILE': return 'Search by mobile no...';
+      case 'PATIENT_ID': return 'Search by patient ID...';
+      default: return 'Search by patient name...';
+    }
+  }
+
+  onBillSearchFieldChange(field: 'NAME' | 'BILL_NO' | 'MOBILE' | 'PATIENT_ID') {
+    this.billSearchFieldChange.emit(field || 'NAME');
+  }
 
   billPaymentClass(b: any): string {
     const raw = String(b?.payment_status || '').toUpperCase();

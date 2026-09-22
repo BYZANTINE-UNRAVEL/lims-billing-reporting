@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, HostListener, OnInit, Output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DateTimeSettingsService } from '../shared/date-time-settings.service';
+import { dateRangeFilterError } from '../shared/date-range-filters';
 import { code128Svg } from '../shared/code128';
 import { MatMenuModule } from '@angular/material/menu';
 import { ReportTypingPageComponent } from './reports/report-typing-page.component';
@@ -75,6 +76,7 @@ export class CollectionPageComponent implements OnInit {
   outsourceVendors:any[]=[];
   pendingSearch=''; collectionSearch=''; logSearch=''; logFilter='ALL'; collectionGroupMode:'BILL'|'SPECIMEN'='SPECIMEN';
   fromDate=''; toDate='';
+  dateError='';
   activeBill:any=null;
   collectionTests: CollectionTestRow[]=[];
   sampleTypes = ['Random','Fasting','Post-prandial','Timed','Emergency','Scheduled','Specify'];
@@ -91,11 +93,23 @@ export class CollectionPageComponent implements OnInit {
   async ngOnInit(){ await this.load(); }
 
   async load(){
+    this.dateError = dateRangeFilterError(this.fromDate, this.toDate, { required: false });
     this.pendingBills = await this.api?.listCollectionPending?.() || [];
     this.acceptedPendingBills = await this.api?.listAcceptedCollectionPending?.() || [];
-    const rawCollections = await this.api?.listCollections?.({from:this.fromDate,to:this.toDate}) || [];
-    this.collections = this.buildWorkflowScopedCollectionRows(rawCollections);
-    this.collectionLogs = await this.api?.listCollectionLogs?.({from:this.fromDate,to:this.toDate}) || [];
+    if (this.dateError) {
+      this.collections = [];
+      this.collectionLogs = [];
+    } else {
+      try {
+        const rawCollections = await this.api?.listCollections?.({from:this.fromDate,to:this.toDate}) || [];
+        this.collections = this.buildWorkflowScopedCollectionRows(rawCollections);
+        this.collectionLogs = await this.api?.listCollectionLogs?.({from:this.fromDate,to:this.toDate}) || [];
+      } catch (e: any) {
+        this.dateError = e?.message || String(e) || 'Invalid date range.';
+        this.collections = [];
+        this.collectionLogs = [];
+      }
+    }
     this.outsourceVendors = await this.api?.listOutsourceVendors?.() || [];
   }
 
@@ -176,6 +190,7 @@ export class CollectionPageComponent implements OnInit {
   closeCollect(){ this.mode.set('list'); this.step.set(1); this.activeBill=null; this.collectionTests=[]; this.dirty=false; }
 
   filteredPendingBills(){ const q=this.pendingSearch.toLowerCase().trim(); return this.pendingBills.filter(b=>{
+    if (this.dateError) return false;
     const d=this.dateOnly(b.bill_date);
     const inDate=(!this.fromDate || d>=this.fromDate) && (!this.toDate || d<=this.toDate);
     const normalPendingOk = (+b.pending_count || 0) > 0;

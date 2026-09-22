@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { ConnectedPosition, Overlay, OverlayModule, ScrollStrategy } from '@angular/cdk/overlay';
-import { Component, ElementRef, EventEmitter, OnDestroy, OnInit, Output, ViewChild, signal } from '@angular/core';
-import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
+import { Component, ElementRef, EventEmitter, HostListener, OnDestroy, OnInit, Output, ViewChild, signal } from '@angular/core';
+import { FormControl, FormGroup, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { DateTimeSettingsService } from '../../shared/date-time-settings.service';
 import { code128Svg } from '../../shared/code128';
@@ -11,9 +11,10 @@ import { OptionInputEngine } from './result-input/option-input.engine';
 import { SearchSelectInputEngine } from './result-input/search-select-input.engine';
 import { ResultOption } from './result-input/result-option';
 import { useResultChips as shouldUseResultChips, useResultOverlay as shouldUseResultOverlay } from './result-input/result-picker-mode';
-import { dateRangePresets, matchesDateRange, openNativeDatePicker, DATE_RANGE_FILTER_STYLES } from '../../shared/date-range-filters';
+import { dateRangeFilterError, dateRangePresets, matchesDateRange, openNativeDatePicker, DATE_RANGE_FILTER_STYLES } from '../../shared/date-range-filters';
 
 type ReportQueueStatus = 'DRAFT' | 'TYPED' | 'RECHECK' | 'APPROVED' | 'CANCELLED' | 'LOG';
+type QueueSearchField = 'NAME' | 'BILL_NO' | 'MOBILE' | 'PATIENT_ID';
 type WorkspaceMode = 'ENTRY' | 'APPROVE' | 'APPROVED';
 type PdfPreviewState = { title: string; url: SafeResourceUrl } | null;
 type ReopenState = { report: ReportVm; reason: string; error: string } | null;
@@ -48,7 +49,7 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
 @Component({
   selector: 'app-report-typing-page',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, MatMenuModule, MatSnackBarModule, OverlayModule],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, MatMenuModule, MatSnackBarModule, OverlayModule],
   template: `
     <section class="reporting-page">
       <ng-container *ngIf="!selectedReport(); else reportWorkspace">
@@ -70,7 +71,58 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
               <div class="head-actions"><button class="btn ghost small" type="button" (click)="reload()" [disabled]="busy()">↻ Refresh</button></div>
             </div>
             <div class="filter-row">
-              <input placeholder="Search bill / Patient ID / patient / mobile..." [formControl]="queueFilterForm.controls.search">
+              <div class="queue-search-bar">
+                <select class="queue-search-field" [ngModel]="reportSearchField" (ngModelChange)="onQueueSearchFieldChange($event)" aria-label="Search by">
+                  <option *ngFor="let opt of queueSearchFieldOptions" [ngValue]="opt.value">{{ opt.label }}</option>
+                </select>
+                <div class="queue-search-box" id="reportQueueSearchArea">
+                  <div class="queue-search-input-shell">
+                    <input
+                      #queueSearchInput
+                      class="queue-search-input"
+                      [placeholder]="queueSearchPlaceholder()"
+                      [formControl]="queueFilterForm.controls.search"
+                      (focus)="openQueueSearchPopover()"
+                      (keydown)="onQueueSearchKeydown($event)"
+                      autocomplete="off">
+                    <button
+                      type="button"
+                      class="queue-search-clear"
+                      *ngIf="reportSearch"
+                      aria-label="Clear search"
+                      (mousedown)="$event.preventDefault()"
+                      (click)="clearQueueSearch()">×</button>
+                  </div>
+
+                  <div
+                    class="queue-search-popover"
+                    *ngIf="queueSearchOpen && reportSearch.trim()"
+                    (mousedown)="$event.preventDefault()">
+                    <div class="queue-search-popover-head">
+                      <span>{{ queueSearchSuggestions().length }} result{{ queueSearchSuggestions().length === 1 ? '' : 's' }} for <b>"{{ reportSearch.trim() }}"</b></span>
+                      <span>Use ↑ ↓ and Enter</span>
+                    </div>
+                    <div class="queue-search-results" *ngIf="queueSearchSuggestions().length; else noQueueSearchMatches">
+                      <button
+                        type="button"
+                        class="queue-search-result-row"
+                        *ngFor="let s of queueSearchSuggestions(); let i = index; trackBy: trackQueueSuggestion"
+                        [class.active]="i === queueSearchActiveIndex"
+                        (click)="selectQueueSearchSuggestion(s.value)"
+                        (mouseenter)="queueSearchActiveIndex = i">
+                        <b>{{ s.label }}</b>
+                        <small *ngIf="s.meta">{{ s.meta }}</small>
+                      </button>
+                    </div>
+                    <ng-template #noQueueSearchMatches>
+                      <div class="queue-search-empty">
+                        <b>No matching {{ queueSearchFieldLabel() }}</b>
+                        <span>Try another spelling, or clear search to browse by date.</span>
+                      </div>
+                    </ng-template>
+                  </div>
+                </div>
+              </div>
               <div class="date-range-filters" aria-label="Report date filters">
                 <label class="date-field"><input type="date" [formControl]="queueFilterForm.controls.fromDate" (click)="openDatePicker($event)" (keydown.enter)="openDatePicker($event)"></label>
                 <span class="range-arrow">→</span>
@@ -83,6 +135,7 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
                 <button type="button" [class.active]="isQueueCurrentYearRange" (click)="setQueueDatePreset('currentYear')">Current Year</button>
                 <button type="button" [class.active]="isQueueLastYearRange" (click)="setQueueDatePreset('lastYear')">Last Year</button>
               </div>
+              <p class="date-range-error" *ngIf="queueDateError">{{queueDateError}}</p>
             </div>
             <div class="pending-summary-toolbar" *ngIf="reportStatus==='DRAFT' && filteredReports().length">
               <label class="plain-check pending-master-check">
@@ -122,7 +175,12 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
               <div class="empty" *ngIf="!filteredReportLogs().length">No reporting log found.</div>
             </ng-container>
             <ng-template #reportQueueTable>
-              <div class="report-queue-scroll">
+              <div class="queue-fetch-banner" *ngIf="queueLoading()" aria-live="polite">
+                <span class="queue-fetch-spinner" aria-hidden="true"></span>
+                <b>Loading reports…</b>
+                <small>Fetching from database with current filters</small>
+              </div>
+              <div class="report-queue-scroll" [class.is-loading]="queueLoading()">
               <table class="master-table report-queue-table">
                 <colgroup>
                   <col class="rq-select-col">
@@ -265,8 +323,8 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
                 </tbody>
               </table>
               </div>
-              <div class="queue-pager" *ngIf="quickReporting && filteredReports().length">
-                <span>Showing {{queuePageStart()}}–{{queuePageEnd()}} of {{filteredReports().length}}</span>
+              <div class="queue-pager" *ngIf="quickReporting && queueTotal">
+                <span>Showing {{queuePageStart()}}–{{queuePageEnd()}} of {{queueTotal}}</span>
                 <div class="pager">
                   <label>Rows
                     <select [value]="queuePageSize" (change)="setQueuePageSize(+$any($event.target).value)">
@@ -276,12 +334,14 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
                       <option [value]="100">100</option>
                     </select>
                   </label>
-                  <button type="button" (click)="setQueuePage(queuePage - 1)" [disabled]="queuePage <= 1">‹</button>
+                  <button type="button" title="First page" aria-label="First page" (click)="setQueuePage(1)" [disabled]="queuePage <= 1">«</button>
+                  <button type="button" title="Previous page" aria-label="Previous page" (click)="setQueuePage(queuePage - 1)" [disabled]="queuePage <= 1">‹</button>
                   <b>{{queuePage}} / {{queueTotalPages()}}</b>
-                  <button type="button" (click)="setQueuePage(queuePage + 1)" [disabled]="queuePage >= queueTotalPages()">›</button>
+                  <button type="button" title="Next page" aria-label="Next page" (click)="setQueuePage(queuePage + 1)" [disabled]="queuePage >= queueTotalPages()">›</button>
+                  <button type="button" title="Last page" aria-label="Last page" (click)="setQueuePage(queueTotalPages())" [disabled]="queuePage >= queueTotalPages()">»</button>
                 </div>
               </div>
-              <div class="empty" *ngIf="!filteredReports().length">No {{activeQueueTitle().toLowerCase()}} found.</div>
+              <div class="empty" *ngIf="!queueLoading() && !filteredReports().length">No {{activeQueueTitle().toLowerCase()}} found.</div>
             </ng-template>
           </div>
         </div>
@@ -888,8 +948,26 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
     .report-tabs button.active b{background:rgba(255,255,255,.22);color:#fff}
     .report-content{min-height:0;overflow:auto;padding:2px 0 22px}
     .master-card{border:1px solid var(--border);border-radius:22px;background:var(--panel);box-shadow:var(--shadow);padding:16px}
-    .list-card{margin-top:0}
-    .filter-row{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
+    .list-card{margin-top:0;overflow:visible}
+    .filter-row{display:flex;flex-direction:column;gap:10px;margin-bottom:12px;overflow:visible;position:relative;z-index:40}
+    .queue-search-bar{display:flex;align-items:stretch;gap:8px;width:100%;max-width:640px;position:relative;z-index:50}
+    .queue-search-field{width:148px;min-width:132px;height:36px;border:1px solid var(--border);border-radius:12px;background:var(--input);color:var(--text);padding:0 10px;font-weight:850;flex:0 0 auto}
+    .queue-search-box{position:relative;flex:1 1 auto;min-width:0;z-index:60}
+    .queue-search-input-shell{position:relative;display:flex;align-items:center}
+    .queue-search-input{height:36px;border:1px solid var(--border);border-radius:12px;background-color:var(--input);color:var(--text);padding:0 36px 0 12px;font-weight:850;outline:none;width:100%}
+    .queue-search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+    .queue-search-clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:26px;height:26px;border:0;border-radius:999px;background:color-mix(in srgb,var(--muted) 18%,transparent);color:var(--text);font-size:16px;font-weight:900;line-height:1;cursor:pointer}
+    .queue-search-popover{position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:3000;padding:8px;border:1px solid color-mix(in srgb,var(--accent) 55%,var(--border));border-radius:16px;background:var(--panel);box-shadow:0 28px 80px rgba(0,0,0,.55),0 0 0 1px color-mix(in srgb,var(--accent) 18%,transparent);max-height:min(340px,52vh);overflow:auto}
+    .queue-search-popover-head{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:2px 4px 8px;color:var(--muted);font-size:11px;font-weight:800}
+    .queue-search-popover-head b{color:var(--text)}
+    .queue-search-results{display:grid;gap:4px}
+    .queue-search-result-row{width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;border:1px solid transparent;border-radius:12px;background:var(--row, var(--input));color:var(--text);padding:10px 12px;cursor:pointer}
+    .queue-search-result-row:hover,.queue-search-result-row.active{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:var(--accent-soft)}
+    .queue-search-result-row b{font-size:13px;font-weight:900}
+    .queue-search-result-row small{font-size:11px;font-weight:700;color:var(--muted)}
+    .queue-search-empty{padding:14px 10px;text-align:center;display:grid;gap:4px}
+    .queue-search-empty b{font-size:13px;color:var(--text)}
+    .queue-search-empty span{font-size:11px;color:var(--muted);font-weight:700}
     .filter-row > input{height:36px;border:1px solid var(--border);border-radius:12px;background-color:var(--input);color:var(--text);padding:0 12px;font-weight:850;outline:none;width:100%;max-width:520px}
     input,select{height:36px;width:100%;border:1px solid var(--border);border-radius:12px;background-color:var(--input);color:var(--text);padding:0 10px;font-size:13px;outline:none;color-scheme:dark}
     input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
@@ -915,6 +993,12 @@ type QuickBarcodeModalState = { mode:'GENERATE'|'RESET'; row:any; state:any; sel
     .queue-pager .pager button:disabled{opacity:.45;cursor:not-allowed}
     .queue-pager .pager b{min-width:64px;text-align:center;color:var(--text)}
 
+    .queue-fetch-banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border));border-radius:14px;background:color-mix(in srgb,var(--accent-soft) 70%,var(--panel))}
+    .queue-fetch-banner b{font-size:13px;font-weight:900;color:var(--text)}
+    .queue-fetch-banner small{color:var(--muted);font-size:11px;font-weight:750}
+    .queue-fetch-spinner{width:16px;height:16px;border-radius:50%;border:2px solid color-mix(in srgb,var(--accent) 25%,transparent);border-top-color:var(--accent);animation:queueSpin .7s linear infinite;flex:0 0 auto}
+    @keyframes queueSpin{to{transform:rotate(360deg)}}
+    .report-queue-scroll.is-loading{opacity:.55;pointer-events:none;transition:opacity .15s ease}
     .report-queue-scroll{width:100%;overflow:visible;padding-bottom:0}
     .report-queue-table{width:100%;border-spacing:0 8px;table-layout:fixed}
     .report-queue-table .rq-select-col{width:42px}.report-queue-table .rq-bill-col{width:29%}.report-queue-table .rq-patient-col{width:31%}.report-queue-table .rq-date-col{width:20%}.report-queue-table .rq-action-col{width:86px}.report-queue-table .rq-expand-col{width:42px}
@@ -1135,18 +1219,38 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   constructor(private sanitizer: DomSanitizer, private snackBar: MatSnackBar, private overlay: Overlay) {
     this.resultOverlayScrollStrategy = this.overlay.scrollStrategies.reposition();
     this.queueFilterForm.controls.search.valueChanges.subscribe(value => {
-      this.reportSearch = value;
-      this.ensureQueuePageInRange();
+      this.reportSearch = String(value ?? '');
+      this.queueSearchOpen = !!this.reportSearch.trim();
+      this.queueSearchActiveIndex = 0;
+      if (this.suppressSearchReload) return;
+      this.searchExact = false;
+      if (this.quickReporting) {
+        this.resetQueuePage();
+        if (this.searchReloadTimer) window.clearTimeout(this.searchReloadTimer);
+        this.searchReloadTimer = window.setTimeout(() => { void this.loadReports(); }, 250);
+      } else {
+        this.ensureQueuePageInRange();
+      }
     });
     this.queueFilterForm.controls.fromDate.valueChanges.subscribe(value => { this.fromDate = value; this.onDateFilterChanged(); });
     this.queueFilterForm.controls.toDate.valueChanges.subscribe(value => { this.toDate = value; this.onDateFilterChanged(); });
   }
   private dateRangeRestored = false;
   private dateReloadTimer: any = null;
-  /** In-memory page per Quick queue (Pending / Finished × bill|report view). Survives open/edit/back. */
+  private searchReloadTimer: any = null;
+  private suppressSearchReload = false;
+  /** Suggestion pick → exact DB match; typing → LIKE. */
+  private searchExact = false;
+  /** Server-backed page per Quick queue (Pending / Finished × bill|report view). Survives open/edit/back. */
   private queuePageMemory: Record<string, number> = {};
   queuePage = 1;
   queuePageSize = 25;
+  /** Total rows for current queue tab from DB (not just the current page). */
+  queueTotal = 0;
+  queueCounts: Record<string, number> = { DRAFT: 0, APPROVED: 0 };
+  /** True while the report queue is fetching from DB (separate from action busy). */
+  queueLoading = signal(false);
+  private queueLoadGen = 0;
   @Output() changed = new EventEmitter<void>();
   reports = signal<any[]>([]);
   quickReporting = false;
@@ -1179,8 +1283,20 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   reportQueueView: 'BILL' | 'REPORT' = 'BILL';
   recheckEntryMode = false;
   reportSearch = '';
+  reportSearchField: QueueSearchField = 'NAME';
+  queueSearchOpen = false;
+  queueSearchActiveIndex = 0;
+  private queueInitialized = false;
+  private queuedPatientNav: { billNo: string; status?: string; focusDate?: string; reportNo?: string } | null = null;
+  readonly queueSearchFieldOptions: { value: QueueSearchField; label: string }[] = [
+    { value: 'NAME', label: 'Name' },
+    { value: 'BILL_NO', label: 'Bill No' },
+    { value: 'MOBILE', label: 'Mobile No' },
+    { value: 'PATIENT_ID', label: 'Patient ID' },
+  ];
   fromDate = DateTimeSettingsService.nowInputValue().slice(0, 10);
   toDate = DateTimeSettingsService.nowInputValue().slice(0, 10);
+  queueDateError = '';
   readonly queueFilterForm = new FormGroup({
     search: new FormControl('', { nonNullable:true }),
     fromDate: new FormControl(this.fromDate, { nonNullable:true }),
@@ -1209,6 +1325,14 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   outsourceVendors: any[] = [];
   private errorListener = (event: ErrorEvent) => this.showError(event?.message || 'Unexpected reporting error.');
   private rejectionListener = (event: PromiseRejectionEvent) => this.showError(event?.reason?.message || String(event?.reason || 'Unexpected reporting error.'));
+
+  @HostListener('document:pointerdown', ['$event'])
+  onDocumentPointerDown(event: PointerEvent) {
+    if (!this.queueSearchOpen) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest?.('#reportQueueSearchArea')) return;
+    this.queueSearchOpen = false;
+  }
 
   openApprovedQueueMenu(event:MouseEvent, row:any){
     event.preventDefault();
@@ -1242,6 +1366,12 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     this.restoreDateRangeForStatus(this.reportStatus);
     await this.loadOutsourceVendors();
     await this.loadReports();
+    this.queueInitialized = true;
+    if (this.queuedPatientNav) {
+      const nav = this.queuedPatientNav;
+      this.queuedPatientNav = null;
+      await this.applyPatientNavFocus(nav);
+    }
   }
   async loadOutsourceVendors() { const api:any = window.limsApi as any; this.outsourceVendors = api.listOutsourceVendors ? await api.listOutsourceVendors() : []; }
   ngOnDestroy() {
@@ -2016,27 +2146,37 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     this.rememberQueuePage();
   }
   setQueuePage(page: number) {
-    this.queuePage = Math.max(1, Math.min(this.queueTotalPages(), Math.floor(+page || 1)));
+    const next = Math.max(1, Math.min(this.queueTotalPages(), Math.floor(+page || 1)));
+    if (next === this.queuePage && this.reports().length) {
+      this.rememberQueuePage();
+      return;
+    }
+    this.queuePage = next;
     this.rememberQueuePage();
+    if (this.quickReporting) void this.loadReports();
   }
   setQueuePageSize(size: number) {
     const next = [10, 25, 50, 100].includes(+size) ? +size : 25;
     this.queuePageSize = next;
     this.resetQueuePage();
+    if (this.quickReporting) void this.loadReports();
   }
   queueTotalPages(): number {
-    return Math.max(1, Math.ceil(this.filteredReports().length / Math.max(1, this.queuePageSize || 25)));
+    const total = this.quickReporting ? this.queueTotal : this.filteredReports().length;
+    return Math.max(1, Math.ceil(total / Math.max(1, this.queuePageSize || 25)));
   }
   queuePageStart(): number {
-    const total = this.filteredReports().length;
+    const total = this.quickReporting ? this.queueTotal : this.filteredReports().length;
     return total ? (this.queuePage - 1) * this.queuePageSize + 1 : 0;
   }
   queuePageEnd(): number {
-    return Math.min(this.queuePage * this.queuePageSize, this.filteredReports().length);
+    const total = this.quickReporting ? this.queueTotal : this.filteredReports().length;
+    return Math.min(this.queuePage * this.queuePageSize, total);
   }
   pagedFilteredReports(): any[] {
+    // Quick Reporting pages in SQL; rows are already the current page.
+    if (this.quickReporting) return this.filteredReports();
     const rows = this.filteredReports();
-    if (!this.quickReporting) return rows;
     const start = (Math.max(1, this.queuePage) - 1) * Math.max(1, this.queuePageSize);
     return rows.slice(start, start + Math.max(1, this.queuePageSize));
   }
@@ -2047,9 +2187,21 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     return this.isQuickFinishedEdit(report) ? 'Edit Report' : 'Save Reports';
   }
 
-  async loadReports() {
-    await this.runAction(async () => {
+  async loadReports(opts?: { search?: string; searchExact?: boolean }) {
+    const gen = ++this.queueLoadGen;
+    if (opts?.search != null) {
+      const next = String(opts.search || '').trim();
+      this.reportSearch = next;
+      this.queueFilterForm.controls.search.setValue(next, { emitEvent: false });
+    }
+    if (opts?.searchExact != null) this.searchExact = !!opts.searchExact;
+    const searchTerm = String(this.reportSearch || '').trim();
+    const searchExact = !!this.searchExact;
+    this.queueLoading.set(true);
+    this.errorMessage.set('');
+    try {
       const settings = await window.limsApi.getSettings();
+      if (gen !== this.queueLoadGen) return;
       const nextQuickReporting = String(settings['quickReporting.enabled'] || 'false').toLowerCase() === 'true';
       const quickModeChanged = nextQuickReporting !== this.quickReporting;
       this.quickReporting = nextQuickReporting;
@@ -2057,6 +2209,13 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
       if (!this.dateRangeRestored || quickModeChanged) {
         this.restoreDateRangeForStatus(this.reportStatus);
         this.dateRangeRestored = true;
+      }
+      this.queueDateError = dateRangeFilterError(this.fromDate, this.toDate);
+      if (this.queueDateError) {
+        this.reports.set([]);
+        this.queueTotal = 0;
+        this.reportLogs.set([]);
+        return;
       }
       try {
         const depts = await window.limsApi.listDepartments();
@@ -2070,13 +2229,70 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
       } catch {
         this.quickSingleTestPlacement = 'DEPARTMENT';
       }
-      const rows = await window.limsApi.listReports('');
-      this.reports.set((Array.isArray(rows) ? rows : []).map(r => ({...r, status: this.normalizeStatus(r.status)})));
+      if (gen !== this.queueLoadGen) return;
+
+      const listArgs = {
+        status: this.quickReporting ? this.reportStatus : '',
+        from: this.fromDate || undefined,
+        to: this.toDate || undefined,
+        page: this.queuePage || 1,
+        pageSize: this.queuePageSize || 25,
+        search: this.quickReporting ? (searchTerm || undefined) : undefined,
+        searchField: this.quickReporting ? this.reportSearchField : undefined,
+        searchExact: this.quickReporting ? searchExact : undefined,
+        view: this.quickReporting && this.reportStatus === 'APPROVED' ? this.reportQueueView : 'REPORT'
+      };
+      const result: any = await window.limsApi.listReports(listArgs);
+      if (gen !== this.queueLoadGen) return;
+
+      let rows = Array.isArray(result) ? result : (Array.isArray(result?.rows) ? result.rows : []);
+      this.queueTotal = Array.isArray(result) ? rows.length : Math.max(0, +result?.total || rows.length);
+      this.queueCounts = {
+        DRAFT: result?.counts?.DRAFT != null ? Math.max(0, +result.counts.DRAFT) : this.queueCounts.DRAFT,
+        APPROVED: result?.counts?.APPROVED != null ? Math.max(0, +result.counts.APPROVED) : this.queueCounts.APPROVED,
+        TYPED: result?.counts?.TYPED != null ? Math.max(0, +result.counts.TYPED) : this.queueCounts.TYPED,
+        CANCELLED: result?.counts?.CANCELLED != null ? Math.max(0, +result.counts.CANCELLED) : this.queueCounts.CANCELLED,
+        RECHECK: result?.counts?.RECHECK != null ? Math.max(0, +result.counts.RECHECK) : this.queueCounts.RECHECK
+      };
+      const maxPage = Math.max(1, Math.ceil(this.queueTotal / Math.max(1, this.queuePageSize || 25)));
+      if (this.quickReporting && this.queuePage > maxPage) {
+        this.queuePage = maxPage;
+        this.rememberQueuePage();
+        const retry: any = await window.limsApi.listReports({
+          ...listArgs,
+          page: this.queuePage,
+          search: searchTerm || undefined,
+          searchExact
+        });
+        if (gen !== this.queueLoadGen) return;
+        rows = Array.isArray(retry) ? retry : (Array.isArray(retry?.rows) ? retry.rows : []);
+        this.queueTotal = Array.isArray(retry) ? rows.length : Math.max(0, +retry?.total || rows.length);
+        this.queueCounts = {
+          DRAFT: retry?.counts?.DRAFT != null ? Math.max(0, +retry.counts.DRAFT) : this.queueCounts.DRAFT,
+          APPROVED: retry?.counts?.APPROVED != null ? Math.max(0, +retry.counts.APPROVED) : this.queueCounts.APPROVED,
+          TYPED: retry?.counts?.TYPED != null ? Math.max(0, +retry.counts.TYPED) : this.queueCounts.TYPED,
+          CANCELLED: retry?.counts?.CANCELLED != null ? Math.max(0, +retry.counts.CANCELLED) : this.queueCounts.CANCELLED,
+          RECHECK: retry?.counts?.RECHECK != null ? Math.max(0, +retry.counts.RECHECK) : this.queueCounts.RECHECK
+        };
+      }
+      this.reports.set(rows.map((r: any) => ({...r, status: this.normalizeStatus(r.status)})));
+      // Keep the selected/typed search text visible after fetch.
+      this.queueFilterForm.controls.search.setValue(searchTerm, { emitEvent: false });
+      this.reportSearch = searchTerm;
       const api:any = window.limsApi as any;
       const logs = api.listReportLogs ? await api.listReportLogs({ from: this.fromDate || '1900-01-01', to: this.toDate || '2999-12-31' }) : [];
+      if (gen !== this.queueLoadGen) return;
       this.reportLogs.set(Array.isArray(logs) ? logs : []);
       this.ensureQueuePageInRange();
-    }, 'Unable to load reports.');
+    } catch (err: any) {
+      if (gen !== this.queueLoadGen) return;
+      console.error('[Reporting]', err);
+      const msg = err?.message || 'Unable to load reports.';
+      if (/date range|from date|to date/i.test(String(msg))) this.queueDateError = msg;
+      this.showError(msg);
+    } finally {
+      if (gen === this.queueLoadGen) this.queueLoading.set(false);
+    }
   }
 
   setReportStatus(status: ReportQueueStatus) {
@@ -2091,6 +2307,40 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     this.pendingSummarySelected.clear();
     void this.loadReports();
   }
+
+  /** Deep-link from Patient history: Finished/Pending + exact bill search on the report day. */
+  focusFromPatientNav(nav: { billNo: string; status?: string; focusDate?: string; reportNo?: string }) {
+    if (!this.queueInitialized) {
+      this.queuedPatientNav = nav;
+      return;
+    }
+    void this.applyPatientNavFocus(nav);
+  }
+
+  private async applyPatientNavFocus(nav: { billNo: string; status?: string; focusDate?: string; reportNo?: string }) {
+    const billNo = String(nav?.billNo || '').trim();
+    if (!billNo) return;
+    const rawStatus = String(nav?.status || '').trim().toUpperCase();
+    const queueStatus: ReportQueueStatus = (rawStatus === 'FINISHED' || rawStatus === 'APPROVED') ? 'APPROVED' : 'DRAFT';
+    this.saveDateRangeForStatus(this.reportStatus);
+    this.reportStatus = queueStatus;
+    if (queueStatus === 'APPROVED') this.reportQueueView = 'BILL';
+    const day = this.validInputDate(nav?.focusDate) || DateTimeSettingsService.nowInputValue().slice(0, 10);
+    this.fromDate = day;
+    this.toDate = day;
+    this.queueFilterForm.patchValue({ fromDate: day, toDate: day }, { emitEvent: false });
+    this.saveDateRangeForStatus(queueStatus);
+    this.reportSearchField = 'BILL_NO';
+    this.searchExact = true;
+    this.reportSearch = billNo;
+    this.queueFilterForm.controls.search.setValue(billNo, { emitEvent: false });
+    this.queueSearchOpen = false;
+    this.queueSearchActiveIndex = 0;
+    this.resetQueuePage();
+    this.pendingSummarySelected.clear();
+    this.selectedReport.set(null);
+    await this.loadReports({ search: billNo, searchExact: true });
+  }
   canGroupReportQueue(): boolean {
     if (this.quickReporting) return this.reportStatus === 'APPROVED';
     return this.reportStatus === 'TYPED' || this.reportStatus === 'APPROVED';
@@ -2101,7 +2351,8 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     this.restoreQueuePage();
     this.queueExpanded.clear();
     this.pendingSummarySelected.clear();
-    this.ensureQueuePageInRange();
+    if (this.quickReporting) void this.loadReports();
+    else this.ensureQueuePageInRange();
   }
   isBillGroupedQueueRow(r:any): boolean { return !!(r?._bill_group || r?._approved_bill_group); }
   isRecheckEntryLocked(r:any): boolean { return (+r?.recheck_count || 0) > 0 && (+r?.ready_for_entry_count || 0) === 0; }
@@ -4671,7 +4922,13 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   }
 
   approvedBillKey(r:any): string { return `${String(r?.bill_no || '').trim()}|${String(r?.patient_no || r?.patient_id || '').trim() || String(r?.patient_name || '').trim()}`; }
-  approvedRows(): any[] { return (this.reports() || []).filter((r:any)=>((+r.approved_count || 0) > 0 || (this.normalizeStatus(r.status) === 'APPROVED' && this.reportCompletedCount(r) > 0)) && this.inDateRange(r)); }
+  approvedRows(): any[] {
+    const rows = (this.reports() || []).filter((r: any) =>
+      ((+r.approved_count || 0) > 0 || (this.normalizeStatus(r.status) === 'APPROVED' && this.reportCompletedCount(r) > 0))
+      && (this.quickReporting || this.inDateRange(r))
+    );
+    return rows;
+  }
   approvedGroupedRows(): any[] {
     const groups = new Map<string, any>();
     for (const r of this.approvedRows()) {
@@ -4777,18 +5034,162 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
 
   filteredReports(): any[] {
     if (this.reportStatus === 'LOG') return [];
+    // Quick Reporting: search + date already applied in SQL; keep client search only for non-quick.
+    if (this.quickReporting) return this.baseQueueRowsForSearch();
     const q=(this.reportSearch||'').trim().toLowerCase();
-    const rows = this.quickReporting
-      ? (this.reportStatus === 'APPROVED'
-        ? (this.reportQueueView === 'REPORT' ? this.approvedRows() : this.approvedGroupedRows())
-        : (this.reports()||[]).filter((r:any)=>this.matchesReportTab(r) && this.inDateRange(r)))
-      : (this.reportStatus === 'APPROVED'
-        ? (this.reportQueueView === 'REPORT' ? this.approvedRows() : this.approvedGroupedRows())
-        : (this.reportStatus === 'TYPED'
-          ? (this.reportQueueView === 'REPORT' ? this.waitingApprovalRows() : this.waitingApprovalGroupedRows())
-          : (this.reports()||[]).filter((r:any)=>this.matchesReportTab(r) && this.inDateRange(r))));
+    const rows = this.baseQueueRowsForSearch();
     if(!q) return rows;
-    return rows.filter((r:any)=>((r.bill_no||'')+' '+(r.report_no||'')+' '+(r.report_title||'')+' '+(r.patient_name||'')+' '+(r.patient_no||'')+' '+(r.status||'')+' '+(r.mobile||'')+' '+(r.patient_mobile||'')+' '+this.queueGroupLabel(r)+' '+((r._approved_group_labels||[]).join(' '))).toLowerCase().includes(q));
+    return rows.filter((r:any)=> this.queueSearchMatches(r, q));
+  }
+  queueSearchPlaceholder(): string {
+    switch (this.reportSearchField) {
+      case 'BILL_NO': return 'Search by bill no...';
+      case 'MOBILE': return 'Search by mobile no...';
+      case 'PATIENT_ID': return 'Search by patient ID...';
+      default: return 'Search by patient name...';
+    }
+  }
+  onQueueSearchFieldChange(field: QueueSearchField) {
+    this.reportSearchField = field || 'NAME';
+    this.queueSearchActiveIndex = 0;
+    this.queueSearchOpen = !!this.reportSearch.trim();
+    if (this.quickReporting) {
+      this.resetQueuePage();
+      void this.loadReports();
+    } else {
+      this.ensureQueuePageInRange();
+    }
+  }
+  queueSearchFieldLabel(): string {
+    switch (this.reportSearchField) {
+      case 'BILL_NO': return 'bill no';
+      case 'MOBILE': return 'mobile no';
+      case 'PATIENT_ID': return 'patient ID';
+      default: return 'patient name';
+    }
+  }
+  trackQueueSuggestion = (_: number, s: { value: string }) => s.value;
+  openQueueSearchPopover() {
+    this.queueSearchOpen = !!String(this.reportSearch || '').trim();
+    this.queueSearchActiveIndex = 0;
+  }
+  clearQueueSearch() {
+    if (this.searchReloadTimer) window.clearTimeout(this.searchReloadTimer);
+    this.suppressSearchReload = true;
+    this.searchExact = false;
+    this.reportSearch = '';
+    this.queueFilterForm.controls.search.setValue('', { emitEvent: false });
+    this.queueSearchOpen = false;
+    this.queueSearchActiveIndex = 0;
+    this.suppressSearchReload = false;
+    this.resetQueuePage();
+    void this.loadReports({ search: '', searchExact: false });
+  }
+  onQueueSearchKeydown(event: KeyboardEvent) {
+    const rows = this.queueSearchSuggestions();
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.queueSearchOpen = false;
+      return;
+    }
+    if (!this.queueSearchOpen || !rows.length) {
+      if (event.key === 'ArrowDown' && String(this.reportSearch || '').trim()) {
+        event.preventDefault();
+        this.queueSearchOpen = true;
+        this.queueSearchActiveIndex = 0;
+      }
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.queueSearchActiveIndex = Math.min(this.queueSearchActiveIndex + 1, rows.length - 1);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.queueSearchActiveIndex = Math.max(this.queueSearchActiveIndex - 1, 0);
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const active = rows[this.queueSearchActiveIndex] || rows[0];
+      if (active) this.selectQueueSearchSuggestion(active.value);
+    }
+  }
+  selectQueueSearchSuggestion(value: string) {
+    const next = String(value || '').trim();
+    if (!next) return;
+    if (this.searchReloadTimer) window.clearTimeout(this.searchReloadTimer);
+    this.queueLoadGen += 1;
+    this.suppressSearchReload = true;
+    this.searchExact = true;
+    this.reportSearch = next;
+    this.queueFilterForm.controls.search.setValue(next, { emitEvent: false });
+    this.queueSearchOpen = false;
+    this.queueSearchActiveIndex = 0;
+    this.resetQueuePage();
+    this.suppressSearchReload = false;
+    void this.loadReports({ search: next, searchExact: true });
+  }
+  queueRowSearchValue(r: any, field: QueueSearchField = this.reportSearchField): string {
+    switch (field) {
+      case 'BILL_NO': return String(r?.bill_no || r?.report_no || '').trim();
+      case 'MOBILE': return String(r?.patient_mobile || r?.mobile || '').trim();
+      case 'PATIENT_ID': return String(r?.patient_no || '').trim();
+      case 'NAME':
+      default: return String(r?.patient_name || '').trim();
+    }
+  }
+  queueSearchMatches(r: any, q: string = (this.reportSearch || '').trim().toLowerCase(), field: QueueSearchField = this.reportSearchField): boolean {
+    if (!q) return true;
+    return this.queueRowSearchValue(r, field).toLowerCase().includes(q);
+  }
+  logSearchMatches(l: any, q: string = (this.reportSearch || '').trim().toLowerCase(), field: QueueSearchField = this.reportSearchField): boolean {
+    if (!q) return true;
+    let value = '';
+    switch (field) {
+      case 'BILL_NO': value = String(l?.bill_no || '').trim(); break;
+      case 'MOBILE': value = String(l?.patient_mobile || l?.mobile || '').trim(); break;
+      case 'PATIENT_ID': value = String(l?.patient_no || '').trim(); break;
+      case 'NAME':
+      default: value = String(l?.patient_name || '').trim(); break;
+    }
+    return value.toLowerCase().includes(q);
+  }
+  baseQueueRowsForSearch(): any[] {
+    // Quick Reporting: DB already applied date/search/page filters.
+    if (this.quickReporting) {
+      return this.reportStatus === 'APPROVED'
+        ? (this.reportQueueView === 'REPORT' ? this.approvedRows() : this.approvedGroupedRows())
+        : (this.reports() || []).filter((r: any) => this.matchesReportTab(r));
+    }
+    return this.reportStatus === 'APPROVED'
+      ? (this.reportQueueView === 'REPORT' ? this.approvedRows() : this.approvedGroupedRows())
+      : (this.reportStatus === 'TYPED'
+        ? (this.reportQueueView === 'REPORT' ? this.waitingApprovalRows() : this.waitingApprovalGroupedRows())
+        : (this.reports() || []).filter((r: any) => this.matchesReportTab(r) && this.inDateRange(r)));
+  }
+  queueSearchSuggestions(): { value: string; label: string; meta: string }[] {
+    const q = (this.reportSearch || '').trim().toLowerCase();
+    if (q.length < 1) return [];
+    const seen = new Set<string>();
+    const out: { value: string; label: string; meta: string }[] = [];
+    for (const r of this.baseQueueRowsForSearch()) {
+      const value = this.queueRowSearchValue(r);
+      if (!value || !value.toLowerCase().includes(q)) continue;
+      const key = value.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const metaParts = [
+        this.reportSearchField === 'BILL_NO' ? '' : String(r?.bill_no || '').trim(),
+        this.reportSearchField === 'NAME' ? '' : String(r?.patient_name || '').trim(),
+        this.reportSearchField === 'PATIENT_ID' ? '' : String(r?.patient_no || '').trim(),
+        this.reportSearchField === 'MOBILE' ? '' : String(r?.patient_mobile || r?.mobile || '').trim(),
+      ].filter(Boolean);
+      out.push({ value, label: value, meta: metaParts.join(' · ') });
+      if (out.length >= 12) break;
+    }
+    return out;
   }
   isRecheckReportRow(r:any): boolean {
     const scope = String(r?.report_scope || '').toUpperCase();
@@ -4811,7 +5212,7 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
     const q=(this.reportSearch||'').trim().toLowerCase();
     const rows=(this.reportLogs()||[]).filter((l:any)=>this.inDateRange(l) && this.matchesLogFilter(l));
     if(!q) return rows;
-    return rows.filter((l:any)=>((l.bill_no||'')+' '+(l.patient_name||'')+' '+(l.patient_no||'')+' '+(l.patient_mobile||'')+' '+(l.action_label||'')+' '+(l.details_label||'')+' '+(l.action||'')).toLowerCase().includes(q));
+    return rows.filter((l:any)=> this.logSearchMatches(l, q));
   }
   matchesLogFilter(l:any): boolean {
     const a=String(l?.action||'').toLowerCase(); const f=this.logFilter;
@@ -4909,12 +5310,8 @@ export class ReportTypingPageComponent implements OnInit, OnDestroy {
   reportCountByStatus(status:ReportQueueStatus): number {
     if (status === 'LOG') return this.reportLogCount();
     if (this.quickReporting) {
-      if (status === 'DRAFT') {
-        return (this.reports() || []).filter((r:any)=>this.normalizeStatus(r.status)==='DRAFT' && (+r.pending_count || 0) > 0 && this.inDateRange(r)).length;
-      }
-      if (status === 'APPROVED') {
-        return this.reportQueueView === 'REPORT' ? this.approvedRows().length : this.approvedGroupedRows().length;
-      }
+      if (status === 'DRAFT') return Math.max(0, +this.queueCounts.DRAFT || 0);
+      if (status === 'APPROVED') return Math.max(0, +this.queueCounts.APPROVED || 0);
       return 0;
     }
     if (status === 'RECHECK') return (this.reports() || []).filter((r:any)=>(+r.recheck_count || 0) > 0 && this.inDateRange(r)).length;

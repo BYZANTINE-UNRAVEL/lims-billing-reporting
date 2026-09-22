@@ -17,6 +17,36 @@ export abstract class DatabaseCoreService {
   dbPath: string;
   protected quickBarcode?: QuickReportingBarcodeService;
 
+  /** Inclusive day cap for user-facing from/to list filters (leap year). */
+  protected static readonly MAX_FILTER_DATE_RANGE_DAYS = 366;
+
+  /**
+   * Reject open-ended or multi-year filter ranges when both from and to are set.
+   * Sentinel all-time defaults (1900 / 2999) used by internal open queries are skipped.
+   */
+  protected assertFilterDateRange(from?: any, to?: any, opts?: { required?: boolean }) {
+    const f = String(from ?? '').trim().slice(0, 10);
+    const t = String(to ?? '').trim().slice(0, 10);
+    if (!f || !t) {
+      if (opts?.required) throw new Error('From and To dates are required.');
+      return;
+    }
+    if (f <= '1900-01-01' || t >= '2999-01-01') return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(f) || !/^\d{4}-\d{2}-\d{2}$/.test(t)) {
+      throw new Error('Invalid From / To date.');
+    }
+    if (f > t) throw new Error('From date must be on or before To date.');
+    const a = new Date(f + 'T00:00:00');
+    const b = new Date(t + 'T00:00:00');
+    if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) {
+      throw new Error('Invalid From / To date.');
+    }
+    const days = Math.round((b.getTime() - a.getTime()) / 86400000) + 1;
+    if (days > DatabaseCoreService.MAX_FILTER_DATE_RANGE_DAYS) {
+      throw new Error(`Date range cannot exceed ${DatabaseCoreService.MAX_FILTER_DATE_RANGE_DAYS} days (1 year). Narrow the From / To dates.`);
+    }
+  }
+
   protected static pathConfigFile() { return path.join(app.getPath('userData'), 'lims-paths.json'); }
 
   protected static readPathConfig(): any {
@@ -117,7 +147,9 @@ CREATE TABLE IF NOT EXISTS report_items(id INTEGER PRIMARY KEY AUTOINCREMENT, re
 CREATE TABLE IF NOT EXISTS audit_logs(id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, details TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now','+330 minutes')));
 CREATE INDEX IF NOT EXISTS idx_patients_name_mobile ON patients(name, mobile);
 CREATE INDEX IF NOT EXISTS idx_bills_date ON bills(bill_date);
+CREATE INDEX IF NOT EXISTS idx_bills_date_status ON bills(bill_date, status);
 CREATE INDEX IF NOT EXISTS idx_bills_patient ON bills(patient_id);
+CREATE INDEX IF NOT EXISTS idx_bill_items_bill ON bill_items(bill_id, item_type, item_id);
 CREATE INDEX IF NOT EXISTS idx_report_status ON reports(status);
 `);
     this.ensureBillingSchema();
@@ -136,6 +168,7 @@ CREATE INDEX IF NOT EXISTS idx_report_status ON reports(status);
     this.ensureCollectionSchema();
     this.ensureMultiReportSchema();
     this.ensureQuickReportingSchema();
+    try { this.db.exec(`CREATE INDEX IF NOT EXISTS idx_bills_date_status ON bills(bill_date, status)`); } catch {}
   }
 
 
@@ -191,6 +224,7 @@ CREATE TABLE IF NOT EXISTS quick_report_items(
 CREATE INDEX IF NOT EXISTS idx_quick_reports_bill_status ON quick_reports(bill_id,status);
 CREATE INDEX IF NOT EXISTS idx_quick_report_items_key ON quick_report_items(item_key);
 CREATE INDEX IF NOT EXISTS idx_quick_report_items_report ON quick_report_items(quick_report_id);
+CREATE INDEX IF NOT EXISTS idx_quick_report_items_bill_test ON quick_report_items(bill_id, test_id);
 `);
     this.ensureColumn('quick_report_items', 'specimen_type_id', 'INTEGER NOT NULL DEFAULT 0');
     this.ensureColumn('quick_report_items', 'specimen_name', 'TEXT');
@@ -315,7 +349,7 @@ CREATE TABLE IF NOT EXISTS consultant_commission_rules(id INTEGER PRIMARY KEY AU
     this.ensureColumn('bill_items', 'commission_profile_name', 'TEXT');
     this.ensureColumn('bill_items', 'commission_rule_source', 'TEXT');
     this.ensureColumn('bill_items', 'commission_status', "TEXT NOT NULL DEFAULT 'GENERATED'");
-    ["min_commission REAL NOT NULL DEFAULT 0","max_commission REAL NOT NULL DEFAULT 0","round_mode TEXT NOT NULL DEFAULT 'NONE'","discount_basis TEXT NOT NULL DEFAULT 'AFTER_DISCOUNT'","fixed_apply_mode TEXT NOT NULL DEFAULT 'PER_ITEM'","effective_from TEXT","effective_to TEXT","status TEXT NOT NULL DEFAULT 'GENERATED'"].forEach(def => { const [name] = def.split(' '); this.ensureColumn('consultant_commission_profiles', name, def.substring(name.length + 1)); });
+    ["min_commission REAL NOT NULL DEFAULT 0","max_commission REAL NOT NULL DEFAULT 0","round_mode TEXT NOT NULL DEFAULT 'NONE'","discount_basis TEXT NOT NULL DEFAULT 'AFTER_DISCOUNT'","fixed_apply_mode TEXT NOT NULL DEFAULT 'PER_ITEM'","effective_from TEXT","effective_to TEXT","status TEXT NOT NULL DEFAULT 'GENERATED'","commission_mode TEXT NOT NULL DEFAULT 'ITEM'","profile_key TEXT","supersedes_profile_id INTEGER","commission_technique TEXT","formula_expression TEXT"].forEach(def => { const [name] = def.split(' '); this.ensureColumn('consultant_commission_profiles', name, def.substring(name.length + 1)); });
     this.ensureColumn('bill_items', 'commission_approved_at', 'TEXT');
     this.ensureColumn('bill_items', 'commission_paid_at', 'TEXT');
     this.ensureColumn('bill_items', 'commission_hold_reason', 'TEXT');
@@ -324,6 +358,7 @@ CREATE TABLE IF NOT EXISTS consultant_commission_rules(id INTEGER PRIMARY KEY AU
     this.ensureColumn('bill_items', 'commission_formula_values', 'TEXT');
     this.ensureColumn('bill_items', 'commission_group_id', 'INTEGER');
     this.ensureColumn('bill_items', 'commission_rule_version', 'INTEGER NOT NULL DEFAULT 1');
+    this.ensureColumn('bill_items', 'bill_discount_share', 'REAL NOT NULL DEFAULT 0');
     this.db.exec(`CREATE TABLE IF NOT EXISTS commission_groups(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -389,6 +424,154 @@ CREATE TABLE IF NOT EXISTS consultant_commission_rules(id INTEGER PRIMARY KEY AU
     );
     CREATE INDEX IF NOT EXISTS idx_bill_items_commission_status ON bill_items(commission_status);
     CREATE INDEX IF NOT EXISTS idx_commission_settlement_consultant ON commission_settlements(consultant_id, settlement_date);`);
+    this.db.exec(`CREATE TABLE IF NOT EXISTS consultant_item_rates(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      consultant_id INTEGER NOT NULL,
+      item_type TEXT NOT NULL,
+      item_id INTEGER NOT NULL,
+      selling_rate REAL,
+      cpt TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now','+330 minutes')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now','+330 minutes')),
+      UNIQUE(consultant_id, item_type, item_id),
+      FOREIGN KEY(consultant_id) REFERENCES consultants(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_consultant_item_rates ON consultant_item_rates(consultant_id, item_type, item_id);`);
+    this.ensureColumn('consultant_item_rates', 'cpt', 'TEXT');
+    this.ensureColumn('consultant_item_rates', 'selling_rate', 'REAL');
+    // Clear accrued commission on bills that still have dues (rule: earn only when fully settled).
+    this.db.prepare(`UPDATE bill_items
+      SET commission_amount=0,
+          profit_amount=ROUND(MAX(0, COALESCE(net_amount,0) - COALESCE(bill_discount_share,0) - COALESCE(running_cost,0) - COALESCE(extra_deduction,0)), 2),
+          commission_rule_source=CASE
+            WHEN TRIM(COALESCE(commission_profile_name,''))<>'' OR TRIM(COALESCE(commission_rule_source,''))<>''
+            THEN 'Awaiting full bill settlement'
+            ELSE commission_rule_source
+          END
+      WHERE COALESCE(commission_amount,0)>0
+        AND UPPER(COALESCE(commission_status,'GENERATED')) NOT IN ('PAID','CANCELLED','REVERSAL_PENDING')
+        AND bill_id IN (SELECT id FROM bills WHERE COALESCE(due,0)>0 AND UPPER(COALESCE(status,''))<>'CANCELLED')`).run();
+  }
+
+  listConsultantItemRates(consultantId: number) {
+    this.ensureCommissionSchema();
+    const id = Number(consultantId || 0);
+    if (!id) return [];
+    return this.db.prepare(`SELECT cir.*,
+        CASE WHEN cir.item_type='TEST' THEN COALESCE(t.display_name,t.name) ELSE COALESCE(p.display_name,p.name) END item_name,
+        CASE WHEN cir.item_type='TEST' THEN t.code ELSE p.code END item_code,
+        CASE WHEN cir.item_type='TEST' THEN COALESCE(t.price,0) ELSE COALESCE(p.price,0) END master_price
+      FROM consultant_item_rates cir
+      LEFT JOIN tests t ON cir.item_type='TEST' AND t.id=cir.item_id
+      LEFT JOIN profiles p ON cir.item_type='PROFILE' AND p.id=cir.item_id
+      WHERE cir.consultant_id=?
+      ORDER BY item_name`).all(id);
+  }
+
+  saveConsultantItemRates(payload: any = {}) {
+    this.ensureCommissionSchema();
+    const consultantId = Number(payload.consultant_id || 0);
+    if (!consultantId) throw new Error('Consultant is required.');
+    const consultant = this.db.prepare('SELECT id FROM consultants WHERE id=?').get(consultantId) as any;
+    if (!consultant) throw new Error('Consultant not found.');
+    const rates = Array.isArray(payload.rates) ? payload.rates : [];
+    const now = this.nowIst();
+    const tx = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM consultant_item_rates WHERE consultant_id=?').run(consultantId);
+      const ins = this.db.prepare(`INSERT INTO consultant_item_rates(consultant_id,item_type,item_id,selling_rate,cpt,created_at,updated_at)
+        VALUES(?,?,?,?,?,?,?)`);
+      for (const r of rates) {
+        const itemType = String(r.item_type || '').toUpperCase();
+        const itemId = Number(r.item_id || 0);
+        if ((itemType !== 'TEST' && itemType !== 'PROFILE') || !itemId) continue;
+        const rateRaw = r.selling_rate;
+        const hasRate = rateRaw !== null && rateRaw !== undefined && String(rateRaw).trim() !== '';
+        const sellingRate = hasRate ? Math.max(0, Number(rateRaw) || 0) : null;
+        const cpt = String(r.cpt || '').trim() || null;
+        if (sellingRate === null && !cpt) continue;
+        ins.run(consultantId, itemType, itemId, sellingRate, cpt, now, now);
+      }
+    });
+    tx();
+    this.audit('commission.item-rates.save', JSON.stringify({ consultantId, count: rates.length }));
+    return this.listConsultantItemRates(consultantId);
+  }
+
+  /** Resolve consultant selling rate for a billed item; null = use master. */
+  resolveConsultantSellingRate(consultantId: number, itemType: string, itemId: number): number | null {
+    this.ensureCommissionSchema();
+    const cid = Number(consultantId || 0);
+    const type = String(itemType || '').toUpperCase();
+    const id = Number(itemId || 0);
+    if (!cid || !id || (type !== 'TEST' && type !== 'PROFILE')) return null;
+    const exact = this.db.prepare(`SELECT selling_rate FROM consultant_item_rates
+      WHERE consultant_id=? AND item_type=? AND item_id=?`).get(cid, type, id) as any;
+    if (exact && exact.selling_rate !== null && exact.selling_rate !== undefined) {
+      return Math.max(0, Number(exact.selling_rate) || 0);
+    }
+    // Duplicate catalog names (e.g. two "Blood Sugar Random") — reuse rate from same-name sibling.
+    const nameSql = type === 'PROFILE'
+      ? `SELECT lower(trim(COALESCE(display_name, name, ''))) n FROM profiles WHERE id=?`
+      : `SELECT lower(trim(COALESCE(display_name, name, ''))) n FROM tests WHERE id=?`;
+    const nameRow = this.db.prepare(nameSql).get(id) as any;
+    const name = String(nameRow?.n || '').trim();
+    if (!name) return null;
+    const siblingSql = type === 'PROFILE'
+      ? `SELECT cir.selling_rate FROM consultant_item_rates cir
+           JOIN profiles p ON p.id=cir.item_id
+          WHERE cir.consultant_id=? AND cir.item_type='PROFILE' AND cir.item_id<>?
+            AND cir.selling_rate IS NOT NULL
+            AND lower(trim(COALESCE(p.display_name, p.name, '')))=?`
+      : `SELECT cir.selling_rate FROM consultant_item_rates cir
+           JOIN tests t ON t.id=cir.item_id
+          WHERE cir.consultant_id=? AND cir.item_type='TEST' AND cir.item_id<>?
+            AND cir.selling_rate IS NOT NULL
+            AND lower(trim(COALESCE(t.display_name, t.name, '')))=?`;
+    const siblings = this.db.prepare(siblingSql).all(cid, id, name) as any[];
+    if (!siblings.length) return null;
+    const rates = siblings.map(s => Math.max(0, Number(s.selling_rate) || 0));
+    const first = rates[0];
+    if (rates.every(r => Math.abs(r - first) < 0.009)) return first;
+    return null;
+  }
+
+  protected masterCatalogPrice(itemType: string, itemId: number): number {
+    const type = String(itemType || '').toUpperCase();
+    const id = Number(itemId || 0);
+    if (!id) return 0;
+    if (type === 'PROFILE') {
+      const row = this.db.prepare('SELECT COALESCE(price,0) price FROM profiles WHERE id=?').get(id) as any;
+      return Math.max(0, Number(row?.price) || 0);
+    }
+    const row = this.db.prepare('SELECT COALESCE(price,0) price FROM tests WHERE id=?').get(id) as any;
+    return Math.max(0, Number(row?.price) || 0);
+  }
+
+  /** Active group covering this item for the consultant (one-plan check). */
+  protected findConsultantGroupPlanForItem(consultantId: number, itemType: string, itemId: number, excludeGroupId = 0): any {
+    return this.db.prepare(`SELECT g.id group_id, g.name group_name
+      FROM consultant_commission_group_assignments a
+      JOIN commission_groups g ON g.id=a.group_id
+      JOIN commission_group_items gi ON gi.group_id=g.id
+      WHERE a.consultant_id=? AND a.active=1 AND g.active=1
+        AND gi.item_type=? AND gi.item_id=?
+        AND (?=0 OR g.id<>?)
+      LIMIT 1`).get(consultantId, String(itemType || '').toUpperCase(), Number(itemId || 0), excludeGroupId, excludeGroupId) as any;
+  }
+
+  /** Item already in another active group (global uniqueness across groups). */
+  protected findOtherGroupForItem(itemType: string, itemId: number, excludeGroupId = 0): any {
+    return this.db.prepare(`SELECT g.id group_id, g.name group_name
+      FROM commission_group_items gi
+      JOIN commission_groups g ON g.id=gi.group_id
+      WHERE gi.item_type=? AND gi.item_id=? AND g.active=1 AND (?=0 OR g.id<>?)
+      LIMIT 1`).get(String(itemType || '').toUpperCase(), Number(itemId || 0), excludeGroupId, excludeGroupId) as any;
+  }
+
+  protected findConsultantExceptionForItem(consultantId: number, itemType: string, itemId: number): any {
+    return this.db.prepare(`SELECT id, action FROM consultant_commission_rules
+      WHERE consultant_id=? AND item_type=? AND item_id=? LIMIT 1`)
+      .get(consultantId, String(itemType || '').toUpperCase(), Number(itemId || 0)) as any;
   }
 
 
@@ -691,6 +874,7 @@ CREATE INDEX IF NOT EXISTS idx_tests_billing_order ON tests(department_id, billi
 
 
   protected ensureProfileBuilderSchema() {
+    if ((this as any)._profileBuilderSchemaReady) return;
     this.db.exec(`CREATE TABLE IF NOT EXISTS profile_items(id INTEGER PRIMARY KEY AUTOINCREMENT, profile_id INTEGER NOT NULL, item_type TEXT NOT NULL DEFAULT 'TEST', test_id INTEGER, child_profile_id INTEGER, header_text TEXT, priority INTEGER NOT NULL DEFAULT 0, side_header TEXT, display_profile_name INTEGER NOT NULL DEFAULT 1, FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE, FOREIGN KEY(test_id) REFERENCES tests(id), FOREIGN KEY(child_profile_id) REFERENCES profiles(id));`);
     this.ensureColumn('profiles', 'display_name', 'TEXT');
     this.ensureColumn('profiles', 'active_for_reporting', 'INTEGER NOT NULL DEFAULT 1');
@@ -708,12 +892,27 @@ CREATE INDEX IF NOT EXISTS idx_tests_billing_order ON tests(department_id, billi
     this.ensureColumn('profiles', 'interpretation_text', 'TEXT');
     this.ensureColumn('profiles', 'running_cost', 'REAL NOT NULL DEFAULT 0');
     this.ensureColumn('profiles', 'running_cost_mode', "TEXT NOT NULL DEFAULT 'AUTO'");
-    const itemCount = (this.db.prepare('SELECT COUNT(*) count FROM profile_items').get() as any)?.count || 0;
-    const legacyCount = (this.db.prepare('SELECT COUNT(*) count FROM profile_tests').get() as any)?.count || 0;
-    if (!itemCount && legacyCount) {
-      this.db.prepare(`INSERT INTO profile_items(profile_id,item_type,test_id,priority,side_header,display_profile_name)
-        SELECT profile_id,'TEST',test_id,priority,side_header,1 FROM profile_tests`).run();
-    }
+    this.db.exec(`
+CREATE INDEX IF NOT EXISTS idx_profile_items_profile_id ON profile_items(profile_id);
+CREATE INDEX IF NOT EXISTS idx_profile_items_profile_type ON profile_items(profile_id, item_type);
+CREATE INDEX IF NOT EXISTS idx_profiles_list_order ON profiles(billing_order, report_order, priority, name);
+CREATE INDEX IF NOT EXISTS idx_profiles_active_billable ON profiles(active, billable, active_for_reporting);
+`);
+    // One-time legacy migration — never COUNT whole tables on every Masters page click.
+    try {
+      const migrated = String(this.getSetting('schema.profile_items_migrated', '') || '');
+      if (migrated !== '1') {
+        const itemCount = Number((this.db.prepare('SELECT COUNT(*) count FROM profile_items').get() as any)?.count || 0);
+        let legacyCount = 0;
+        try { legacyCount = Number((this.db.prepare('SELECT COUNT(*) count FROM profile_tests').get() as any)?.count || 0); } catch { legacyCount = 0; }
+        if (!itemCount && legacyCount) {
+          this.db.prepare(`INSERT INTO profile_items(profile_id,item_type,test_id,priority,side_header,display_profile_name)
+            SELECT profile_id,'TEST',test_id,priority,side_header,1 FROM profile_tests`).run();
+        }
+        this.setSetting('schema.profile_items_migrated', '1');
+      }
+    } catch {}
+    (this as any)._profileBuilderSchemaReady = true;
   }
 
   protected seedDefaults() {
@@ -766,7 +965,12 @@ CREATE INDEX IF NOT EXISTS idx_tests_billing_order ON tests(department_id, billi
       ['mg/dL','g/dL','%','cells/cumm','IU/L','mmol/L','10^3/uL','10^6/uL'].forEach(name => this.saveUnit({ name, active: 1 }));
     }
     this.seedSampleBillingMasters();
-    this.seedComprehensiveLabMasters();
+    try {
+      this.seedComprehensiveLabMasters();
+    } catch (e: any) {
+      console.error('seedComprehensiveLabMasters failed:', e?.message || e);
+      this.audit('masters.seed.comprehensive.fail', String(e?.message || e));
+    }
   }
 
   protected seedSampleBillingMasters() {
@@ -797,10 +1001,18 @@ CREATE INDEX IF NOT EXISTS idx_tests_billing_order ON tests(department_id, billi
     const seedKey = 'seed.comprehensiveLabMasters.v1';
     if (this.getSetting(seedKey, '') === 'DONE') return;
 
-    const ensureDepartment = (name: string, priority: number) => {
+    const ensureDepartment = (name: string, priority: number, code: string) => {
       const existing = this.db.prepare('SELECT id FROM departments WHERE lower(name)=lower(?) LIMIT 1').get(name) as any;
       if (existing?.id) return existing.id;
-      this.db.prepare('INSERT INTO departments(name,priority,active) VALUES(?,?,1)').run(name, priority);
+      const deptCode = String(code || name).trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16) || `D${priority}`;
+      const hasCode = (this.db.prepare(`PRAGMA table_info(departments)`).all() as any[]).some(c => c.name === 'code');
+      if (hasCode) {
+        const byCode = this.db.prepare('SELECT id FROM departments WHERE upper(trim(code))=upper(?) LIMIT 1').get(deptCode) as any;
+        if (byCode?.id) return byCode.id;
+        this.db.prepare('INSERT INTO departments(name,code,priority,active) VALUES(?,?,?,1)').run(name, deptCode, priority);
+      } else {
+        this.db.prepare('INSERT INTO departments(name,priority,active) VALUES(?,?,1)').run(name, priority);
+      }
       return (this.db.prepare('SELECT id FROM departments WHERE lower(name)=lower(?) LIMIT 1').get(name) as any)?.id;
     };
     const ensureUnit = (name: string) => {
@@ -816,13 +1028,13 @@ CREATE INDEX IF NOT EXISTS idx_tests_billing_order ON tests(department_id, billi
       return (this.db.prepare('SELECT id FROM specimen_types WHERE lower(name)=lower(?) LIMIT 1').get(name) as any)?.id;
     };
     const dept: Record<string, number> = {
-      HEM: ensureDepartment('HEMATOLOGY', 1),
-      BIO: ensureDepartment('BIOCHEMISTRY', 2),
-      SER: ensureDepartment('SEROLOGY', 3),
-      URI: ensureDepartment('URINE', 4),
-      MIC: ensureDepartment('MICROBIOLOGY', 5),
-      IMM: ensureDepartment('IMMUNOLOGY', 6),
-      COAG: ensureDepartment('COAGULATION', 7)
+      HEM: ensureDepartment('HEMATOLOGY', 1, 'HEM'),
+      BIO: ensureDepartment('BIOCHEMISTRY', 2, 'BIO'),
+      SER: ensureDepartment('SEROLOGY', 3, 'SER'),
+      URI: ensureDepartment('URINE', 4, 'URI'),
+      MIC: ensureDepartment('MICROBIOLOGY', 5, 'MIC'),
+      IMM: ensureDepartment('IMMUNOLOGY', 6, 'IMM'),
+      COAG: ensureDepartment('COAGULATION', 7, 'COAG')
     };
     const unit: Record<string, number> = {};
     ['mg/dL','g/dL','%','cells/cumm','IU/L','U/L','mmol/L','mEq/L','10^3/uL','10^6/uL','/HPF','/LPF','Ratio','seconds','INR','uIU/mL','ng/mL','pg/mL','U/mL','Index','mg/L','mL/min/1.73m2'].forEach(u => unit[u] = ensureUnit(u));
@@ -1040,6 +1252,8 @@ CREATE INDEX IF NOT EXISTS idx_tests_billing_order ON tests(department_id, billi
     const pageBreakAfter = d.page_break_after ? 1 : 0;
     const active = d.active === false || d.active === 0 || d.active === '0' ? 0 : 1;
     const priority = +d.priority || 0;
+    const hasCode = (this.db.prepare(`PRAGMA table_info(departments)`).all() as any[]).some(c => c.name === 'code');
+    const deptCode = String(d.code || name).trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16) || `D${priority || 1}`;
 
     const clash = this.db.prepare(
       id
@@ -1061,8 +1275,16 @@ CREATE INDEX IF NOT EXISTS idx_tests_billing_order ON tests(department_id, billi
         throw err;
       }
       oldName = String(existing.name || '').trim();
-      this.db.prepare('UPDATE departments SET name=?,priority=?,page_break_after=?,active=? WHERE id=?')
-        .run(name, priority, pageBreakAfter, active, id);
+      if (hasCode) {
+        this.db.prepare('UPDATE departments SET name=?,code=?,priority=?,page_break_after=?,active=? WHERE id=?')
+          .run(name, deptCode || existing.code || name, priority, pageBreakAfter, active, id);
+      } else {
+        this.db.prepare('UPDATE departments SET name=?,priority=?,page_break_after=?,active=? WHERE id=?')
+          .run(name, priority, pageBreakAfter, active, id);
+      }
+    } else if (hasCode) {
+      this.db.prepare('INSERT INTO departments(name,code,priority,page_break_after,active) VALUES(?,?,?,?,?)')
+        .run(name, deptCode, priority, pageBreakAfter, active);
     } else {
       this.db.prepare('INSERT INTO departments(name,priority,page_break_after,active) VALUES(?,?,?,?)')
         .run(name, priority, pageBreakAfter, active);
@@ -1667,6 +1889,325 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     });
   }
 
+  /** Single test with full edit graph — never used for list screens. */
+  getTest(id: number) {
+    const testId = Number(id || 0);
+    if (!testId) return null;
+    const t = this.db.prepare(`SELECT t.*, d.name department_name, u.name unit_name, m.name method_name,
+      COALESCE(NULLIF(t.billing_order,0), t.priority * 1000, 1000) billing_order,
+      COALESCE(NULLIF(t.report_order,0), t.priority * 1000, 1000) report_order
+      FROM tests t
+      LEFT JOIN departments d ON d.id=t.department_id
+      LEFT JOIN units u ON u.id=t.unit_id
+      LEFT JOIN test_methods m ON m.id=t.method_id
+      WHERE t.id=?`).get(testId) as any;
+    if (!t) return null;
+    const specimens = this.db.prepare(`SELECT m.test_id, s.id, s.name, m.is_default
+      FROM test_specimen_mappings m JOIN specimen_types s ON s.id=m.specimen_type_id
+      WHERE m.test_id=? ORDER BY m.display_order,s.name`).all(testId) as any[];
+    const options = this.db.prepare('SELECT * FROM test_result_options WHERE test_id=? ORDER BY display_order, option_label, option_value').all(testId) as any[];
+    const refs = this.db.prepare('SELECT * FROM test_reference_ranges WHERE test_id=? ORDER BY display_order, gender').all(testId) as any[];
+    const formula = this.db.prepare('SELECT * FROM test_formulas WHERE test_id=? AND is_active=1 ORDER BY id DESC LIMIT 1').get(testId) as any;
+    const formulaVars = formula
+      ? this.db.prepare(`SELECT v.*, t.name source_test_name, t.code source_test_code
+          FROM test_formula_variables v LEFT JOIN tests t ON t.id=v.source_test_id
+          WHERE v.formula_id=? ORDER BY v.id`).all(+formula.id) as any[]
+      : [];
+    return {
+      ...t,
+      method: t.method_name || t.method || '',
+      side_header: '',
+      specimen_ids: specimens.map(s => s.id),
+      specimen_names: specimens.map(s => s.name).join(', '),
+      options,
+      reference_ranges: refs,
+      formula: formula ? { ...formula, variables: formulaVars } : null
+    };
+  }
+
+  /** Paged Masters test list — scalar rows only (no options/refs/formulas). */
+  searchMastersTests(filters: any = {}) {
+    const q = String(filters?.q || filters?.search || '').trim();
+    const pageSize = [25, 50, 100].includes(+filters?.pageSize) ? +filters.pageSize : 50;
+    const page = Math.max(1, Math.floor(+filters?.page || 1));
+    const offset = (page - 1) * pageSize;
+    const state = String(filters?.state || 'ACTIVE').toUpperCase();
+    const status = String(filters?.status || 'ALL').toUpperCase();
+    const departmentId = Number(filters?.departmentId || 0) || 0;
+    const escapeLike = (s: string) => s.replace(/([%_\\])/g, '\\$1');
+    const like = `%${escapeLike(q.toLowerCase())}%`;
+
+    const where: string[] = [];
+    const args: any[] = [];
+    if (state === 'ACTIVE') where.push('COALESCE(t.active,1)=1');
+    else if (state === 'DEACTIVATED') where.push('COALESCE(t.active,1)=0');
+    if (status === 'BILLABLE') where.push('COALESCE(t.billable,1)=1');
+    else if (status === 'NON_BILLABLE') where.push('COALESCE(t.billable,1)=0');
+    if (departmentId > 0) { where.push('t.department_id=?'); args.push(departmentId); }
+    if (q) {
+      where.push(`(
+        lower(COALESCE(t.name,'')) LIKE ? ESCAPE '\\'
+        OR lower(COALESCE(t.display_name,'')) LIKE ? ESCAPE '\\'
+        OR lower(COALESCE(t.code,'')) LIKE ? ESCAPE '\\'
+        OR lower(COALESCE(t.search_keywords,'')) LIKE ? ESCAPE '\\'
+        OR lower(COALESCE(d.name,'')) LIKE ? ESCAPE '\\'
+      )`);
+      args.push(like, like, like, like, like);
+    }
+    const whereSql = where.length ? ` WHERE ${where.join(' AND ')}` : '';
+
+    const activeCount = +((this.db.prepare(`SELECT COUNT(*) c FROM tests t WHERE COALESCE(t.active,1)=1`).get() as any)?.c || 0);
+    const deactivatedCount = +((this.db.prepare(`SELECT COUNT(*) c FROM tests t WHERE COALESCE(t.active,1)=0`).get() as any)?.c || 0);
+
+    const deptArgs: any[] = [];
+    const deptWhere: string[] = ['COALESCE(t.active,1)=1'];
+    if (status === 'BILLABLE') deptWhere.push('COALESCE(t.billable,1)=1');
+    else if (status === 'NON_BILLABLE') deptWhere.push('COALESCE(t.billable,1)=0');
+    if (q) {
+      deptWhere.push(`(
+        lower(COALESCE(t.name,'')) LIKE ? ESCAPE '\\'
+        OR lower(COALESCE(t.display_name,'')) LIKE ? ESCAPE '\\'
+        OR lower(COALESCE(t.code,'')) LIKE ? ESCAPE '\\'
+        OR lower(COALESCE(t.search_keywords,'')) LIKE ? ESCAPE '\\'
+      )`);
+      deptArgs.push(like, like, like, like);
+    }
+    const byDepartmentRows = this.db.prepare(`SELECT t.department_id id, COUNT(*) c
+      FROM tests t
+      WHERE ${deptWhere.join(' AND ')} AND COALESCE(t.department_id,0)>0
+      GROUP BY t.department_id`).all(...deptArgs) as any[];
+    const byDepartment: Record<string, number> = {};
+    for (const row of byDepartmentRows) byDepartment[String(row.id)] = +row.c || 0;
+    const activeFilteredTotal = +((this.db.prepare(`SELECT COUNT(*) c FROM tests t WHERE ${deptWhere.join(' AND ')}`).get(...deptArgs) as any)?.c || 0);
+
+    const total = +((this.db.prepare(`SELECT COUNT(*) c
+      FROM tests t LEFT JOIN departments d ON d.id=t.department_id${whereSql}`).get(...args) as any)?.c || 0);
+
+    const rows = this.db.prepare(`SELECT t.id, t.code, t.name, t.display_name, t.department_id, t.unit_id, t.price,
+      t.active, t.billable, t.active_for_reporting, t.result_data_type, t.input_control_type, t.result_mode,
+      t.priority, t.method,
+      COALESCE(NULLIF(t.billing_order,0), t.priority * 1000, 1000) billing_order,
+      COALESCE(NULLIF(t.report_order,0), t.priority * 1000, 1000) report_order,
+      d.name department_name, u.name unit_name, m.name method_name,
+      (SELECT GROUP_CONCAT(s.name, ', ') FROM test_specimen_mappings sm
+        JOIN specimen_types s ON s.id=sm.specimen_type_id WHERE sm.test_id=t.id) specimen_names
+      FROM tests t
+      LEFT JOIN departments d ON d.id=t.department_id
+      LEFT JOIN units u ON u.id=t.unit_id
+      LEFT JOIN test_methods m ON m.id=t.method_id
+      ${whereSql}
+      ORDER BY COALESCE(d.priority,9999), COALESCE(NULLIF(t.report_order,0), t.priority * 1000, 1000), t.name
+      LIMIT ? OFFSET ?`).all(...args, pageSize, offset) as any[];
+
+    return {
+      rows: rows.map((t: any) => ({
+        ...t,
+        method: t.method_name || t.method || '',
+        specimen_names: t.specimen_names || '',
+        active: !!t.active,
+        billable: !!t.billable,
+        active_for_reporting: t.active_for_reporting !== 0
+      })),
+      total,
+      page,
+      pageSize,
+      counts: {
+        ACTIVE: activeCount,
+        DEACTIVATED: deactivatedCount,
+        filtered: total,
+        activeFiltered: activeFilteredTotal,
+        byDepartment
+      }
+    };
+  }
+
+  /** Lightweight catalog for Billing search — never returns full master graphs. */
+  searchBillingCatalog(filters: any = {}) {
+    const q = String(filters?.q || filters?.search || '').trim();
+    const limit = Math.min(80, Math.max(1, Number(filters?.limit || 40) || 40));
+    const recentKeys = Array.isArray(filters?.recentKeys) ? filters.recentKeys.map((k: any) => String(k || '')).filter(Boolean).slice(0, 20) : [];
+    const escapeLike = (s: string) => s.replace(/([%_\\])/g, '\\$1');
+    const qLower = q.toLowerCase();
+
+    const mapTest = (t: any) => ({
+      id: +t.id,
+      code: t.code || '',
+      name: t.name || '',
+      display_name: t.display_name || t.name || '',
+      price: +t.price || 0,
+      running_cost: +t.running_cost || 0,
+      department_name: t.department_name || '',
+      unit_name: t.unit_name || '',
+      billing_order: +t.billing_order || +t.priority || 0,
+      report_order: +t.report_order || +t.priority || 0,
+      priority: +t.priority || 0,
+      side_header: '',
+      active: 1,
+      billable: 1,
+      search_keywords: t.search_keywords || '',
+      itemType: 'TEST' as const,
+      typeLabel: 'Test',
+      key: `TEST:${t.id}`,
+      meta: `${t.code || 'Test'} · ${t.department_name || 'General'}${t.unit_name ? ' · ' + t.unit_name : ''}`,
+      shortName: String(t.display_name || t.name || '').slice(0, 18)
+    });
+    const mapProfile = (p: any) => ({
+      id: +p.id,
+      code: p.code || '',
+      name: p.name || '',
+      display_name: p.display_name || p.name || '',
+      price: +p.price || 0,
+      running_cost: +p.running_cost || 0,
+      department_name: p.department_name || 'Mixed',
+      billing_order: +p.billing_order || +p.priority || 0,
+      report_order: +p.report_order || +p.priority || 0,
+      priority: +p.priority || 0,
+      side_header: p.side_header || '',
+      active: 1,
+      billable: 1,
+      search_keywords: p.search_keywords || '',
+      tests: [],
+      itemType: 'PROFILE' as const,
+      typeLabel: 'Profile',
+      key: `PROFILE:${p.id}`,
+      meta: `${p.code || p.side_header || 'Profile'}`,
+      shortName: String(p.display_name || p.name || '').slice(0, 18)
+    });
+
+    const matchesQuery = (row: any) => {
+      if (!qLower) return true;
+      const hay = [
+        row?.name, row?.display_name, row?.code, row?.search_keywords, row?.department_name, row?.meta
+      ].map((x: any) => String(x || '').toLowerCase()).join(' ');
+      return qLower.split(/\s+/).filter(Boolean).every((term) => hay.includes(term));
+    };
+
+    const relevance = (row: any) => {
+      const name = String(row?.display_name || row?.name || '').toLowerCase();
+      const code = String(row?.code || '').toLowerCase();
+      let score = 0;
+      if (name === qLower || code === qLower) score += 500;
+      if (name.startsWith(qLower)) score += 200;
+      if (code.startsWith(qLower)) score += 180;
+      if (name.includes(qLower)) score += 80;
+      if (code.includes(qLower)) score += 60;
+      if (String(row?.search_keywords || '').toLowerCase().includes(qLower)) score += 40;
+      // Prefer real masters over stress-seed rows when scores tie.
+      if (String(row?.code || '').toUpperCase().startsWith('STRESS-')) score -= 30;
+      return score;
+    };
+
+    const loadRecent = (requireMatch: boolean) => {
+      const recent: any[] = [];
+      for (const key of recentKeys) {
+        const [type, idRaw] = String(key).split(':');
+        const id = Number(idRaw || 0);
+        if (!id) continue;
+        if (String(type).toUpperCase() === 'PROFILE') {
+          const row = this.db.prepare(`SELECT p.*, CASE WHEN COALESCE(p.department_id,0)=0 THEN 'Mixed' ELSE COALESCE(d.name,'Mixed') END department_name
+            FROM profiles p LEFT JOIN departments d ON d.id=p.department_id
+            WHERE p.id=? AND COALESCE(p.active,1)=1 AND COALESCE(p.billable,1)=1`).get(id) as any;
+          if (row) {
+            const mapped = { ...mapProfile(row), reason: 'Recent' };
+            if (!requireMatch || matchesQuery(mapped)) recent.push(mapped);
+          }
+        } else {
+          const row = this.db.prepare(`SELECT t.*, d.name department_name, u.name unit_name
+            FROM tests t LEFT JOIN departments d ON d.id=t.department_id LEFT JOIN units u ON u.id=t.unit_id
+            WHERE t.id=? AND COALESCE(t.active,1)=1 AND COALESCE(t.billable,1)=1`).get(id) as any;
+          if (row) {
+            const mapped = { ...mapTest(row), reason: 'Recent' };
+            if (!requireMatch || matchesQuery(mapped)) recent.push(mapped);
+          }
+        }
+      }
+      return recent;
+    };
+
+    if (q.length >= 2) {
+      // Fetch a wider SQL pool, then rank/filter in JS so LIMIT isn't filled by unrelated billing_order rows.
+      const sqlLimit = Math.min(200, Math.max(limit * 4, 80));
+      const likeLower = `%${escapeLike(qLower)}%`;
+      const profiles = this.db.prepare(`SELECT p.*, CASE WHEN COALESCE(p.department_id,0)=0 THEN 'Mixed' ELSE COALESCE(d.name,'Mixed') END department_name
+        FROM profiles p LEFT JOIN departments d ON d.id=p.department_id
+        WHERE COALESCE(p.active,1)=1 AND COALESCE(p.billable,1)=1
+          AND (
+            lower(COALESCE(p.name,'')) LIKE ? ESCAPE '\\'
+            OR lower(COALESCE(p.display_name,'')) LIKE ? ESCAPE '\\'
+            OR lower(COALESCE(p.code,'')) LIKE ? ESCAPE '\\'
+            OR lower(COALESCE(p.search_keywords,'')) LIKE ? ESCAPE '\\'
+          )
+        LIMIT ?`).all(likeLower, likeLower, likeLower, likeLower, sqlLimit) as any[];
+      const tests = this.db.prepare(`SELECT t.*, d.name department_name, u.name unit_name
+        FROM tests t LEFT JOIN departments d ON d.id=t.department_id LEFT JOIN units u ON u.id=t.unit_id
+        WHERE COALESCE(t.active,1)=1 AND COALESCE(t.billable,1)=1
+          AND (
+            lower(COALESCE(t.name,'')) LIKE ? ESCAPE '\\'
+            OR lower(COALESCE(t.display_name,'')) LIKE ? ESCAPE '\\'
+            OR lower(COALESCE(t.code,'')) LIKE ? ESCAPE '\\'
+            OR lower(COALESCE(t.search_keywords,'')) LIKE ? ESCAPE '\\'
+          )
+        LIMIT ?`).all(likeLower, likeLower, likeLower, likeLower, sqlLimit) as any[];
+
+      const recent = loadRecent(true);
+      const seen = new Set(recent.map((r) => r.key));
+      const matched = [...profiles.map(mapProfile), ...tests.map(mapTest)]
+        .filter((row) => matchesQuery(row) && !seen.has(row.key))
+        .map((row) => ({ ...row, _score: relevance(row) }))
+        .sort((a, b) => b._score - a._score || String(a.name).localeCompare(String(b.name)));
+
+      const out = [
+        ...recent.map((r) => ({ ...r, _score: relevance(r) + 20 })),
+        ...matched
+      ]
+        .sort((a, b) => b._score - a._score || String(a.name).localeCompare(String(b.name)))
+        .slice(0, limit)
+        .map(({ _score, ...row }) => row);
+      return out;
+    }
+
+    // Empty / short query: recent + small popular set (prefer non-STRESS masters).
+    const out = loadRecent(false);
+    const seen = new Set(out.map((r) => r.key));
+    const addRows = (rows: any[], maxAdd: number) => {
+      let added = 0;
+      for (const row of rows) {
+        if (seen.has(row.key)) continue;
+        out.push(row);
+        seen.add(row.key);
+        added += 1;
+        if (added >= maxAdd) break;
+      }
+    };
+    const profiles = this.db.prepare(`SELECT p.*, CASE WHEN COALESCE(p.department_id,0)=0 THEN 'Mixed' ELSE COALESCE(d.name,'Mixed') END department_name
+      FROM profiles p LEFT JOIN departments d ON d.id=p.department_id
+      WHERE COALESCE(p.active,1)=1 AND COALESCE(p.billable,1)=1
+      ORDER BY CASE WHEN p.code LIKE 'STRESS-%' THEN 1 ELSE 0 END, COALESCE(NULLIF(p.billing_order,0), p.priority), p.name
+      LIMIT 12`).all() as any[];
+    const tests = this.db.prepare(`SELECT t.*, d.name department_name, u.name unit_name
+      FROM tests t LEFT JOIN departments d ON d.id=t.department_id LEFT JOIN units u ON u.id=t.unit_id
+      WHERE COALESCE(t.active,1)=1 AND COALESCE(t.billable,1)=1
+      ORDER BY CASE WHEN t.code LIKE 'STRESS-%' THEN 1 ELSE 0 END, COALESCE(NULLIF(t.billing_order,0), t.priority), t.name
+      LIMIT 12`).all() as any[];
+    addRows(profiles.map((p) => ({ ...mapProfile(p), reason: 'Suggested' })), 4);
+    addRows(tests.map((t) => ({ ...mapTest(t), reason: 'Suggested' })), 5);
+    return out.slice(0, limit);
+  }
+
+  getBillingCatalogItem(type: string, id: number) {
+    const kind = String(type || '').toUpperCase();
+    const itemId = Number(id || 0);
+    if (!itemId) return null;
+    if (kind === 'PROFILE') {
+      const row = this.db.prepare(`SELECT p.*, CASE WHEN COALESCE(p.department_id,0)=0 THEN 'Mixed' ELSE COALESCE(d.name,'Mixed') END department_name
+        FROM profiles p LEFT JOIN departments d ON d.id=p.department_id WHERE p.id=?`).get(itemId) as any;
+      return row ? { ...row, itemType: 'PROFILE', key: `PROFILE:${row.id}` } : null;
+    }
+    const row = this.db.prepare(`SELECT t.*, d.name department_name, u.name unit_name
+      FROM tests t LEFT JOIN departments d ON d.id=t.department_id LEFT JOIN units u ON u.id=t.unit_id WHERE t.id=?`).get(itemId) as any;
+    return row ? { ...row, itemType: 'TEST', key: `TEST:${row.id}` } : null;
+  }
+
   saveTest(t: any) {
     this.ensureAdvancedTestMasterSchema();
     const tx = this.db.transaction(() => {
@@ -1911,7 +2452,8 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     });
     tx();
     this.audit('test.reorder', JSON.stringify(items || []));
-    return this.listTests();
+    // Never return listTests() here — full graphs hang Masters on large DBs.
+    return { ok: true, updated: (items || []).length };
   }
 
   reorderDepartments(items: any[]) {
@@ -1944,7 +2486,8 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     });
     tx();
     this.audit('profile.reorder', JSON.stringify(items || []));
-    return this.listProfiles();
+    // Never return listProfiles() here — full graphs hang Masters on large DBs.
+    return { ok: true, updated: (items || []).length };
   }
 
   listProfiles(activeOnly = false) {
@@ -1965,11 +2508,172 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
       return {...p, display_name: p.display_name || p.name || '', department_id:+p.department_id || 0, department_name:p.department_name || 'Mixed', running_cost:+effectiveRunningCost.toFixed(2), manual_running_cost:Math.max(0, +p.running_cost || 0), auto_running_cost:autoRunningCost, running_cost_mode:runningCostMode, active_for_reporting: p.active_for_reporting !== 0, show_profile_name: p.show_profile_name !== 0, ordering_mode: p.ordering_mode || 'MANUAL', billing_order: p.billing_order || p.priority || 0, report_order: p.report_order || p.priority || 0, search_keywords: p.search_keywords || '', interpretation_enabled: p.interpretation_enabled === 1, interpretation_text: p.interpretation_text || '', break_page_after: Number(p.break_page_after || p.start_new_page || 0) === 1, start_new_page:false, items: normalized, tests: normalized.filter(x => x.item_type === 'TEST').map(x => ({ test_id:x.test_id, priority:x.priority, side_header:'', test_name:x.test_name }))};
     });
   }
+
+  /** Single profile with full items graph for Masters edit. */
+  getProfile(id: number) {
+    this.ensureProfileBuilderSchema();
+    const profileId = Number(id || 0);
+    if (!profileId) return null;
+    const p = this.db.prepare(`SELECT p.*, CASE WHEN COALESCE(p.department_id,0)=0 THEN 'Mixed' ELSE COALESCE(d.name,'Mixed') END department_name
+      FROM profiles p LEFT JOIN departments d ON d.id=p.department_id WHERE p.id=?`).get(profileId) as any;
+    if (!p) return null;
+    const items = this.db.prepare(`SELECT pi.*, pi.child_profile_id profile_id_ref, t.name test_name, t.code test_code,
+      pr.name profile_name, pr.display_name profile_display_name
+      FROM profile_items pi
+      LEFT JOIN tests t ON t.id=pi.test_id
+      LEFT JOIN profiles pr ON pr.id=pi.child_profile_id
+      WHERE pi.profile_id=?
+      ORDER BY pi.priority, pi.id`).all(profileId) as any[];
+    const normalized = items.map((x: any) => ({
+      ...x,
+      item_type: String(x.item_type || 'TEST').toUpperCase(),
+      profile_id: x.child_profile_id,
+      display_profile_name: x.display_profile_name !== 0
+    }));
+    const autoRunningCost = this.profileRunningCost(profileId, new Set<number>(), true);
+    const runningCostMode = String(p.running_cost_mode || 'AUTO').toUpperCase() === 'MANUAL' ? 'MANUAL' : 'AUTO';
+    const effectiveRunningCost = runningCostMode === 'MANUAL' ? Math.max(0, +p.running_cost || 0) : autoRunningCost;
+    return {
+      ...p,
+      display_name: p.display_name || p.name || '',
+      department_id: +p.department_id || 0,
+      department_name: p.department_name || 'Mixed',
+      running_cost: +effectiveRunningCost.toFixed(2),
+      manual_running_cost: Math.max(0, +p.running_cost || 0),
+      auto_running_cost: autoRunningCost,
+      running_cost_mode: runningCostMode,
+      active_for_reporting: p.active_for_reporting !== 0,
+      show_profile_name: p.show_profile_name !== 0,
+      ordering_mode: p.ordering_mode || 'MANUAL',
+      billing_order: p.billing_order || p.priority || 0,
+      report_order: p.report_order || p.priority || 0,
+      search_keywords: p.search_keywords || '',
+      interpretation_enabled: p.interpretation_enabled === 1,
+      interpretation_text: p.interpretation_text || '',
+      break_page_after: Number(p.break_page_after || p.start_new_page || 0) === 1,
+      start_new_page: false,
+      item_count: normalized.length,
+      items: normalized,
+      tests: normalized.filter((x: any) => x.item_type === 'TEST').map((x: any) => ({
+        test_id: x.test_id, priority: x.priority, side_header: '', test_name: x.test_name
+      }))
+    };
+  }
+
+  /** Paged Masters profile list — no item hydration / running-cost walks. */
+  searchMastersProfiles(filters: any = {}) {
+    this.ensureProfileBuilderSchema();
+    const q = String(filters?.q || filters?.search || '').trim();
+    const pageSize = [25, 50, 100].includes(+filters?.pageSize) ? +filters.pageSize : 50;
+    const page = Math.max(1, Math.floor(+filters?.page || 1));
+    const offset = (page - 1) * pageSize;
+    const status = String(filters?.status || 'ALL').toUpperCase();
+    const escapeLike = (s: string) => s.replace(/([%_\\])/g, '\\$1');
+    const like = `%${escapeLike(q.toLowerCase())}%`;
+
+    const where: string[] = [];
+    const args: any[] = [];
+    if (status === 'ACTIVE') where.push('COALESCE(p.active,1)=1');
+    else if (status === 'INACTIVE') where.push('COALESCE(p.active,1)=0');
+    else if (status === 'BILLABLE') where.push('COALESCE(p.billable,1)=1');
+    else if (status === 'NON_BILLABLE') where.push('COALESCE(p.billable,1)=0');
+    else if (status === 'REPORTING') where.push('COALESCE(p.active_for_reporting,1)=1');
+    if (q) {
+      where.push(`(
+        lower(COALESCE(p.name,'')) LIKE ? ESCAPE '\\'
+        OR lower(COALESCE(p.display_name,'')) LIKE ? ESCAPE '\\'
+        OR lower(COALESCE(p.code,'')) LIKE ? ESCAPE '\\'
+        OR lower(COALESCE(p.search_keywords,'')) LIKE ? ESCAPE '\\'
+        OR lower(COALESCE(p.side_header,'')) LIKE ? ESCAPE '\\'
+        OR lower(CASE WHEN COALESCE(p.department_id,0)=0 THEN 'mixed' ELSE COALESCE(d.name,'') END) LIKE ? ESCAPE '\\'
+      )`);
+      args.push(like, like, like, like, like, like);
+    }
+    const whereSql = where.length ? ` WHERE ${where.join(' AND ')}` : '';
+    const orderSql = `ORDER BY COALESCE(NULLIF(p.billing_order,0), NULLIF(p.report_order,0), p.priority), p.name, p.id`;
+
+    const total = +((this.db.prepare(`SELECT COUNT(*) c
+      FROM profiles p LEFT JOIN departments d ON d.id=p.department_id${whereSql}`).get(...args) as any)?.c || 0);
+
+    // Page IDs first (no per-row profile_items scans), then batch counts for this page only.
+    const idRows = this.db.prepare(`SELECT p.id
+      FROM profiles p
+      LEFT JOIN departments d ON d.id=p.department_id
+      ${whereSql}
+      ${orderSql}
+      LIMIT ? OFFSET ?`).all(...args, pageSize, offset) as any[];
+    const ids = idRows.map((r: any) => Number(r.id)).filter((id: number) => Number.isFinite(id) && id > 0);
+    if (!ids.length) {
+      return { rows: [], total, page, pageSize, counts: { filtered: total } };
+    }
+
+    const placeholders = ids.map(() => '?').join(',');
+    const countMap = new Map<number, { item_count: number; test_item_count: number; profile_item_count: number; header_item_count: number }>();
+    const countRows = this.db.prepare(`SELECT profile_id,
+        COUNT(*) item_count,
+        SUM(CASE WHEN UPPER(COALESCE(item_type,'TEST'))='TEST' THEN 1 ELSE 0 END) test_item_count,
+        SUM(CASE WHEN UPPER(COALESCE(item_type,''))='PROFILE' THEN 1 ELSE 0 END) profile_item_count,
+        SUM(CASE WHEN UPPER(COALESCE(item_type,''))='HEADER' THEN 1 ELSE 0 END) header_item_count
+      FROM profile_items
+      WHERE profile_id IN (${placeholders})
+      GROUP BY profile_id`).all(...ids) as any[];
+    for (const row of countRows) {
+      countMap.set(Number(row.profile_id), {
+        item_count: Number(row.item_count || 0),
+        test_item_count: Number(row.test_item_count || 0),
+        profile_item_count: Number(row.profile_item_count || 0),
+        header_item_count: Number(row.header_item_count || 0)
+      });
+    }
+
+    const rows = this.db.prepare(`SELECT p.id, p.code, p.name, p.display_name, p.department_id, p.price, p.active, p.billable,
+      p.active_for_reporting, p.show_profile_name, p.ordering_mode, p.priority, p.side_header, p.search_keywords,
+      COALESCE(NULLIF(p.billing_order,0), NULLIF(p.report_order,0), p.priority, 0) billing_order,
+      COALESCE(NULLIF(p.report_order,0), NULLIF(p.billing_order,0), p.priority, 0) report_order,
+      CASE WHEN COALESCE(p.department_id,0)=0 THEN 'Mixed' ELSE COALESCE(d.name,'Mixed') END department_name
+      FROM profiles p
+      LEFT JOIN departments d ON d.id=p.department_id
+      WHERE p.id IN (${placeholders})`).all(...ids) as any[];
+
+    const byId = new Map(rows.map((p: any) => [Number(p.id), p]));
+    const ordered = ids.map((id: number) => byId.get(id)).filter(Boolean);
+
+    return {
+      rows: ordered.map((p: any) => {
+        const counts = countMap.get(Number(p.id)) || { item_count: 0, test_item_count: 0, profile_item_count: 0, header_item_count: 0 };
+        const tests = counts.test_item_count;
+        const profiles = counts.profile_item_count;
+        const headers = counts.header_item_count;
+        const parts = [
+          tests ? `${tests} test${tests === 1 ? '' : 's'}` : '',
+          profiles ? `${profiles} profile${profiles === 1 ? '' : 's'}` : '',
+          headers ? `${headers} header${headers === 1 ? '' : 's'}` : ''
+        ].filter(Boolean);
+        return {
+          ...p,
+          active: !!p.active,
+          billable: !!p.billable,
+          active_for_reporting: p.active_for_reporting !== 0,
+          show_profile_name: p.show_profile_name !== 0,
+          item_count: counts.item_count,
+          summary: parts.join(' · ') || 'Empty',
+          items: [],
+          tests: []
+        };
+      }),
+      total,
+      page,
+      pageSize,
+      counts: { filtered: total }
+    };
+  }
+
   saveProfile(p: any) {
     this.ensureProfileBuilderSchema();
     const plannedItems = Array.isArray(p.items) && p.items.length ? p.items : (p.tests||[]).map((x:any)=>({ item_type:'TEST', test_id:x.test_id, priority:x.priority, side_header:x.side_header }));
     const conflictList = this.validateProfileItems(+p.id || 0, plannedItems);
     if (conflictList.length && !p.confirm_conflicts) throw new Error('Profile conflicts found: ' + conflictList.join(' | '));
+    let savedId = +p.id || 0;
     const tx = this.db.transaction(() => {
       const runningCostMode = String(p.running_cost_mode || 'AUTO').toUpperCase() === 'MANUAL' ? 'MANUAL' : 'AUTO';
       const manualRunningCost = Math.max(0, +p.running_cost || +p.manual_running_cost || 0);
@@ -1979,6 +2683,7 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
       let id=+p.id||0;
       if(id) this.db.prepare('UPDATE profiles SET code=?,name=?,display_name=?,department_id=?,price=?,running_cost=?,running_cost_mode=?,priority=?,side_header=?,active=?,billable=?,active_for_reporting=?,show_profile_name=?,ordering_mode=?,billing_order=?,report_order=?,search_keywords=?,interpretation_enabled=?,interpretation_text=? WHERE id=?').run(...vals,id);
       else id=Number(this.db.prepare('INSERT INTO profiles(code,name,display_name,department_id,price,running_cost,running_cost_mode,priority,side_header,active,billable,active_for_reporting,show_profile_name,ordering_mode,billing_order,report_order,search_keywords,interpretation_enabled,interpretation_text) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(...vals).lastInsertRowid);
+      savedId = id;
       this.db.prepare('DELETE FROM profile_items WHERE profile_id=?').run(id);
       this.db.prepare('DELETE FROM profile_tests WHERE profile_id=?').run(id);
       const sourceItems = plannedItems;
@@ -2020,7 +2725,8 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
       }
     });
     tx();
-    return this.listProfiles();
+    // Never return listProfiles() — full graph hydration freezes Masters on large DBs.
+    return { ok: true, id: savedId };
   }
 
 
@@ -2050,21 +2756,64 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     if (used) {
       this.db.prepare('UPDATE profiles SET active=0, billable=0, active_for_reporting=0 WHERE id=?').run(profileId);
       this.audit('profile.deactivate', JSON.stringify({ id: profileId, billCount, nestedParentCount, reportItemCount, quickItemCount }));
-      return { action: 'deactivated', id: profileId, list: this.listProfiles() };
+      return { action: 'deactivated', id: profileId };
     }
-
     const tx = this.db.transaction(() => {
       this.db.prepare('DELETE FROM profile_items WHERE profile_id=?').run(profileId);
       this.db.prepare('DELETE FROM profile_items WHERE child_profile_id=?').run(profileId);
-      this.db.prepare('DELETE FROM profile_tests WHERE profile_id=?').run(profileId);
+      try { this.db.prepare('DELETE FROM profile_tests WHERE profile_id=?').run(profileId); } catch {}
       this.db.prepare('DELETE FROM profiles WHERE id=?').run(profileId);
     });
     tx();
     this.audit('profile.delete.unused', JSON.stringify({ id: profileId }));
-    return { action: 'deleted', id: profileId, list: this.listProfiles() };
+    // Never return listProfiles() — full graph hydration freezes Masters on large DBs.
+    return { action: 'deleted', id: profileId };
   }
 
-  listPatients(q = '') { return this.db.prepare('SELECT * FROM patients WHERE name LIKE ? OR mobile LIKE ? OR patient_no LIKE ? OR title LIKE ? OR guardian_name LIKE ? ORDER BY id DESC LIMIT 200').all(`%${q}%`,`%${q}%`,`%${q}%`,`%${q}%`,`%${q}%`); }
+  listPatients(q: string | { q?: string; searchField?: string } = '') {
+    const result = this.searchPatients(typeof q === 'string' ? { q } : (q || {}));
+    return result.rows;
+  }
+
+  /** Paged patient search — never returns unbounded patient tables. */
+  searchPatients(filters: any = {}) {
+    const q = String(filters?.q || filters?.search || '').trim();
+    const field = String(filters?.searchField || filters?.search_field || '').toUpperCase();
+    const pageSize = Math.min(100, Math.max(1, Number(filters?.pageSize || filters?.limit || 50) || 50));
+    const page = Math.max(1, Math.floor(+filters?.page || 1));
+    const offset = (page - 1) * pageSize;
+    const escapeLike = (s: string) => s.replace(/([%_\\])/g, '\\$1');
+    const like = `%${escapeLike(q.toLowerCase())}%`;
+
+    let whereSql = '';
+    const args: any[] = [];
+    if (q) {
+      if (field === 'NAME') {
+        whereSql = ` WHERE lower(COALESCE(p.name,'')) LIKE ? ESCAPE '\\' OR lower(COALESCE(p.title,'')) LIKE ? ESCAPE '\\'`;
+        args.push(like, like);
+      } else if (field === 'MOBILE') {
+        whereSql = ` WHERE lower(COALESCE(p.mobile,'')) LIKE ? ESCAPE '\\'`;
+        args.push(like);
+      } else if (field === 'PATIENT_ID') {
+        whereSql = ` WHERE lower(COALESCE(p.patient_no,'')) LIKE ? ESCAPE '\\'`;
+        args.push(like);
+      } else {
+        whereSql = ` WHERE (
+          lower(COALESCE(p.name,'')) LIKE ? ESCAPE '\\'
+          OR lower(COALESCE(p.mobile,'')) LIKE ? ESCAPE '\\'
+          OR lower(COALESCE(p.patient_no,'')) LIKE ? ESCAPE '\\'
+          OR lower(COALESCE(p.title,'')) LIKE ? ESCAPE '\\'
+          OR lower(COALESCE(p.guardian_name,'')) LIKE ? ESCAPE '\\'
+        )`;
+        args.push(like, like, like, like, like);
+      }
+    }
+
+    const total = +((this.db.prepare(`SELECT COUNT(*) c FROM patients p${whereSql}`).get(...args) as any)?.c || 0);
+    const rows = this.db.prepare(`SELECT p.* FROM patients p${whereSql}
+      ORDER BY p.id DESC LIMIT ? OFFSET ?`).all(...args, pageSize, offset) as any[];
+    return { rows, total, page, pageSize };
+  }
 
   /** Patients with no bill and no quick report — safe to drop. */
   unusedPatientsSqlWhere() {
@@ -2419,15 +3168,90 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
   lastPatientScopeResult() { return this._lastPatientScopeResult; }
 
   listConsultants() {
+    // Heavy full graph — prefer searchConsultants / getConsultant for list UIs.
     this.ensureCommissionSchema();
     const rows = this.db.prepare('SELECT * FROM consultants ORDER BY name').all() as any[];
-    const profiles = this.db.prepare('SELECT * FROM consultant_commission_profiles ORDER BY is_default DESC, id').all() as any[];
-    const rules = this.db.prepare('SELECT r.*, cp.profile_name commission_profile_name FROM consultant_commission_rules r LEFT JOIN consultant_commission_profiles cp ON cp.id=r.commission_profile_id ORDER BY r.id').all() as any[];
-    return rows.map(c => ({
+    return rows.map((c: any) => this.hydrateConsultant(c));
+  }
+
+  /** Paged light consultant rows — no commission profiles/rules graphs. */
+  searchConsultants(filters: any = {}) {
+    this.ensureCommissionSchema();
+    const q = String(filters?.q || filters?.search || '').trim();
+    const status = String(filters?.status || '').toUpperCase();
+    const activeOnly = filters?.activeOnly === true || filters?.activeOnly === 1 || filters?.activeOnly === '1'
+      || status === 'ACTIVE';
+    const archivedOnly = status === 'ARCHIVED' || status === 'INACTIVE';
+    const pageSize = Math.min(100, Math.max(1, Number(filters?.pageSize || filters?.limit || 50) || 50));
+    const page = Math.max(1, Math.floor(+filters?.page || 1));
+    const offset = (page - 1) * pageSize;
+    const escapeLike = (s: string) => s.replace(/([%_\\])/g, '\\$1');
+    const like = `%${escapeLike(q.toLowerCase())}%`;
+
+    const where: string[] = [];
+    const args: any[] = [];
+    if (activeOnly) where.push('COALESCE(c.active,1)=1');
+    else if (archivedOnly) where.push('COALESCE(c.active,1)=0');
+    if (q) {
+      where.push(`(
+        lower(COALESCE(c.name,'')) LIKE ? ESCAPE '\\'
+        OR lower(COALESCE(c.phone,'')) LIKE ? ESCAPE '\\'
+        OR lower(COALESCE(c.clinic,'')) LIKE ? ESCAPE '\\'
+      )`);
+      args.push(like, like, like);
+    }
+    const whereSql = where.length ? ` WHERE ${where.join(' AND ')}` : '';
+    const total = +((this.db.prepare(`SELECT COUNT(*) c FROM consultants c${whereSql}`).get(...args) as any)?.c || 0);
+    const rows = this.db.prepare(`SELECT c.id, c.name, c.phone, c.clinic, c.active,
+      c.default_commission_type, c.default_commission_value, c.default_commission_profile_id
+      FROM consultants c${whereSql}
+      ORDER BY c.name LIMIT ? OFFSET ?`).all(...args, pageSize, offset) as any[];
+    return {
+      rows: rows.map((c: any) => ({
+        ...c,
+        active: c.active !== 0 && c.active !== false,
+        commission_profiles: [],
+        commission_rules: [],
+        commission_groups: [],
+        commission_group_ids: []
+      })),
+      total,
+      page,
+      pageSize
+    };
+  }
+
+  getConsultant(id: number) {
+    this.ensureCommissionSchema();
+    const consultantId = Number(id || 0);
+    if (!consultantId) return null;
+    const row = this.db.prepare('SELECT * FROM consultants WHERE id=?').get(consultantId) as any;
+    return row ? this.hydrateConsultant(row) : null;
+  }
+
+  protected hydrateConsultant(c: any) {
+    const profiles = this.db.prepare('SELECT * FROM consultant_commission_profiles WHERE consultant_id=? ORDER BY is_default DESC, id').all(+c.id) as any[];
+    const rules = this.db.prepare(`SELECT r.*, cp.profile_name commission_profile_name
+      FROM consultant_commission_rules r
+      LEFT JOIN consultant_commission_profiles cp ON cp.id=r.commission_profile_id
+      WHERE r.consultant_id=?
+      ORDER BY r.id`).all(+c.id) as any[];
+    const assignments = this.db.prepare(`SELECT a.consultant_id,a.group_id,a.priority,g.name group_name,g.calculation_type,g.rate,g.fixed_amount
+      FROM consultant_commission_group_assignments a
+      JOIN commission_groups g ON g.id=a.group_id
+      WHERE a.consultant_id=? AND a.active=1
+      ORDER BY a.priority,a.id`).all(+c.id) as any[];
+    return {
       ...c,
-      commission_profiles: profiles.filter(p => +p.consultant_id === +c.id).map(p => ({...p, active: p.active !== 0, is_default: p.is_default === 1})),
-      commission_rules: rules.filter(r => +r.consultant_id === +c.id)
-    }));
+      active: c.active !== 0 && c.active !== false,
+      commission_profiles: profiles.map(p => {
+        const technique = this.deriveCommissionTechnique(p);
+        return { ...p, technique, commission_technique: technique, active: p.active !== 0, is_default: p.is_default === 1 };
+      }),
+      commission_rules: rules,
+      commission_groups: assignments,
+      commission_group_ids: assignments.map(a => +a.group_id)
+    };
   }
 
   saveConsultant(c: any) {
@@ -2441,14 +3265,18 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
         this.db.prepare('DELETE FROM consultant_commission_rules WHERE consultant_id=?').run(id);
         this.db.prepare('DELETE FROM consultant_commission_profiles WHERE consultant_id=?').run(id);
         const profileIdMap = new Map<any, number>();
-        const profileInsert = this.db.prepare('INSERT INTO consultant_commission_profiles(consultant_id,profile_name,description,commission_type,commission_value,calculation_base,extra_deduction_type,extra_deduction_value,min_commission,max_commission,round_mode,discount_basis,fixed_apply_mode,effective_from,effective_to,status,active,is_default) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-        for (const p of c.commission_profiles) {
+        const profileInsert = this.db.prepare('INSERT INTO consultant_commission_profiles(consultant_id,profile_name,description,commission_type,commission_value,calculation_base,extra_deduction_type,extra_deduction_value,min_commission,max_commission,round_mode,discount_basis,fixed_apply_mode,effective_from,effective_to,status,active,is_default,commission_mode,commission_technique,formula_expression) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+        for (const raw of c.commission_profiles) {
+          const p = this.applyCommissionTechniqueToProfile(raw);
           const name = this.normalizeName(p.profile_name || p.name || 'Commission Profile');
-          const newId = Number(profileInsert.run(id, name, p.description || '', this.normalizeCommissionType(p.commission_type), +p.commission_value || 0, this.normalizeCalculationBase(p.calculation_base), this.normalizeDeductionType(p.extra_deduction_type), +p.extra_deduction_value || 0, Math.max(0,+p.min_commission||0), Math.max(0,+p.max_commission||0), this.normalizeCommissionRoundMode(p.round_mode), this.normalizeDiscountBasis(p.discount_basis), this.normalizeFixedApplyMode(p.fixed_apply_mode), p.effective_from || null, p.effective_to || null, this.normalizeCommissionStatus(p.status), p.active === false ? 0 : 1, p.is_default ? 1 : 0).lastInsertRowid);
-          profileIdMap.set(p.id || p.temp_id || name, newId);
-          profileIdMap.set(String(p.id || p.temp_id || name), newId);
-          profileIdMap.set(p.temp_id || String(p.id || name), newId);
-          if (p.is_default) this.db.prepare('UPDATE consultants SET default_commission_profile_id=? WHERE id=?').run(newId, id);
+          const newId = Number(profileInsert.run(id, name, p.description || '', this.normalizeCommissionType(p.commission_type), +p.commission_value || 0, this.normalizeCalculationBase(p.calculation_base), this.normalizeDeductionType(p.extra_deduction_type), +p.extra_deduction_value || 0, Math.max(0,+p.min_commission||0), Math.max(0,+p.max_commission||0), this.normalizeCommissionRoundMode(p.round_mode), this.normalizeDiscountBasis(p.discount_basis), this.normalizeFixedApplyMode(p.fixed_apply_mode), p.effective_from || null, p.effective_to || null, this.normalizeCommissionStatus(p.status), p.active === false ? 0 : 1, p.is_default ? 1 : 0, this.normalizeCommissionMode(p.commission_mode), this.normalizeCommissionTechnique(p.technique || p.commission_technique) || 'PERCENT_NET', String(p.formula_expression || '').trim() || null).lastInsertRowid);
+          profileIdMap.set(raw.id || raw.temp_id || name, newId);
+          profileIdMap.set(String(raw.id || raw.temp_id || name), newId);
+          profileIdMap.set(raw.temp_id || String(raw.id || name), newId);
+          if (p.is_default) {
+            this.db.prepare('UPDATE consultants SET default_commission_profile_id=?, default_commission_type=?, default_commission_value=? WHERE id=?')
+              .run(newId, this.normalizeCommissionType(p.commission_type), +p.commission_value || 0, id);
+          }
         }
         const defaultProfile = this.db.prepare('SELECT id FROM consultant_commission_profiles WHERE consultant_id=? AND is_default=1 ORDER BY id LIMIT 1').get(id) as any;
         if (!defaultProfile?.id) {
@@ -2464,9 +3292,18 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
           if (r.item_id && (String(r.item_type || '').toUpperCase() === 'TEST' || String(r.item_type || '').toUpperCase() === 'PROFILE')) ruleInsert.run(id, String(r.item_type).toUpperCase(), +r.item_id, action, commissionProfileId);
         }
       }
+      // Persist selected predefined groups for this referrer (checkbox list on Consultants page).
+      if (Array.isArray(c.commission_group_ids) || Array.isArray(c.commission_groups)) {
+        const groupIds = Array.isArray(c.commission_group_ids)
+          ? c.commission_group_ids.map((x:any)=>Number(x)).filter((x:number)=>x>0)
+          : (c.commission_groups || []).map((g:any)=>Number(g.group_id || g.id)).filter((x:number)=>x>0);
+        this.db.prepare('DELETE FROM consultant_commission_group_assignments WHERE consultant_id=?').run(id);
+        const ins = this.db.prepare('INSERT INTO consultant_commission_group_assignments(consultant_id,group_id,priority,active) VALUES(?,?,?,1)');
+        groupIds.forEach((groupId:number, idx:number) => ins.run(id, groupId, (idx + 1) * 10));
+      }
     });
     tx();
-    return this.listConsultants();
+    return this.searchConsultants({ page: 1, pageSize: 50 }).rows;
   }
 
   deleteConsultant(id: number) {
@@ -2474,7 +3311,8 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     const consultantId = Number(id || 0);
     if (!consultantId) throw new Error('Invalid consultant.');
     const consultant = this.db.prepare('SELECT * FROM consultants WHERE id=?').get(consultantId) as any;
-    if (!consultant) return { action: 'missing', consultants: this.listConsultants() };
+    const lightList = () => this.searchConsultants({ page: 1, pageSize: 50 }).rows;
+    if (!consultant) return { action: 'missing', consultants: lightList() };
 
     const billCount = Number((this.db.prepare('SELECT COUNT(*) count FROM bills WHERE consultant_id=?').get(consultantId) as any)?.count || 0);
     const hasAuditReferences = billCount > 0;
@@ -2482,7 +3320,7 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     if (hasAuditReferences) {
       this.db.prepare('UPDATE consultants SET active=0 WHERE id=?').run(consultantId);
       this.audit('consultant.archive', JSON.stringify({ id: consultantId, name: consultant.name, billCount }));
-      return { action: 'archived', consultants: this.listConsultants() };
+      return { action: 'archived', consultants: lightList() };
     }
 
     const tx = this.db.transaction(() => {
@@ -2493,7 +3331,7 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     });
     tx();
     this.audit('consultant.delete', JSON.stringify({ id: consultantId, name: consultant.name }));
-    return { action: 'deleted', consultants: this.listConsultants() };
+    return { action: 'deleted', consultants: lightList() };
   }
 
   protected normalizeCommissionType(value:any) {
@@ -2507,6 +3345,201 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
   protected normalizeDeductionType(value:any) {
     const v = String(value || 'NONE').toUpperCase();
     return ['NONE','AMOUNT','PERCENT'].includes(v) ? v : 'NONE';
+  }
+
+  /** First-class per-referrer technique catalog. */
+  protected normalizeCommissionTechnique(value:any) {
+    const v = String(value || '').toUpperCase().trim();
+    if ([
+      'PERCENT_NET',           // per item after item disc − bill total disc (default)
+      'PERCENT_NET_NO_BILL',   // per item after item disc, ignore bill disc
+      'PERCENT_GROSS',         // per item before item disc
+      'PERCENT_PROFIT',
+      'FIXED_PER_ITEM',        // legacy alias of FIXED_AFTER_DISCOUNT
+      'FIXED_BEFORE_DISCOUNT', // direct ₹ before discount (full amount)
+      'FIXED_AFTER_DISCOUNT',  // direct ₹ after discount (scaled by net/gross)
+      'FIXED_PER_QTY',
+      'PERCENT_BILL',          // net bill after disc
+      'PERCENT_BILL_BEFORE',   // net bill before total disc
+      'FIXED_BILL',
+      'CUSTOM_FORMULA', 'FORMULA',
+      'NONE'
+    ].includes(v)) {
+      if (v === 'FORMULA') return 'CUSTOM_FORMULA';
+      if (v === 'FIXED_PER_ITEM') return 'FIXED_AFTER_DISCOUNT';
+      return v;
+    }
+    return '';
+  }
+
+  protected normalizeCommissionMode(value:any) {
+    const v = String(value || 'ITEM').toUpperCase();
+    return v === 'BILL' ? 'BILL' : 'ITEM';
+  }
+
+  protected deriveCommissionTechnique(profile:any): string {
+    const explicit = this.normalizeCommissionTechnique(profile?.technique || profile?.commission_technique);
+    if (explicit) return explicit;
+    if (String(profile?.formula_expression || '').trim()) return 'CUSTOM_FORMULA';
+    const mode = this.normalizeCommissionMode(profile?.commission_mode);
+    const type = this.normalizeCommissionType(profile?.commission_type);
+    if (mode === 'BILL') {
+      if (type === 'FIXED') return 'FIXED_BILL';
+      if (type === 'NONE') return 'NONE';
+      return this.normalizeDiscountBasis(profile?.discount_basis) === 'BEFORE_DISCOUNT' ? 'PERCENT_BILL_BEFORE' : 'PERCENT_BILL';
+    }
+    if (type === 'NONE') return 'NONE';
+    if (type === 'FIXED') {
+      if (this.normalizeFixedApplyMode(profile?.fixed_apply_mode) === 'PER_QUANTITY') return 'FIXED_PER_QTY';
+      return this.normalizeDiscountBasis(profile?.discount_basis) === 'BEFORE_DISCOUNT' ? 'FIXED_BEFORE_DISCOUNT' : 'FIXED_AFTER_DISCOUNT';
+    }
+    const base = this.normalizeCalculationBase(profile?.calculation_base);
+    if (base === 'NET_AFTER_COST' || base === 'NET_AFTER_COST_DEDUCTION') return 'PERCENT_PROFIT';
+    if (this.normalizeDiscountBasis(profile?.discount_basis) === 'BEFORE_DISCOUNT') return 'PERCENT_GROSS';
+    return 'PERCENT_NET';
+  }
+
+  /** Map catalog technique → stored profile fields used by computeItemCommission. */
+  protected applyCommissionTechniqueToProfile(profile:any): any {
+    const p = { ...(profile || {}) };
+    const technique = this.normalizeCommissionTechnique(p.technique || p.commission_technique) || this.deriveCommissionTechnique(p);
+    p.technique = technique;
+    p.commission_technique = technique;
+    switch (technique) {
+      case 'NONE':
+        p.commission_mode = 'ITEM';
+        p.commission_type = 'NONE';
+        p.commission_value = 0;
+        p.calculation_base = 'GROSS';
+        p.discount_basis = 'AFTER_DISCOUNT';
+        p.fixed_apply_mode = 'PER_ITEM';
+        p.formula_expression = '';
+        break;
+      case 'CUSTOM_FORMULA': {
+        const formula = String(p.formula_expression || p.formula || '').trim();
+        if (!formula) throw new Error('Custom formula expression is required.');
+        const checked = this.validateCommissionFormula({ formula });
+        if (!checked.valid) throw new Error(checked.error || 'Invalid custom formula.');
+        p.commission_mode = 'ITEM';
+        p.commission_type = 'PERCENT';
+        p.calculation_base = 'GROSS';
+        p.discount_basis = 'AFTER_DISCOUNT';
+        p.fixed_apply_mode = 'PER_ITEM';
+        p.formula_expression = formula;
+        break;
+      }
+      case 'FIXED_BEFORE_DISCOUNT':
+        p.commission_mode = 'ITEM';
+        p.commission_type = 'FIXED';
+        p.fixed_apply_mode = 'PER_ITEM';
+        p.calculation_base = 'GROSS';
+        p.discount_basis = 'BEFORE_DISCOUNT';
+        p.formula_expression = '';
+        break;
+      case 'FIXED_AFTER_DISCOUNT':
+      case 'FIXED_PER_ITEM':
+        p.commission_mode = 'ITEM';
+        p.commission_type = 'FIXED';
+        p.fixed_apply_mode = 'PER_ITEM';
+        p.calculation_base = 'GROSS';
+        p.discount_basis = 'AFTER_DISCOUNT';
+        p.technique = 'FIXED_AFTER_DISCOUNT';
+        p.commission_technique = 'FIXED_AFTER_DISCOUNT';
+        p.formula_expression = '';
+        break;
+      case 'FIXED_PER_QTY':
+        p.commission_mode = 'ITEM';
+        p.commission_type = 'FIXED';
+        p.fixed_apply_mode = 'PER_QUANTITY';
+        p.calculation_base = 'GROSS';
+        p.discount_basis = 'AFTER_DISCOUNT';
+        p.formula_expression = '';
+        break;
+      case 'PERCENT_GROSS':
+        p.commission_mode = 'ITEM';
+        p.commission_type = 'PERCENT';
+        p.calculation_base = 'GROSS';
+        p.discount_basis = 'BEFORE_DISCOUNT';
+        p.fixed_apply_mode = 'PER_ITEM';
+        p.formula_expression = '';
+        break;
+      case 'PERCENT_NET_NO_BILL':
+        p.commission_mode = 'ITEM';
+        p.commission_type = 'PERCENT';
+        p.calculation_base = 'GROSS';
+        p.discount_basis = 'AFTER_DISCOUNT';
+        p.fixed_apply_mode = 'PER_ITEM';
+        p.formula_expression = '';
+        break;
+      case 'PERCENT_PROFIT':
+        p.commission_mode = 'ITEM';
+        p.commission_type = 'PERCENT';
+        p.calculation_base = 'NET_AFTER_COST';
+        p.discount_basis = 'AFTER_DISCOUNT';
+        p.fixed_apply_mode = 'PER_ITEM';
+        p.formula_expression = '';
+        break;
+      case 'PERCENT_BILL':
+        p.commission_mode = 'BILL';
+        p.commission_type = 'PERCENT';
+        p.calculation_base = 'GROSS';
+        p.discount_basis = 'AFTER_DISCOUNT';
+        p.fixed_apply_mode = 'PER_BILL';
+        p.formula_expression = '';
+        break;
+      case 'PERCENT_BILL_BEFORE':
+        p.commission_mode = 'BILL';
+        p.commission_type = 'PERCENT';
+        p.calculation_base = 'GROSS';
+        p.discount_basis = 'BEFORE_DISCOUNT';
+        p.fixed_apply_mode = 'PER_BILL';
+        p.formula_expression = '';
+        break;
+      case 'FIXED_BILL':
+        p.commission_mode = 'BILL';
+        p.commission_type = 'FIXED';
+        p.calculation_base = 'GROSS';
+        p.discount_basis = 'AFTER_DISCOUNT';
+        p.fixed_apply_mode = 'PER_BILL';
+        p.formula_expression = '';
+        break;
+      case 'PERCENT_NET':
+      default:
+        p.commission_mode = 'ITEM';
+        p.commission_type = 'PERCENT';
+        p.calculation_base = 'GROSS';
+        p.discount_basis = 'AFTER_DISCOUNT';
+        p.fixed_apply_mode = 'PER_ITEM';
+        p.technique = 'PERCENT_NET';
+        p.commission_technique = 'PERCENT_NET';
+        p.formula_expression = '';
+        break;
+    }
+    p.commission_mode = this.normalizeCommissionMode(p.commission_mode);
+    return p;
+  }
+
+  protected profileEffectiveOnDate(profile:any, billDate:any) {
+    const day = String(billDate || '').trim().slice(0, 10) || new Date().toISOString().slice(0, 10);
+    const from = String(profile?.effective_from || '').trim().slice(0, 10);
+    const to = String(profile?.effective_to || '').trim().slice(0, 10);
+    if (from && day < from) return false;
+    if (to && day > to) return false;
+    return true;
+  }
+
+  protected findInPeriodDefaultProfile(consultantId:number, billDate:any) {
+    const rows = this.db.prepare(`SELECT * FROM consultant_commission_profiles
+      WHERE consultant_id=? AND active=1 AND COALESCE(is_default,0)=1
+      ORDER BY effective_from DESC, id DESC`).all(consultantId) as any[];
+    return rows.find((p:any) => this.profileEffectiveOnDate(p, billDate)) || null;
+  }
+
+  protected findInPeriodProfileById(profileId:number, billDate:any) {
+    if (!profileId) return null;
+    const p = this.db.prepare('SELECT * FROM consultant_commission_profiles WHERE id=? AND active=1').get(profileId) as any;
+    if (!p || !this.profileEffectiveOnDate(p, billDate)) return null;
+    return p;
   }
 
   protected normalizeCommissionRoundMode(value:any) {
@@ -2643,20 +3676,48 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     if(String(payload.calculation_type||'').toUpperCase()==='FORMULA') {
       const checked=this.validateCommissionFormula({formula}); if(!checked.valid) throw new Error(checked.error);
     }
+    const groupId = Number(payload.id || 0);
+    const items = (payload.items || []).map((it: any) => ({
+      item_type: String(it.item_type || 'TEST').toUpperCase(),
+      item_id: Number(it.item_id || it.id || 0)
+    })).filter((it: any) => (it.item_type === 'TEST' || it.item_type === 'PROFILE') && it.item_id);
+    for (const it of items) {
+      const other = this.findOtherGroupForItem(it.item_type, it.item_id, groupId);
+      if (other) {
+        throw new Error(`Item already belongs to commission group "${other.group_name}". Remove it from that group before adding it here.`);
+      }
+    }
+    const consultantIds: number[] | null = Array.isArray(payload.consultant_ids)
+      ? [...new Set((payload.consultant_ids as any[]).map((x: any) => Number(x)).filter((n: number) => !!n))]
+      : null;
+    if (consultantIds) {
+      for (const consultantId of consultantIds) {
+        for (const it of items) {
+          const exc = this.findConsultantExceptionForItem(consultantId, it.item_type, it.item_id);
+          if (exc) {
+            throw new Error(`Consultant already has an item exception for this test/profile. Remove the exception first before assigning the group.`);
+          }
+          const otherPlan = this.findConsultantGroupPlanForItem(consultantId, it.item_type, it.item_id, groupId);
+          if (otherPlan) {
+            throw new Error(`Consultant already has group plan "${otherPlan.group_name}" for this item. Remove that assignment first.`);
+          }
+        }
+      }
+    }
     const tx=this.db.transaction(()=>{
-      let id=Number(payload.id||0); const now=this.nowIst();
+      let id=groupId; const now=this.nowIst();
       const vals=[name,String(payload.code||''),String(payload.description||''),String(payload.calculation_type||'PERCENT_NET').toUpperCase(),Number(payload.rate||0),Number(payload.fixed_amount||0),String(payload.formula_type||'PREDEFINED').toUpperCase(),formula,String(payload.discount_basis||'AFTER_DISCOUNT').toUpperCase(),String(payload.profile_mode||'PROFILE_ONLY').toUpperCase(),Number(payload.min_commission||0),Number(payload.max_commission||0),payload.effective_from||null,payload.effective_to||null,payload.active===false?0:1,now];
       if(id) { this.db.prepare('UPDATE commission_groups SET name=?,code=?,description=?,calculation_type=?,rate=?,fixed_amount=?,formula_type=?,formula_expression=?,discount_basis=?,profile_mode=?,min_commission=?,max_commission=?,effective_from=?,effective_to=?,active=?,version=version+1,updated_at=? WHERE id=?').run(...vals,id); }
       else id=Number(this.db.prepare('INSERT INTO commission_groups(name,code,description,calculation_type,rate,fixed_amount,formula_type,formula_expression,discount_basis,profile_mode,min_commission,max_commission,effective_from,effective_to,active,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(...vals).lastInsertRowid);
       this.db.prepare('DELETE FROM commission_group_items WHERE group_id=?').run(id);
       const ins=this.db.prepare('INSERT OR IGNORE INTO commission_group_items(group_id,item_type,item_id) VALUES(?,?,?)');
-      for(const it of payload.items||[]) ins.run(id,String(it.item_type||'TEST').toUpperCase(),Number(it.item_id||it.id||0));
-      if(Array.isArray(payload.consultant_ids)) {
+      for(const it of items) ins.run(id, it.item_type, it.item_id);
+      if(consultantIds) {
         this.db.prepare('DELETE FROM consultant_commission_group_assignments WHERE group_id=?').run(id);
         const assign=this.db.prepare('INSERT OR IGNORE INTO consultant_commission_group_assignments(consultant_id,group_id,priority,active) VALUES(?,?,?,1)');
-        for(const consultantId of payload.consultant_ids) assign.run(Number(consultantId),id,Number(payload.priority||100));
+        for(const consultantId of consultantIds) assign.run(Number(consultantId),id,Number(payload.priority||100));
       }
-      this.audit('commission.group.save',JSON.stringify({id,name,itemCount:(payload.items||[]).length,consultants:(payload.consultant_ids||[]).length}));
+      this.audit('commission.group.save',JSON.stringify({id,name,itemCount:items.length,consultants:(consultantIds||[]).length}));
       return id;
     });
     const id=tx(); return {id,groups:this.listCommissionGroups()};
@@ -2686,10 +3747,13 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     return this.db.prepare(`SELECT g.*,a.custom_formula,a.custom_rate,a.priority FROM consultant_commission_group_assignments a JOIN commission_groups g ON g.id=a.group_id JOIN commission_group_items gi ON gi.group_id=g.id WHERE a.consultant_id=? AND a.active=1 AND g.active=1 AND gi.item_type=? AND gi.item_id=? AND (g.effective_from IS NULL OR date(g.effective_from)<=date('now','+330 minutes')) AND (g.effective_to IS NULL OR date(g.effective_to)>=date('now','+330 minutes')) ORDER BY a.priority ASC,a.id ASC LIMIT 1`).get(consultantId,itemType,itemId) as any;
   }
 
-  protected computeItemCommission(consultantId:number, item:any, netAmount:number, runningCost:number, beforeDiscountAmount?:number): any {
-    const effectiveNetAmount = Math.max(0, +netAmount || 0);
+  protected computeItemCommission(consultantId:number, item:any, netAmount:number, runningCost:number, beforeDiscountAmount?:any, billDate?:any, itemNetOnly?:number): any {
+    // netAmount = after item disc and after allocated bill disc (default base)
+    // itemNetOnly = after item disc only (used by PERCENT_NET_NO_BILL)
+    let effectiveNetAmount = Math.max(0, +netAmount || 0);
     const rawBeforeDiscountAmount = beforeDiscountAmount === undefined || beforeDiscountAmount === null ? effectiveNetAmount : Number(beforeDiscountAmount);
     const preDiscountAmount = Math.max(effectiveNetAmount, Number.isFinite(rawBeforeDiscountAmount) ? rawBeforeDiscountAmount : effectiveNetAmount);
+    const onDate = billDate || new Date().toISOString().slice(0, 10);
     if (!this.commissionAllowedForItem(item)) return { commission_amount:0, extra_deduction:0, profit_amount:+(effectiveNetAmount-runningCost).toFixed(2), commission_profile_name:'No commission', commission_rule_source:'Outsourced disallowed', commission_status:'CANCELLED' };
     if (!consultantId) return { commission_amount:0, extra_deduction:0, profit_amount:+(effectiveNetAmount-runningCost).toFixed(2), commission_profile_name:'', commission_rule_source:'No consultant', commission_status:'GENERATED' };
     const itemType = String(item.item_type || '').toUpperCase();
@@ -2697,18 +3761,47 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     if (rule && String(rule.action || '').toUpperCase() === 'NO_COMMISSION') return { commission_amount:0, extra_deduction:0, profit_amount:+(effectiveNetAmount-runningCost).toFixed(2), commission_profile_name:'No commission', commission_rule_source:'Item exception', commission_status:'CANCELLED' };
     let profile:any = null;
     let group:any = null;
-    if (rule?.commission_profile_id) profile = this.db.prepare('SELECT * FROM consultant_commission_profiles WHERE id=? AND active=1').get(rule.commission_profile_id) as any;
+    if (rule?.commission_profile_id) profile = this.findInPeriodProfileById(+rule.commission_profile_id, onDate);
     if (!profile && !rule) group = this.resolveCommissionGroup(consultantId,itemType,+item.item_id||0);
-    if (profile && !this.isProfileEffective(profile)) profile = null;
-    if (!profile && !group) profile = this.db.prepare('SELECT cp.* FROM consultants c JOIN consultant_commission_profiles cp ON cp.id=c.default_commission_profile_id WHERE c.id=? AND cp.active=1').get(consultantId) as any;
-    if (profile && !this.isProfileEffective(profile)) profile = null;
-    if (!profile && !group) profile = this.db.prepare('SELECT * FROM consultant_commission_profiles WHERE consultant_id=? AND is_default=1 AND active=1 ORDER BY id LIMIT 1').get(consultantId) as any;
-    if (profile && !this.isProfileEffective(profile)) profile = null;
-    if (!profile && !group) {
-      const legacy = this.db.prepare('SELECT default_commission_type, default_commission_value FROM consultants WHERE id=?').get(consultantId) as any;
-      if (legacy && (+legacy.default_commission_value || 0) > 0) profile = { profile_name:'Legacy default', commission_type: legacy.default_commission_type || 'PERCENT', commission_value:+legacy.default_commission_value || 0, calculation_base:'GROSS', extra_deduction_type:'NONE', extra_deduction_value:0, discount_basis:'AFTER_DISCOUNT', round_mode:'NONE', fixed_apply_mode:'PER_ITEM', min_commission:0, max_commission:0, status:'GENERATED' };
-    }
+    if (!profile && !group) profile = this.findInPeriodDefaultProfile(consultantId, onDate);
+    // No silent legacy default — unconfigured / out of period => 0
     if (!profile && !group) return { commission_amount:0, extra_deduction:0, profit_amount:+(effectiveNetAmount-runningCost).toFixed(2), commission_profile_name:'', commission_rule_source:'No active profile', commission_status:'GENERATED' };
+    if (profile && this.normalizeCommissionMode(profile.commission_mode) === 'BILL') {
+      // Bill-level profiles are applied in prepareBillPayload; per-item path yields 0 here.
+      return { commission_amount:0, extra_deduction:0, profit_amount:+(effectiveNetAmount-runningCost).toFixed(2), commission_profile_name:profile.profile_name || '', commission_rule_source:'Bill mode pending allocation', commission_status:'GENERATED', _bill_mode_profile: profile };
+    }
+    if (profile) {
+      const technique = this.deriveCommissionTechnique(profile);
+      // Per item after item discount, do NOT subtract bill total discount
+      if (technique === 'PERCENT_NET_NO_BILL' && itemNetOnly !== undefined && itemNetOnly !== null) {
+        effectiveNetAmount = Math.max(0, +itemNetOnly || 0);
+      }
+      if (technique === 'CUSTOM_FORMULA') {
+        const formula = String(profile.formula_expression || '').trim();
+        const vars = this.commissionFormulaVariables(item, effectiveNetAmount, runningCost, preDiscountAmount);
+        let commission = 0;
+        try {
+          commission = Math.max(0, +this.evaluateCommissionFormula(formula, vars).toFixed(2));
+        } catch {
+          commission = 0;
+        }
+        const min = Math.max(0, +profile.min_commission || 0);
+        const max = Math.max(0, +profile.max_commission || 0);
+        if (commission > 0 && min > 0) commission = Math.max(commission, min);
+        if (max > 0) commission = Math.min(commission, max);
+        commission = this.applyCommissionRounding(commission, profile.round_mode);
+        return {
+          commission_amount: +commission.toFixed(2),
+          extra_deduction: 0,
+          profit_amount: +(effectiveNetAmount - runningCost - commission).toFixed(2),
+          commission_profile_name: profile.profile_name || '',
+          commission_rule_source: rule ? 'Item override formula' : 'Custom formula',
+          commission_status: this.normalizeCommissionStatus(profile.status),
+          commission_formula: formula,
+          commission_formula_values: JSON.stringify(vars)
+        };
+      }
+    }
     if (group) {
       const vars=this.commissionFormulaVariables(item,effectiveNetAmount,runningCost,preDiscountAmount);
       const kind=String(group.calculation_type||'PERCENT_NET').toUpperCase();
@@ -2728,13 +3821,25 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     const baseMode = this.normalizeCalculationBase(profile.calculation_base);
     const deductionType = this.normalizeDeductionType(profile.extra_deduction_type);
     const extraDeduction = deductionType === 'PERCENT' ? Math.max(0, commissionAmountBase * (+profile.extra_deduction_value || 0) / 100) : deductionType === 'AMOUNT' ? Math.max(0, +profile.extra_deduction_value || 0) : 0;
+    // % after test cost = NET_AFTER_COST on selling/net base
     const commissionBase = Math.max(0, commissionAmountBase - (baseMode === 'GROSS' ? 0 : runningCost) - (baseMode === 'NET_AFTER_COST_DEDUCTION' ? extraDeduction : 0));
     const type = this.normalizeCommissionType(profile.commission_type);
     let commission = 0;
-    if (type === 'FIXED') {
+    const technique = this.deriveCommissionTechnique(profile);
+    if (technique === 'FIXED_AFTER_DISCOUNT' || technique === 'FIXED_PER_ITEM') {
+      // Full commission = billed item rate after discount (line net after item + bill disc share).
+      commission = Math.max(0, effectiveNetAmount);
+    } else if (technique === 'FIXED_BEFORE_DISCOUNT') {
+      // Full commission = billed item rate before discount (gross line amount).
+      commission = Math.max(0, preDiscountAmount);
+    } else if (type === 'FIXED') {
       const applyMode = this.normalizeFixedApplyMode(profile.fixed_apply_mode);
       const qty = Math.max(1, +item.quantity || 1);
-      commission = applyMode === 'PER_QUANTITY' ? Math.max(0,+profile.commission_value||0) * qty : Math.max(0,+profile.commission_value||0);
+      let fixed = applyMode === 'PER_QUANTITY' ? Math.max(0,+profile.commission_value||0) * qty : Math.max(0,+profile.commission_value||0);
+      if (technique === 'FIXED_PER_QTY' && discountBasis === 'AFTER_DISCOUNT') {
+        if (preDiscountAmount > 0) fixed = fixed * (effectiveNetAmount / preDiscountAmount);
+      }
+      commission = Math.max(0, fixed);
     } else if (type === 'PERCENT') {
       commission = Math.max(0, commissionBase * (+profile.commission_value || 0) / 100);
     }
@@ -2751,15 +3856,28 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     this.ensureCommissionSchema();
     const from = String(filters.from || filters.fromDate || '').trim();
     const to = String(filters.to || filters.toDate || '').trim();
+    this.assertFilterDateRange(from, to);
     const consultantId = Number(filters.consultant_id || filters.consultantId || 0);
     const status = String(filters.status || 'ALL').toUpperCase();
     const search = String(filters.search || '').trim();
+    const billStatus = String(filters.bill_status || 'ACTIVE').toUpperCase();
+    const paymentStatus = String(filters.payment_status || 'ALL').toUpperCase();
+    const includeZero = !!filters.include_zero;
     const params:any[] = [];
-    const where:string[] = ['COALESCE(bi.commission_amount,0) > 0'];
-    if (from) { where.push('date(b.bill_date) >= date(?)'); params.push(from); }
-    if (to) { where.push('date(b.bill_date) <= date(?)'); params.push(to); }
+    const where:string[] = includeZero ? ['1=1'] : ['COALESCE(bi.commission_amount,0) > 0'];
+    if (from) { where.push("b.bill_date >= ?"); params.push(from); }
+    if (to) { where.push("b.bill_date < date(?,'+1 day')"); params.push(to); }
     if (consultantId) { where.push('b.consultant_id=?'); params.push(consultantId); }
-    if (status !== 'ALL') {
+    if (billStatus === 'ACTIVE') where.push("UPPER(COALESCE(b.status,'')) NOT IN ('CANCELLED','CANCELED')");
+    else if (billStatus === 'CANCELLED') where.push("UPPER(COALESCE(b.status,'')) IN ('CANCELLED','CANCELED')");
+    if (paymentStatus !== 'ALL') {
+      where.push(`UPPER(CASE WHEN COALESCE(b.due,0)<=0 THEN 'PAID' WHEN COALESCE(b.paid,0)>0 THEN 'PARTIAL' ELSE 'DUE' END)=?`);
+      params.push(paymentStatus);
+    }
+    if (status === 'UNSETTLED') {
+      where.push("UPPER(COALESCE(b.status,'')) NOT IN ('CANCELLED','CANCELED')");
+      where.push("UPPER(COALESCE(bi.commission_status,'GENERATED')) IN ('GENERATED','APPROVED')");
+    } else if (status !== 'ALL') {
       if (status === 'CANCELLED') where.push("UPPER(COALESCE(b.status,'')) IN ('CANCELLED','CANCELED')");
       else { where.push("UPPER(COALESCE(b.status,'')) NOT IN ('CANCELLED','CANCELED')"); where.push('UPPER(COALESCE(bi.commission_status,\'GENERATED\'))=?'); params.push(status); }
     }
@@ -2768,30 +3886,524 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
       where.push('(b.bill_no LIKE ? OR p.name LIKE ? OR c.name LIKE ? OR bi.name LIKE ?)');
       params.push(q,q,q,q);
     }
-    const rows = this.db.prepare(`SELECT bi.id,bi.bill_id,bi.item_type,bi.item_id,bi.name item_name,bi.quantity,bi.net_amount,
+    const billIds = Array.isArray(filters.bill_ids) ? filters.bill_ids.map((x:any)=>Number(x)).filter(Boolean) : [];
+    if (billIds.length) {
+      where.push(`b.id IN (${billIds.map(()=>'?').join(',')})`);
+      params.push(...billIds);
+    }
+    const itemIds = Array.isArray(filters.item_ids) ? filters.item_ids.map((x:any)=>Number(x)).filter(Boolean) : [];
+    if (itemIds.length) {
+      where.push(`bi.id IN (${itemIds.map(()=>'?').join(',')})`);
+      params.push(...itemIds);
+    }
+    const whereSql = where.join(' AND ');
+    const fromSql = `FROM bill_items bi
+      JOIN bills b ON b.id=bi.bill_id
+      LEFT JOIN consultants c ON c.id=b.consultant_id
+      LEFT JOIN patients p ON p.id=b.patient_id
+      WHERE ${whereSql}`;
+
+    const wantsPage = filters.page != null || filters.pageSize != null || filters.limit != null;
+    const pageSize = wantsPage
+      ? Math.min(100, Math.max(1, Number(filters.pageSize || filters.limit || 25) || 25))
+      : 0;
+    const page = wantsPage ? Math.max(1, Math.floor(+filters.page || 1)) : 1;
+    const offset = wantsPage ? (page - 1) * pageSize : 0;
+
+    const simple = this.db.prepare(`SELECT
+        COUNT(bi.id) records,
+        COUNT(DISTINCT bi.bill_id) billCount,
+        COUNT(DISTINCT b.consultant_id) consultantCount,
+        ROUND(SUM(CASE WHEN UPPER(COALESCE(b.status,'')) IN ('CANCELLED','CANCELED') THEN 0 ELSE COALESCE(bi.commission_amount,0) END), 2) commission,
+        ROUND(SUM(CASE WHEN UPPER(COALESCE(b.status,'')) NOT IN ('CANCELLED','CANCELED') AND UPPER(COALESCE(bi.commission_status,'GENERATED'))='GENERATED' THEN COALESCE(bi.commission_amount,0) ELSE 0 END), 2) generated,
+        ROUND(SUM(CASE WHEN UPPER(COALESCE(b.status,'')) NOT IN ('CANCELLED','CANCELED') AND UPPER(COALESCE(bi.commission_status,'GENERATED'))='APPROVED' THEN COALESCE(bi.commission_amount,0) ELSE 0 END), 2) approved,
+        ROUND(SUM(CASE WHEN UPPER(COALESCE(b.status,'')) NOT IN ('CANCELLED','CANCELED') AND UPPER(COALESCE(bi.commission_status,'GENERATED'))='HELD' THEN COALESCE(bi.commission_amount,0) ELSE 0 END), 2) held,
+        ROUND(SUM(CASE WHEN UPPER(COALESCE(b.status,'')) NOT IN ('CANCELLED','CANCELED') AND UPPER(COALESCE(bi.commission_status,'GENERATED'))='PAID' THEN COALESCE(bi.commission_amount,0) ELSE 0 END), 2) paid,
+        ROUND(SUM(CASE WHEN UPPER(COALESCE(b.status,'')) IN ('CANCELLED','CANCELED') OR UPPER(COALESCE(bi.commission_status,'GENERATED'))='CANCELLED' THEN COALESCE(bi.commission_amount,0) ELSE 0 END), 2) cancelled
+      ${fromSql}`).get(...params) as any;
+    const billMoney = this.db.prepare(`SELECT
+        ROUND(COALESCE(SUM(bx.total),0),2) billed, ROUND(COALESCE(SUM(bx.discount),0),2) discount
+      FROM bills bx
+      WHERE bx.id IN (SELECT DISTINCT bi.bill_id ${fromSql})`).get(...params) as any;
+    const totals: any = {
+      records: Number(simple?.records || 0),
+      billCount: Number(simple?.billCount || 0),
+      consultantCount: Number(simple?.consultantCount || 0),
+      commission: Number(simple?.commission || 0),
+      generated: Number(simple?.generated || 0),
+      approved: Number(simple?.approved || 0),
+      held: Number(simple?.held || 0),
+      paid: Number(simple?.paid || 0),
+      cancelled: Number(simple?.cancelled || 0),
+      billed: Number(billMoney?.billed || 0),
+      discount: Number(billMoney?.discount || 0)
+    };
+
+    const selectSql = `SELECT bi.id,bi.bill_id,bi.item_type,bi.item_id,bi.name item_name,bi.quantity,bi.price,
+      bi.discount_type,bi.discount_value,bi.discount_amount,bi.bill_discount_share,bi.net_amount,
       bi.running_cost,bi.extra_deduction,bi.commission_amount,bi.profit_amount,bi.commission_profile_name,bi.commission_rule_source,
+      bi.commission_formula,bi.commission_formula_values,bi.commission_group_id,
       CASE WHEN UPPER(COALESCE(b.status,'')) IN ('CANCELLED','CANCELED') THEN 'CANCELLED' ELSE UPPER(COALESCE(bi.commission_status,'GENERATED')) END commission_status,
       bi.commission_approved_at,bi.commission_paid_at,bi.commission_hold_reason,bi.commission_settlement_id,
-      b.bill_no,b.bill_date,b.total bill_total,b.paid bill_paid,b.due bill_due,b.status bill_status,
+      b.bill_no,b.bill_date,b.total bill_total,b.subtotal bill_subtotal,b.discount bill_discount,b.paid bill_paid,b.due bill_due,b.status bill_status,
+      UPPER(CASE WHEN COALESCE(b.due,0)<=0 THEN 'PAID' WHEN COALESCE(b.paid,0)>0 THEN 'PARTIAL' ELSE 'DUE' END) payment_status,
       c.id consultant_id,c.name consultant_name,c.clinic consultant_clinic,p.name patient_name
+      ${fromSql}
+      ORDER BY datetime(b.bill_date) DESC, b.id DESC, bi.id`;
+
+    const rows = wantsPage
+      ? (this.db.prepare(`${selectSql} LIMIT ? OFFSET ?`).all(...params, pageSize, offset) as any[])
+      : (this.db.prepare(selectSql).all(...params) as any[]);
+
+    Object.keys(totals).forEach(k => { if (typeof totals[k] === 'number') totals[k] = +Number(totals[k]).toFixed(2); });
+    if (wantsPage) {
+      return { rows, totals, total: totals.records, page, pageSize };
+    }
+    return { rows, totals };
+  }
+
+  /**
+   * Calculate and persist commission for fully paid bills in the statement period.
+   * Skips lines already PAID / CANCELLED / REVERSAL_PENDING.
+   */
+  generateCommissionsForStatementPeriod(filters: any = {}) {
+    this.ensureCommissionSchema();
+    const from = String(filters.from || filters.fromDate || '').trim().slice(0, 10);
+    const to = String(filters.to || filters.toDate || '').trim().slice(0, 10);
+    if (!from || !to) throw new Error('Statement period (from / to) is required to calculate commission.');
+    const consultantId = Number(filters.consultant_id || filters.consultantId || 0);
+    const params: any[] = [from, to];
+    const where = [
+      "UPPER(COALESCE(b.status,'')) NOT IN ('CANCELLED','CANCELED')",
+      'COALESCE(b.due,0) <= 0',
+      'COALESCE(b.total,0) > 0',
+      'date(b.bill_date) >= date(?)',
+      'date(b.bill_date) <= date(?)',
+      'COALESCE(b.consultant_id,0) > 0'
+    ];
+    if (consultantId) {
+      where.push('b.consultant_id=?');
+      params.push(consultantId);
+    }
+    const bills = this.db.prepare(`SELECT b.* FROM bills b WHERE ${where.join(' AND ')} ORDER BY b.id`).all(...params) as any[];
+    const upd = this.db.prepare(`UPDATE bill_items SET
+      running_cost=?, extra_deduction=?, commission_amount=?, profit_amount=?,
+      bill_discount_share=?, commission_profile_name=?, commission_rule_source=?,
+      commission_formula=?, commission_formula_values=?, commission_group_id=?, commission_rule_version=?,
+      commission_status=CASE
+        WHEN UPPER(COALESCE(commission_status,'GENERATED')) IN ('APPROVED','HELD') THEN commission_status
+        ELSE 'GENERATED'
+      END
+      WHERE id=? AND UPPER(COALESCE(commission_status,'GENERATED')) NOT IN ('PAID','CANCELLED','REVERSAL_PENDING')`);
+    const tx = this.db.transaction(() => {
+      let updated = 0;
+      for (const bill of bills) {
+        const items = this.db.prepare('SELECT * FROM bill_items WHERE bill_id=? ORDER BY id').all(bill.id) as any[];
+        if (!items.length) continue;
+        const prepared = this.prepareBillPayload({
+          consultant_id: bill.consultant_id,
+          bill_date: String(bill.bill_date || '').slice(0, 10),
+          discount_type: bill.discount_type,
+          discount_value: bill.discount_value,
+          discount: bill.discount,
+          round_mode: bill.round_mode || 'NONE',
+          payment_mode: bill.payment_mode || 'Cash',
+          paid: +bill.total || 0,
+          cash_received: 0,
+          notes: bill.notes || '',
+          computeCommission: true,
+          items: items.map((i: any) => ({
+            item_type: i.item_type,
+            item_id: i.item_id,
+            name: i.name,
+            department_name: i.department_name,
+            quantity: i.quantity,
+            price: i.price,
+            priority: i.priority,
+            side_header: i.side_header,
+            discount_type: i.discount_type,
+            discount_value: i.discount_value,
+            commission_status: i.commission_status
+          }))
+        });
+        items.forEach((row: any, idx: number) => {
+          const calc = prepared.preparedItems[idx];
+          if (!calc) return;
+          const info = upd.run(
+            +calc.running_cost || 0,
+            +calc.extra_deduction || 0,
+            +calc.commission_amount || 0,
+            +calc.profit_amount || 0,
+            +calc.bill_discount_share || 0,
+            calc.commission_profile_name || '',
+            calc.commission_rule_source || '',
+            calc.commission_formula || '',
+            calc.commission_formula_values || '',
+            calc.commission_group_id || null,
+            calc.commission_rule_version || 1,
+            row.id
+          );
+          updated += info.changes || 0;
+        });
+      }
+      return updated;
+    });
+    const updated = tx();
+    this.audit('commission.statement.generate', JSON.stringify({ from, to, consultantId, bills: bills.length, updated }));
+    return { bills: bills.length, updated };
+  }
+
+  /** Whether a commission statement already exists for consultant + period (fully paid bills). */
+  commissionStatementPeriodInfo(filters: any = {}) {
+    this.ensureCommissionSchema();
+    const from = String(filters.from || filters.fromDate || '').trim().slice(0, 10);
+    const to = String(filters.to || filters.toDate || '').trim().slice(0, 10);
+    if (!from || !to) throw new Error('Statement period (from / to) is required.');
+    const consultantId = Number(filters.consultant_id || filters.consultantId || 0);
+    if (!consultantId) throw new Error('Consultant is required.');
+    const row = this.db.prepare(`
+      SELECT
+        COUNT(DISTINCT b.id) bill_count,
+        COUNT(bi.id) line_count,
+        SUM(CASE WHEN TRIM(COALESCE(bi.commission_profile_name,''))<>''
+                   OR (TRIM(COALESCE(bi.commission_rule_source,''))<>''
+                       AND TRIM(COALESCE(bi.commission_rule_source,'')) NOT IN ('Pending statement generation','No consultant','No active profile'))
+                   OR COALESCE(bi.commission_amount,0) > 0
+                   OR UPPER(COALESCE(bi.commission_status,'GENERATED')) IN ('APPROVED','HELD','PAID')
+                 THEN 1 ELSE 0 END) generated_lines,
+        SUM(CASE WHEN UPPER(COALESCE(bi.commission_status,'GENERATED'))='PAID' THEN 1 ELSE 0 END) paid_lines,
+        SUM(CASE WHEN UPPER(COALESCE(bi.commission_status,'GENERATED')) IN ('GENERATED','APPROVED','HELD') THEN 1 ELSE 0 END) resettable_lines,
+        ROUND(SUM(CASE WHEN UPPER(COALESCE(bi.commission_status,'GENERATED'))<>'CANCELLED'
+                       THEN COALESCE(bi.commission_amount,0) ELSE 0 END), 2) commission_total
+      FROM bills b
+      JOIN bill_items bi ON bi.bill_id=b.id
+      WHERE UPPER(COALESCE(b.status,'')) NOT IN ('CANCELLED','CANCELED')
+        AND COALESCE(b.due,0) <= 0
+        AND COALESCE(b.total,0) > 0
+        AND date(b.bill_date) >= date(?)
+        AND date(b.bill_date) <= date(?)
+        AND b.consultant_id=?
+    `).get(from, to, consultantId) as any;
+    const generatedLines = Number(row?.generated_lines || 0);
+    const paidLines = Number(row?.paid_lines || 0);
+    const resettableLines = Number(row?.resettable_lines || 0);
+    return {
+      exists: generatedLines > 0,
+      from,
+      to,
+      consultant_id: consultantId,
+      bill_count: Number(row?.bill_count || 0),
+      line_count: Number(row?.line_count || 0),
+      generated_lines: generatedLines,
+      paid_lines: paidLines,
+      resettable_lines: resettableLines,
+      commission_total: Number(row?.commission_total || 0),
+      can_reset: resettableLines > 0,
+      fully_paid_locked: paidLines > 0 && resettableLines === 0 && generatedLines > 0
+    };
+  }
+
+  /** Clear unsettled commission for a period so it can be regenerated. Paid lines stay locked. */
+  resetCommissionStatementPeriod(filters: any = {}) {
+    this.ensureCommissionSchema();
+    const info = this.commissionStatementPeriodInfo(filters);
+    if (!info.exists) return { ...info, reset: 0 };
+    if (!info.can_reset) {
+      throw new Error('This period is fully settled (paid). Paid commission cannot be reset from here.');
+    }
+    const from = info.from;
+    const to = info.to;
+    const consultantId = info.consultant_id;
+    const result = this.db.prepare(`
+      UPDATE bill_items
+      SET commission_amount=0,
+          profit_amount=ROUND(MAX(0, COALESCE(net_amount,0) - COALESCE(bill_discount_share,0) - COALESCE(running_cost,0)), 2),
+          extra_deduction=0,
+          bill_discount_share=0,
+          commission_profile_name='',
+          commission_rule_source='',
+          commission_formula='',
+          commission_formula_values='',
+          commission_group_id=NULL,
+          commission_rule_version=1,
+          commission_status='GENERATED'
+      WHERE id IN (
+        SELECT bi.id FROM bill_items bi
+        JOIN bills b ON b.id=bi.bill_id
+        WHERE UPPER(COALESCE(b.status,'')) NOT IN ('CANCELLED','CANCELED')
+          AND COALESCE(b.due,0) <= 0
+          AND COALESCE(b.total,0) > 0
+          AND date(b.bill_date) >= date(?)
+          AND date(b.bill_date) <= date(?)
+          AND b.consultant_id=?
+          AND UPPER(COALESCE(bi.commission_status,'GENERATED')) NOT IN ('PAID','CANCELLED','REVERSAL_PENDING')
+      )
+    `).run(from, to, consultantId);
+    this.audit('commission.statement.reset', JSON.stringify({ from, to, consultantId, reset: result.changes || 0 }));
+    return { ...this.commissionStatementPeriodInfo(filters), reset: result.changes || 0 };
+  }
+
+  /** Bill-grouped commission statement for review/settle/export.
+   *  Generates commission only on first load for the period, or when regenerate=true. */
+  listCommissionStatementBills(filters:any = {}) {
+    this.ensureCommissionSchema();
+    this.assertFilterDateRange(filters?.from || filters?.fromDate, filters?.to || filters?.toDate, { required: true });
+    const statementFilters = {
+      ...filters,
+      status: filters.status || 'UNSETTLED',
+      bill_status: filters.bill_status || 'ACTIVE',
+      // Statement is for fully cleared bills unless UI asks otherwise.
+      payment_status: filters.payment_status && filters.payment_status !== 'ALL'
+        ? filters.payment_status
+        : 'PAID'
+    };
+    const period = Number(statementFilters.consultant_id || 0)
+      ? this.commissionStatementPeriodInfo(statementFilters)
+      : { exists: false };
+    const regenerate = statementFilters.regenerate === true || statementFilters.regenerate === 1;
+    const skipGenerate = statementFilters.skipGenerate === true || statementFilters.skipGenerate === 1;
+    if (regenerate) {
+      this.generateCommissionsForStatementPeriod(statementFilters);
+    } else if (!skipGenerate && !period.exists) {
+      this.generateCommissionsForStatementPeriod(statementFilters);
+    }
+
+    const wantsPage = statementFilters.page != null || statementFilters.pageSize != null || statementFilters.limit != null;
+    const pageSize = wantsPage
+      ? Math.min(100, Math.max(1, Number(statementFilters.pageSize || statementFilters.limit || 50) || 50))
+      : 0;
+    const page = wantsPage ? Math.max(1, Math.floor(+statementFilters.page || 1)) : 1;
+    const offset = wantsPage ? (page - 1) * pageSize : 0;
+
+    // Totals for whole period (no row hydrate).
+    const totalsData = this.listCommissionEntries({
+      ...statementFilters,
+      page: 1,
+      pageSize: 1
+    });
+    const billTotal = Number(totalsData.totals?.billCount || 0);
+
+    // Distinct bill ids for this page only.
+    const from = String(statementFilters.from || statementFilters.fromDate || '').trim();
+    const to = String(statementFilters.to || statementFilters.toDate || '').trim();
+    const consultantId = Number(statementFilters.consultant_id || statementFilters.consultantId || 0);
+    const status = String(statementFilters.status || 'UNSETTLED').toUpperCase();
+    const search = String(statementFilters.search || '').trim();
+    const billStatus = String(statementFilters.bill_status || 'ACTIVE').toUpperCase();
+    const paymentStatus = String(statementFilters.payment_status || 'PAID').toUpperCase();
+    const includeZero = !!statementFilters.include_zero;
+    const idParams: any[] = [];
+    const idWhere: string[] = includeZero ? ['1=1'] : ['COALESCE(bi.commission_amount,0) > 0'];
+    if (from) { idWhere.push("b.bill_date >= ?"); idParams.push(from); }
+    if (to) { idWhere.push("b.bill_date < date(?,'+1 day')"); idParams.push(to); }
+    if (consultantId) { idWhere.push('b.consultant_id=?'); idParams.push(consultantId); }
+    if (billStatus === 'ACTIVE') idWhere.push("UPPER(COALESCE(b.status,'')) NOT IN ('CANCELLED','CANCELED')");
+    else if (billStatus === 'CANCELLED') idWhere.push("UPPER(COALESCE(b.status,'')) IN ('CANCELLED','CANCELED')");
+    if (paymentStatus !== 'ALL') {
+      idWhere.push(`UPPER(CASE WHEN COALESCE(b.due,0)<=0 THEN 'PAID' WHEN COALESCE(b.paid,0)>0 THEN 'PARTIAL' ELSE 'DUE' END)=?`);
+      idParams.push(paymentStatus);
+    }
+    if (status === 'UNSETTLED') {
+      idWhere.push("UPPER(COALESCE(b.status,'')) NOT IN ('CANCELLED','CANCELED')");
+      idWhere.push("UPPER(COALESCE(bi.commission_status,'GENERATED')) IN ('GENERATED','APPROVED')");
+    } else if (status !== 'ALL') {
+      if (status === 'CANCELLED') idWhere.push("UPPER(COALESCE(b.status,'')) IN ('CANCELLED','CANCELED')");
+      else {
+        idWhere.push("UPPER(COALESCE(b.status,'')) NOT IN ('CANCELLED','CANCELED')");
+        idWhere.push("UPPER(COALESCE(bi.commission_status,'GENERATED'))=?");
+        idParams.push(status);
+      }
+    }
+    if (search) {
+      const q = `%${search}%`;
+      idWhere.push('(b.bill_no LIKE ? OR p.name LIKE ? OR c.name LIKE ? OR bi.name LIKE ?)');
+      idParams.push(q, q, q, q);
+    }
+    const idSql = `SELECT DISTINCT b.id
       FROM bill_items bi
       JOIN bills b ON b.id=bi.bill_id
       LEFT JOIN consultants c ON c.id=b.consultant_id
       LEFT JOIN patients p ON p.id=b.patient_id
-      WHERE ${where.join(' AND ')}
-      ORDER BY datetime(b.bill_date) DESC, b.id DESC, bi.id`).all(...params) as any[];
-    const totals:any = { records:rows.length, commission:0, generated:0, approved:0, held:0, paid:0, cancelled:0, billCount:0, consultantCount:0 };
-    const bills = new Set<number>(), consultants = new Set<number>();
-    for (const r of rows) {
-      const amount = Number(r.commission_amount || 0);
-      totals.commission += r.commission_status === 'CANCELLED' ? 0 : amount;
-      const key = String(r.commission_status || 'GENERATED').toLowerCase();
-      if (key in totals) totals[key] += amount;
-      bills.add(Number(r.bill_id)); if (r.consultant_id) consultants.add(Number(r.consultant_id));
+      WHERE ${idWhere.join(' AND ')}
+      ORDER BY datetime(b.bill_date) DESC, b.id DESC`;
+    const pageBillIds = (wantsPage
+      ? this.db.prepare(`${idSql} LIMIT ? OFFSET ?`).all(...idParams, pageSize, offset)
+      : this.db.prepare(idSql).all(...idParams)
+    ).map((r: any) => Number(r.id)).filter(Boolean);
+
+    const data = pageBillIds.length
+      ? this.listCommissionEntries({ ...statementFilters, bill_ids: pageBillIds })
+      : { rows: [], totals: totalsData.totals };
+
+    const map = new Map<number, any>();
+    for (const r of data.rows) {
+      const billId = Number(r.bill_id);
+      if (!map.has(billId)) {
+        map.set(billId, {
+          bill_id: billId,
+          bill_no: r.bill_no,
+          bill_date: r.bill_date,
+          patient_name: r.patient_name,
+          consultant_id: r.consultant_id,
+          consultant_name: r.consultant_name,
+          consultant_clinic: r.consultant_clinic,
+          bill_total: +Number(r.bill_total || 0).toFixed(2),
+          bill_subtotal: +Number(r.bill_subtotal || 0).toFixed(2),
+          bill_discount: +Number(r.bill_discount || 0).toFixed(2),
+          bill_paid: +Number(r.bill_paid || 0).toFixed(2),
+          bill_due: +Number(r.bill_due || 0).toFixed(2),
+          bill_status: r.bill_status,
+          payment_status: r.payment_status,
+          commission_total: 0,
+          net_total: 0,
+          item_count: 0,
+          method_summary: '',
+          statuses: new Set<string>(),
+          items: [] as any[]
+        });
+      }
+      const bill = map.get(billId);
+      const item = {
+        ...r,
+        engine_commission: +Number(r.commission_amount || 0).toFixed(2),
+        override_commission: null as number | null,
+        payable_commission: +Number(r.commission_amount || 0).toFixed(2)
+      };
+      bill.items.push(item);
+      bill.item_count += 1;
+      bill.commission_total += item.payable_commission;
+      bill.net_total += +Number(r.net_amount || 0);
+      bill.statuses.add(String(r.commission_status || 'GENERATED'));
     }
-    totals.billCount=bills.size; totals.consultantCount=consultants.size;
-    Object.keys(totals).forEach(k=>{ if(typeof totals[k]==='number') totals[k]=+Number(totals[k]).toFixed(2); });
-    return { rows, totals };
+    const bills = pageBillIds.map(id => map.get(id)).filter(Boolean).map((b: any) => {
+      const methods = [...new Set(b.items.map((i:any) => i.commission_profile_name || i.commission_rule_source || '').filter(Boolean))];
+      const statuses = [...b.statuses];
+      let commission_status = 'GENERATED';
+      if (statuses.every(s => s === 'PAID')) commission_status = 'PAID';
+      else if (statuses.every(s => s === 'CANCELLED')) commission_status = 'CANCELLED';
+      else if (statuses.some(s => s === 'HELD')) commission_status = 'HELD';
+      else if (statuses.some(s => s === 'APPROVED') && !statuses.some(s => s === 'GENERATED')) commission_status = 'APPROVED';
+      else if (statuses.some(s => s === 'GENERATED')) commission_status = 'GENERATED';
+      else commission_status = statuses[0] || 'GENERATED';
+      return {
+        ...b,
+        statuses,
+        commission_status,
+        commission_total: +Number(b.commission_total).toFixed(2),
+        net_total: +Number(b.net_total).toFixed(2),
+        method_summary: methods.slice(0, 3).join(' · ') || '—'
+      };
+    });
+    return {
+      bills,
+      total: billTotal,
+      page: wantsPage ? page : 1,
+      pageSize: wantsPage ? pageSize : billTotal,
+      period: Number(statementFilters.consultant_id || 0)
+        ? this.commissionStatementPeriodInfo(statementFilters)
+        : null,
+      totals: {
+        ...totalsData.totals,
+        billCount: billTotal,
+        commission: +Number(totalsData.totals?.commission || 0).toFixed(2),
+        billed: +Number(totalsData.totals?.billed || 0).toFixed(2),
+        discount: +Number(totalsData.totals?.discount || 0).toFixed(2)
+      }
+    };
+  }
+
+  applyCommissionOverrides(payload:any = {}) {
+    this.ensureCommissionSchema();
+    const items = Array.isArray(payload.items) ? payload.items : [];
+    if (!items.length) return { updated: 0 };
+    const reason = String(payload.reason || 'Statement override').trim();
+    const tx = this.db.transaction(() => {
+      let updated = 0;
+      const get = this.db.prepare(`SELECT id,net_amount,bill_discount_share,running_cost,commission_status FROM bill_items WHERE id=?`);
+      const upd = this.db.prepare(`UPDATE bill_items SET commission_amount=?, profit_amount=?
+        WHERE id=? AND UPPER(COALESCE(commission_status,'GENERATED')) NOT IN ('PAID','CANCELLED')`);
+      for (const it of items) {
+        const id = Number(it.bill_item_id || it.id || 0);
+        if (!id) continue;
+        const row = get.get(id) as any;
+        if (!row) continue;
+        const amount = Math.max(0, +Number(it.commission_amount ?? it.override_commission ?? 0).toFixed(2));
+        const lineNet = Math.max(0, Number(row.net_amount || 0) - Number(row.bill_discount_share || 0));
+        const profit = +(lineNet - Number(row.running_cost || 0) - amount).toFixed(2);
+        const info = upd.run(amount, profit, id);
+        if (info.changes) updated += 1;
+      }
+      this.audit('commission.override', JSON.stringify({ updated, reason, count: items.length }));
+      return updated;
+    });
+    return { updated: tx() };
+  }
+
+  /** Auto-approve selected unsettled lines (optional overrides), then settle. */
+  settleCommissionStatement(payload:any = {}) {
+    this.ensureCommissionSchema();
+    const ids = Array.from(new Set((payload.ids || []).map((x:any)=>Number(x)).filter(Boolean)));
+    if (!ids.length) throw new Error('Select at least one commission line to settle.');
+    if (Array.isArray(payload.overrides) && payload.overrides.length && payload.persist_overrides) {
+      this.applyCommissionOverrides({ items: payload.overrides, reason: payload.override_reason || 'Settled with statement override' });
+    }
+    // If overrides are statement-only, settlement amount uses override values via temporary map.
+    const overrideMap = new Map<number, number>();
+    for (const o of (payload.overrides || [])) {
+      const id = Number(o.bill_item_id || o.id || 0);
+      if (id) overrideMap.set(id, Math.max(0, +Number(o.commission_amount ?? o.override_commission ?? 0).toFixed(2)));
+    }
+
+    const placeholders = ids.map(()=>'?').join(',');
+    const rows = this.db.prepare(`SELECT bi.id,bi.commission_amount,bi.commission_status,b.consultant_id,b.bill_no,b.status bill_status
+      FROM bill_items bi JOIN bills b ON b.id=bi.bill_id
+      WHERE bi.id IN (${placeholders})`).all(...ids) as any[];
+    if (!rows.length) throw new Error('No commission entries found.');
+    const eligible = rows.filter(r => {
+      const st = String(r.commission_status || 'GENERATED').toUpperCase();
+      const billSt = String(r.bill_status || '').toUpperCase();
+      return ['GENERATED','APPROVED','HELD'].includes(st) && !['CANCELLED','CANCELED'].includes(billSt);
+    });
+    if (!eligible.length) throw new Error('No unsettled commission entries available.');
+    const consultantIds = new Set(eligible.map(r => Number(r.consultant_id || 0)));
+    if (consultantIds.size !== 1 || consultantIds.has(0)) throw new Error('A settlement can contain entries for one consultant only.');
+    const consultantId = Number(eligible[0].consultant_id);
+    const approveIds = eligible.filter(r => String(r.commission_status || '').toUpperCase() !== 'APPROVED').map(r => Number(r.id));
+    if (approveIds.length) {
+      this.updateCommissionStatus({ ids: approveIds, status: 'APPROVED' });
+    }
+
+    // Re-read approved rows and settle with optional statement-only override amounts.
+    const approved = this.db.prepare(`SELECT bi.id,bi.commission_amount,b.consultant_id
+      FROM bill_items bi JOIN bills b ON b.id=bi.bill_id
+      WHERE bi.id IN (${eligible.map(()=>'?').join(',')}) AND UPPER(COALESCE(bi.commission_status,'GENERATED'))='APPROVED'
+        AND UPPER(COALESCE(b.status,'')) NOT IN ('CANCELLED','CANCELED')`).all(...eligible.map(r=>r.id)) as any[];
+    if (!approved.length) throw new Error('No approved commission entries are available for settlement.');
+
+    const amount = +approved.reduce((s:number,r:any)=>s+(overrideMap.has(Number(r.id)) ? overrideMap.get(Number(r.id))! : Number(r.commission_amount||0)),0).toFixed(2);
+    const tx=this.db.transaction(()=>{
+      const base = `CS-${this.nowIst().replace(/[^0-9]/g,'').slice(0,14)}`;
+      let settlementNo=base, n=1;
+      while(this.db.prepare('SELECT 1 FROM commission_settlements WHERE settlement_no=?').get(settlementNo)) settlementNo=`${base}-${n++}`;
+      const result=this.db.prepare('INSERT INTO commission_settlements(settlement_no,consultant_id,settlement_date,amount,payment_mode,reference_no,notes) VALUES(?,?,?,?,?,?,?)')
+        .run(settlementNo,consultantId,this.nowIst(),amount,String(payload.payment_mode||'Cash'),String(payload.reference_no||''),String(payload.notes||''));
+      const settlementId=Number(result.lastInsertRowid);
+      const itemInsert=this.db.prepare('INSERT INTO commission_settlement_items(settlement_id,bill_item_id,amount) VALUES(?,?,?)');
+      const now=this.nowIst();
+      for(const r of approved){
+        const lineAmount = overrideMap.has(Number(r.id)) ? overrideMap.get(Number(r.id))! : Number(r.commission_amount||0);
+        if (!payload.persist_overrides && overrideMap.has(Number(r.id))) {
+          // Keep bill snapshot; settlement voucher stores the payable override amount.
+        } else if (payload.persist_overrides && overrideMap.has(Number(r.id))) {
+          // already persisted above
+        }
+        itemInsert.run(settlementId,r.id,+Number(lineAmount).toFixed(2));
+        this.db.prepare("UPDATE bill_items SET commission_status='PAID',commission_paid_at=?,commission_settlement_id=? WHERE id=?").run(now,settlementId,r.id);
+      }
+      this.audit('commission.statement.settle',JSON.stringify({settlementId,settlementNo,consultantId,amount,ids:approved.map(r=>r.id),persist:!!payload.persist_overrides}));
+      return {settlementId,settlementNo,amount};
+    });
+    return tx();
   }
 
   updateCommissionStatus(payload:any = {}) {
@@ -2842,7 +4454,9 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
 
   listCommissionSettlements(filters:any = {}) {
     this.ensureCommissionSchema();
-    const from=String(filters.from||''), to=String(filters.to||''); const params:any[]=[]; const where:string[]=['1=1'];
+    const from=String(filters.from||''), to=String(filters.to||'');
+    this.assertFilterDateRange(from, to);
+    const params:any[]=[]; const where:string[]=['1=1'];
     if(from){where.push('date(cs.settlement_date)>=date(?)');params.push(from);} if(to){where.push('date(cs.settlement_date)<=date(?)');params.push(to);}
     return this.db.prepare(`SELECT cs.*,c.name consultant_name,COUNT(csi.id) item_count
       FROM commission_settlements cs JOIN consultants c ON c.id=cs.consultant_id
@@ -3103,27 +4717,17 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
 
   calculateBillCommission(payload:any) {
     this.ensureCommissionSchema();
-    const consultantId = +payload.consultant_id || 0;
-    const rawItems = (payload.items || []).map((i:any) => {
-      const qty = +i.quantity || 1;
-      const gross = (+i.price || 0) * qty;
-      const discountType = i.discount_type === 'PERCENT' ? 'PERCENT' : 'VALUE';
-      const discountValue = Math.max(0, +i.discount_value || 0);
-      const discountAmount = Math.min(gross, discountType === 'PERCENT' ? gross * discountValue / 100 : discountValue);
-      const itemNet = Math.max(0, gross - discountAmount);
-      return {...i, gross, item_net_amount:itemNet, item_discount_amount:discountAmount};
+    // Live billing preview only — does not persist. Statement generation persists for the period.
+    const prepared = this.prepareBillPayload({
+      ...payload,
+      bill_date: payload.bill_date || new Date().toISOString().slice(0, 10),
+      paid: payload.paid || 0,
+      cash_received: payload.cash_received || 0,
+      payment_mode: payload.payment_mode || 'Cash',
+      round_mode: payload.round_mode || 'NONE',
+      computeCommission: !!payload.computeCommission
     });
-    const itemNetTotal = rawItems.reduce((s:number,i:any)=>s+(+i.item_net_amount||0),0);
-    const billDiscountType = payload.discount_type === 'PERCENT' ? 'PERCENT' : 'VALUE';
-    const billDiscountValue = Math.max(0, +payload.discount_value || +payload.discount || 0);
-    const finalDiscount = Math.min(itemNetTotal, billDiscountType === 'PERCENT' ? itemNetTotal * billDiscountValue / 100 : billDiscountValue);
-    const items = rawItems.map((i:any) => {
-      const share = itemNetTotal > 0 ? finalDiscount * ((+i.item_net_amount || 0) / itemNetTotal) : 0;
-      const netAmount = Math.max(0, (+i.item_net_amount || 0) - share);
-      const runningCost = this.resolveItemRunningCost(i) * (+i.quantity || 1);
-      const calc = this.computeItemCommission(consultantId, i, netAmount, runningCost, +i.gross || netAmount);
-      return {...i, net_amount:+netAmount.toFixed(2), bill_discount_share:+share.toFixed(2), running_cost:+runningCost.toFixed(2), ...calc};
-    });
+    const items = prepared.preparedItems;
     return {
       items,
       running_cost_total:+items.reduce((s:number,i:any)=>s+(+i.running_cost||0),0).toFixed(2),
@@ -3135,9 +4739,19 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
 
   protected prepareBillPayload(payload: any) {
     const items = (payload.items || []);
+    const computeCommission = payload.computeCommission === true;
+    const consultantId = +payload.consultant_id || 0;
     const preparedItems = items.map((i:any) => {
       const qty = +i.quantity || 1;
-      const price = +i.price || 0;
+      let price = +i.price || 0;
+      if (consultantId) {
+        const custom = this.resolveConsultantSellingRate(consultantId, i.item_type, i.item_id);
+        if (custom !== null) {
+          const master = this.masterCatalogPrice(i.item_type, i.item_id);
+          // Use consultant selling rate when line is empty or still at master catalog price.
+          if (!price || price <= 0 || Math.abs(price - master) < 0.009) price = custom;
+        }
+      }
       const gross = price * qty;
       const discountType = i.discount_type === 'PERCENT' ? 'PERCENT' : 'VALUE';
       const discountValue = Math.max(0, +i.discount_value || 0);
@@ -3145,7 +4759,7 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
       const netAmount = Math.max(0, gross - discountAmount);
       return {...i, quantity: qty, price, gross, discount_type: discountType, discount_value: discountValue, discount_amount: discountAmount, total: netAmount, net_amount: netAmount};
     });
-    const consultantId = +payload.consultant_id || 0;
+    const billDate = String(payload.bill_date || '').trim().slice(0, 10) || new Date().toISOString().slice(0, 10);
     const subtotal = preparedItems.reduce((sum:number, i:any) => sum + (+i.gross || 0), 0);
     const itemsNetTotal = preparedItems.reduce((sum:number, i:any) => sum + (+i.net_amount || 0), 0);
     const discountType = payload.discount_type === 'PERCENT' ? 'PERCENT' : 'VALUE';
@@ -3156,21 +4770,174 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     const roundMode = payload.round_mode || 'NONE';
     const roundedTotal = roundMode === 'NEAREST' ? Math.round(beforeRound) : roundMode === 'UP' ? Math.ceil(beforeRound) : roundMode === 'DOWN' ? Math.floor(beforeRound) : beforeRound;
     const roundOff = +(roundedTotal - beforeRound).toFixed(2);
+    const billModeProfile = computeCommission && consultantId ? this.findInPeriodDefaultProfile(consultantId, billDate) : null;
+    const useBillMode = !!(billModeProfile && this.normalizeCommissionMode(billModeProfile.commission_mode) === 'BILL');
     preparedItems.forEach((i:any) => {
       const share = itemsNetTotal > 0 ? finalDiscount * ((+i.net_amount || 0) / itemsNetTotal) : 0;
-      const commissionNetAmount = Math.max(0, (+i.net_amount || 0) - share);
+      const itemNet = Math.max(0, +i.net_amount || 0);
+      const commissionNetAmount = Math.max(0, itemNet - share);
       const runningCost = this.resolveItemRunningCost(i) * (+i.quantity || 1);
-      const calc = this.computeItemCommission(consultantId, i, commissionNetAmount, runningCost, +i.gross || +i.net_amount || 0);
       i.running_cost = +runningCost.toFixed(2);
       i.bill_discount_share = +share.toFixed(2);
+      if (!computeCommission) {
+        i.commission_amount = 0;
+        i.extra_deduction = 0;
+        i.profit_amount = +(commissionNetAmount - runningCost).toFixed(2);
+        i.commission_profile_name = '';
+        i.commission_rule_source = 'Pending statement generation';
+        i.commission_status = i.commission_status || 'GENERATED';
+        return;
+      }
+      const calc = this.computeItemCommission(consultantId, i, commissionNetAmount, runningCost, +i.gross || itemNet, billDate, itemNet);
       Object.assign(i, calc);
+      i._alloc_bill = !!(calc as any)._bill_mode_profile;
+      delete i._bill_mode_profile;
     });
+    if (computeCommission && useBillMode && billModeProfile) {
+      const billTech = this.deriveCommissionTechnique(billModeProfile);
+      const allocItems = preparedItems.filter((i:any) => i._alloc_bill && String(i.commission_status || '') !== 'CANCELLED');
+      const useBeforeBillDisc = billTech === 'PERCENT_BILL_BEFORE' || this.normalizeDiscountBasis(billModeProfile.discount_basis) === 'BEFORE_DISCOUNT';
+      const allocBase = +allocItems.reduce((s:number,i:any)=>{
+        const line = useBeforeBillDisc
+          ? Math.max(0, +i.net_amount || 0)
+          : Math.max(0, (+i.net_amount || 0) - (+i.bill_discount_share || 0));
+        return s + line;
+      }, 0).toFixed(2);
+      const type = this.normalizeCommissionType(billModeProfile.commission_type);
+      let billCommission = 0;
+      if (type === 'FIXED') billCommission = allocItems.length ? Math.max(0, +billModeProfile.commission_value || 0) : 0;
+      else if (type === 'PERCENT') billCommission = Math.max(0, allocBase * (+billModeProfile.commission_value || 0) / 100);
+      const min = Math.max(0, +billModeProfile.min_commission || 0);
+      const max = Math.max(0, +billModeProfile.max_commission || 0);
+      if (billCommission > 0 && min > 0) billCommission = Math.max(billCommission, min);
+      if (max > 0) billCommission = Math.min(billCommission, max);
+      billCommission = this.applyCommissionRounding(billCommission, billModeProfile.round_mode);
+      allocItems.forEach((i:any) => {
+        const lineNet = useBeforeBillDisc
+          ? Math.max(0, +i.net_amount || 0)
+          : Math.max(0, (+i.net_amount || 0) - (+i.bill_discount_share || 0));
+        const share = allocBase > 0 ? billCommission * (lineNet / allocBase) : 0;
+        i.commission_amount = +share.toFixed(2);
+        i.commission_profile_name = billModeProfile.profile_name || 'Bill commission';
+        i.commission_rule_source = billTech === 'PERCENT_BILL_BEFORE' ? 'Bill before discount (excl. exceptions)' : 'Bill default (excl. exceptions)';
+        i.profit_amount = +(lineNet - (+i.running_cost || 0) - (+i.commission_amount || 0)).toFixed(2);
+      });
+    }
+    preparedItems.forEach((i:any) => { delete i._alloc_bill; });
     const total = +roundedTotal.toFixed(2);
     const cashReceived = +payload.cash_received || 0;
     const paidInput = +payload.paid || 0;
     const paid = payload.payment_mode === 'Cash' && cashReceived > 0 ? Math.min(cashReceived, total) : Math.min(paidInput, total);
     const cashReturn = payload.payment_mode === 'Cash' ? Math.max(0, cashReceived - total) : 0;
-    return { preparedItems, subtotal, discountType, discountValue, finalDiscount, total, paid, due: Math.max(0, total - paid), paymentMode: payload.payment_mode || 'Cash', roundMode, roundOff, cashReceived, cashReturn, notes: payload.notes || '' };
+    const due = Math.max(0, +(total - paid).toFixed(2));
+    return { preparedItems, subtotal, discountType, discountValue, finalDiscount, total, paid, due, paymentMode: payload.payment_mode || 'Cash', roundMode, roundOff, cashReceived, cashReturn, notes: payload.notes || '' };
+  }
+
+  /** Versioned commission config save (does not wipe history). */
+  saveConsultantCommissionConfig(payload:any = {}) {
+    this.ensureCommissionSchema();
+    const consultantId = Number(payload.consultant_id || 0);
+    if (!consultantId) throw new Error('Consultant is required.');
+    const consultant = this.db.prepare('SELECT id FROM consultants WHERE id=?').get(consultantId) as any;
+    if (!consultant) throw new Error('Consultant not found.');
+
+    const tx = this.db.transaction(() => {
+      const closeId = Number(payload.close_profile_id || 0);
+      const newFrom = String(payload.effective_from || '').trim().slice(0, 10);
+      if (closeId && newFrom) {
+        const prev = this.db.prepare('SELECT * FROM consultant_commission_profiles WHERE id=? AND consultant_id=?').get(closeId, consultantId) as any;
+        if (prev) {
+          const d = new Date(newFrom + 'T00:00:00');
+          d.setDate(d.getDate() - 1);
+          const closeTo = d.toISOString().slice(0, 10);
+          const from = String(prev.effective_from || '').slice(0, 10);
+          const effectiveTo = from && closeTo < from ? from : closeTo;
+          this.db.prepare('UPDATE consultant_commission_profiles SET effective_to=?, is_default=0 WHERE id=?').run(effectiveTo, closeId);
+        }
+      }
+
+      const profileIdMap = new Map<any, number>();
+      // Keep existing profiles in map for rule refs
+      const existing = this.db.prepare('SELECT id, profile_name FROM consultant_commission_profiles WHERE consultant_id=?').all(consultantId) as any[];
+      for (const p of existing) {
+        profileIdMap.set(p.id, p.id);
+        profileIdMap.set(String(p.id), p.id);
+        profileIdMap.set(p.profile_name, p.id);
+      }
+
+      const insert = this.db.prepare(`INSERT INTO consultant_commission_profiles(
+        consultant_id,profile_name,description,commission_type,commission_value,calculation_base,
+        extra_deduction_type,extra_deduction_value,min_commission,max_commission,round_mode,discount_basis,
+        fixed_apply_mode,effective_from,effective_to,status,active,is_default,commission_mode,profile_key,supersedes_profile_id,commission_technique,formula_expression
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+
+      for (const raw of (payload.new_profiles || [])) {
+        const p = this.applyCommissionTechniqueToProfile(raw);
+        if (!String(p.effective_from || '').trim()) throw new Error('Effective from date is required for commission profiles.');
+        const name = this.normalizeName(p.profile_name || p.name || 'Commission Profile');
+        const key = String(p.profile_key || (p.is_default ? `default:${consultantId}` : `exc:${name}`)).trim();
+        const newId = Number(insert.run(
+          consultantId, name, p.description || '',
+          this.normalizeCommissionType(p.commission_type), +p.commission_value || 0,
+          this.normalizeCalculationBase(p.calculation_base),
+          this.normalizeDeductionType(p.extra_deduction_type), +p.extra_deduction_value || 0,
+          Math.max(0,+p.min_commission||0), Math.max(0,+p.max_commission||0),
+          this.normalizeCommissionRoundMode(p.round_mode), this.normalizeDiscountBasis(p.discount_basis),
+          this.normalizeFixedApplyMode(p.fixed_apply_mode),
+          String(p.effective_from).slice(0,10), p.effective_to ? String(p.effective_to).slice(0,10) : null,
+          this.normalizeCommissionStatus(p.status), p.active === false ? 0 : 1, p.is_default ? 1 : 0,
+          this.normalizeCommissionMode(p.commission_mode), key, p.supersedes_profile_id || closeId || null,
+          this.normalizeCommissionTechnique(p.technique || p.commission_technique) || 'PERCENT_NET',
+          String(p.formula_expression || '').trim() || null
+        ).lastInsertRowid);
+        profileIdMap.set(raw.temp_id || raw.id || name, newId);
+        profileIdMap.set(String(raw.temp_id || raw.id || name), newId);
+        if (p.is_default) {
+          this.db.prepare('UPDATE consultant_commission_profiles SET is_default=0 WHERE consultant_id=? AND id<>? AND COALESCE(is_default,0)=1 AND (effective_to IS NULL OR effective_to>=?)')
+            .run(consultantId, newId, String(p.effective_from).slice(0,10));
+          this.db.prepare('UPDATE consultants SET default_commission_profile_id=?, default_commission_type=?, default_commission_value=? WHERE id=?')
+            .run(newId, this.normalizeCommissionType(p.commission_type), +p.commission_value || 0, consultantId);
+        }
+      }
+
+      if (Array.isArray(payload.commission_rules)) {
+        const incoming = payload.commission_rules
+          .map((r: any) => ({
+            item_type: String(r.item_type || '').toUpperCase(),
+            item_id: Number(r.item_id || 0),
+            action: String(r.action || 'USE_PROFILE').toUpperCase() === 'NO_COMMISSION' ? 'NO_COMMISSION' : 'USE_PROFILE',
+            profileRef: r.commission_profile_id || r.profile_temp_id || r.commission_profile_name,
+            isReplace: !!r._is_replace
+          }))
+          .filter((r: any) => (r.item_type === 'TEST' || r.item_type === 'PROFILE') && r.item_id);
+        const seen = new Set<string>();
+        const existingRules = this.db.prepare('SELECT item_type,item_id FROM consultant_commission_rules WHERE consultant_id=?').all(consultantId) as any[];
+        const existingKeys = new Set(existingRules.map((r: any) => `${String(r.item_type).toUpperCase()}:${Number(r.item_id)}`));
+        for (const r of incoming) {
+          const key = `${r.item_type}:${r.item_id}`;
+          if (seen.has(key)) throw new Error('Each item can have only one commission plan for this consultant.');
+          seen.add(key);
+          const groupPlan = this.findConsultantGroupPlanForItem(consultantId, r.item_type, r.item_id);
+          if (groupPlan) {
+            throw new Error(`Item already belongs to group plan "${groupPlan.group_name}". Remove it from that group before adding an exception.`);
+          }
+          if (r.isReplace && existingKeys.has(key)) {
+            throw new Error('Remove the existing exception first before applying a new commission plan for this item.');
+          }
+        }
+        this.db.prepare('DELETE FROM consultant_commission_rules WHERE consultant_id=?').run(consultantId);
+        const ruleInsert = this.db.prepare('INSERT INTO consultant_commission_rules(consultant_id,item_type,item_id,action,commission_profile_id) VALUES(?,?,?,?,?)');
+        for (const r of incoming) {
+          const commissionProfileId = r.action === 'NO_COMMISSION'
+            ? null
+            : (profileIdMap.get(r.profileRef) || profileIdMap.get(String(r.profileRef)) || Number(r.profileRef) || null);
+          ruleInsert.run(consultantId, r.item_type, r.item_id, r.action, commissionProfileId);
+        }
+      }
+    });
+    tx();
+    this.audit('commission.config.save', JSON.stringify({ consultantId }));
+    return this.getConsultant(consultantId);
   }
 
 

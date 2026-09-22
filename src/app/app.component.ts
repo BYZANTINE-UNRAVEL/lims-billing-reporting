@@ -7,12 +7,12 @@ import { DashboardPageComponent } from './features/dashboard/dashboard-page.comp
 import { ReportTypingPageComponent } from './features/reports/report-typing-page.component';
 import { MastersPageComponent } from './features/masters/masters-page.component';
 import { ConsultantsPageComponent } from './features/consultants/consultants-page.component';
-import { CommissionsPageComponent } from './features/commissions/commissions-page.component';
+import { CommissionsWorkspaceComponent } from './features/commissions/commissions-workspace.component';
 import { OperationsPageComponent } from './features/operations/operations-page.component';
 import { CollectionPageComponent } from './features/collection-page.component';
 import { StatementsPageComponent } from './features/statements/statements-page.component';
 import { AnalyticsPageComponent } from './features/analytics/analytics-page.component';
-import { PatientHistoryPageComponent } from './features/patients/patient-history-page.component';
+import { PatientHistoryPageComponent, PatientQuickReportNav } from './features/patients/patient-history-page.component';
 import { SettingsBackupPageComponent } from './features/settings/settings-backup-page.component';
 import { ReportSettingsComponent } from './features/report-settings/report-settings.component';
 import { BillingSettingsComponent } from './features/billing/billing-settings.component';
@@ -56,7 +56,7 @@ type ExitProgressState = {
     ReportTypingPageComponent,
     MastersPageComponent,
     ConsultantsPageComponent,
-    CommissionsPageComponent,
+    CommissionsWorkspaceComponent,
     OperationsPageComponent,
     CollectionPageComponent,
     StatementsPageComponent,
@@ -81,6 +81,7 @@ type ExitProgressState = {
       (themeToggle)="toggleTheme()"
       [showBillTools]="tab()==='billing'"
       [billSearchQuery]="billSearchQuery()"
+      [billSearchField]="billSearchField()"
       [billSearchResults]="billSearchResults()"
       [activeBillNo]="activeBillNo()"
       [activeBillPaymentClass]="activeBillPaymentClass()"
@@ -94,6 +95,7 @@ type ExitProgressState = {
       (billingFooterPrimary)="onBillingFooterPrimary()"
       (billingFooterSecondary)="onBillingFooterSecondary()"
       (billSearchChange)="onBillSearchChange($event)"
+      (billSearchFieldChange)="onBillSearchFieldChange($event)"
       (billSearchFocus)="onBillSearchFocus()"
       (billSearchClose)="closeBillSearchResults()"
       (billSearchSelect)="openBillFromSearch($event)"
@@ -107,11 +109,12 @@ type ExitProgressState = {
       <app-report-typing-page *ngIf="tab()==='reports'" (changed)="reload()"></app-report-typing-page>
       <app-masters-page *ngIf="tab()==='masters'" (changed)="reload()"></app-masters-page>
       <app-consultants-page *ngIf="tab()==='consultants'" (changed)="reload()"></app-consultants-page>
+      <app-commissions-workspace *ngIf="tab()==='commissions'"></app-commissions-workspace>
       <app-operations-page *ngIf="tab()==='operations'" (changed)="reload()"></app-operations-page>
       <app-collection-page *ngIf="tab()==='collection'" (changed)="reload()"></app-collection-page>
       <app-analytics-page *ngIf="tab()==='analytics'"></app-analytics-page>
       <app-statements-page *ngIf="tab()==='statements'" (editBill)="openBillFromStatement($event)" (newBill)="newBillFromTopbar()"></app-statements-page>
-      <app-patient-history-page *ngIf="tab()==='patients'"></app-patient-history-page>
+      <app-patient-history-page *ngIf="tab()==='patients'" (editBill)="openBillFromStatement($event)" (openQuickReportNav)="openQuickReportFromPatient($event)"></app-patient-history-page>
       <app-report-settings *ngIf="tab()==='reportSettings'"></app-report-settings>
       <app-billing-settings *ngIf="tab()==='billingSettings'"></app-billing-settings>
       <app-settings-backup-page *ngIf="tab()==='settings'" (changed)="onSettingsChanged($event)"></app-settings-backup-page>
@@ -357,6 +360,7 @@ export class AppComponent implements OnInit, OnDestroy {
     { id: 'reports', label: 'Report Typing', icon: '▦' },
     { id: 'masters', label: 'Masters', icon: '⚙' },
     { id: 'consultants', label: 'Consultants', icon: '★' },
+    { id: 'commissions', label: 'Commissions', icon: '%' },
     { id: 'analytics', label: 'Analytics', icon: '◒' },
     { id: 'operations', label: 'Operations', icon: '▤' },
     { id: 'collection', label: 'Lab Workflow', icon: '◈' },
@@ -378,6 +382,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private reportProgressUnsubscribe?: () => void;
   private pdfProgressHideTimer?: number;
   billSearchQuery = signal('');
+  billSearchField = signal<'NAME' | 'BILL_NO' | 'MOBILE' | 'PATIENT_ID'>('NAME');
   billSearchResults = signal<any[]>([]);
   activeBillId = signal<number | null>(null);
   quickReportingEnabled = computed(() => String(this.settings()['quickReporting.enabled'] || 'false').toLowerCase() === 'true');
@@ -421,6 +426,8 @@ export class AppComponent implements OnInit, OnDestroy {
 
   @ViewChild(BillingStepperComponent) billingComponent?: BillingStepperComponent;
   @ViewChild(CollectionPageComponent) collectionComponent?: CollectionPageComponent;
+  @ViewChild(ReportTypingPageComponent) reportComponent?: ReportTypingPageComponent;
+  private pendingQuickReportNav: PatientQuickReportNav | null = null;
 
   private dialogResolver?: (value: boolean) => void;
   private shutdownResolver?: (value: boolean) => void;
@@ -984,6 +991,11 @@ export class AppComponent implements OnInit, OnDestroy {
     await this.updateBillSearchResults(this.billSearchQuery());
   }
 
+  async onBillSearchFieldChange(field: 'NAME' | 'BILL_NO' | 'MOBILE' | 'PATIENT_ID'){
+    this.billSearchField.set(field || 'NAME');
+    await this.updateBillSearchResults(this.billSearchQuery());
+  }
+
   async onBillSearchChange(value: string){
     this.billSearchQuery.set(value || '');
     await this.updateBillSearchResults(value || '');
@@ -991,12 +1003,13 @@ export class AppComponent implements OnInit, OnDestroy {
 
   private async updateBillSearchResults(value: string){
     const q = String(value || '').trim();
+    const searchField = this.billSearchField();
     if (!q) {
       await this.refreshBills();
       this.billSearchResults.set(this.bills().slice(0, 8));
       return;
     }
-    const rows = await window.limsApi.listBills({ from: '1900-01-01', to: '2999-12-31', q });
+    const rows = await window.limsApi.listBills({ from: '1900-01-01', to: '2999-12-31', q, searchField });
     this.billSearchResults.set((Array.isArray(rows) ? rows : []).slice(0, 8));
   }
 
@@ -1004,6 +1017,37 @@ export class AppComponent implements OnInit, OnDestroy {
 
   async openBillFromStatement(id: number){
     await this.openBill(Number(id));
+  }
+
+  async openQuickReportFromPatient(nav: PatientQuickReportNav) {
+    const billNo = String(nav?.billNo || '').trim();
+    if (!billNo) {
+      this.showError('Unable to open report: missing bill number.');
+      return;
+    }
+    if (!(await this.confirmLeaveBilling('navigate'))) return;
+    this.pendingQuickReportNav = {
+      billNo,
+      billId: nav.billId,
+      reportNo: nav.reportNo,
+      status: nav.status,
+      focusDate: nav.focusDate
+    };
+    this.setTab('reports');
+    setTimeout(() => this.applyPendingQuickReportNav());
+  }
+
+  private applyPendingQuickReportNav() {
+    const nav = this.pendingQuickReportNav;
+    if (!nav) return;
+    const page = this.reportComponent;
+    if (!page) {
+      // Component still mounting — retry once on next tick.
+      setTimeout(() => this.applyPendingQuickReportNav(), 0);
+      return;
+    }
+    this.pendingQuickReportNav = null;
+    page.focusFromPatientNav(nav);
   }
 
   async openBillFromSearch(row: any){

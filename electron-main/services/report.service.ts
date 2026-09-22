@@ -794,6 +794,166 @@ export class ReportService extends ReportDocumentService {  async createBillPdf(
     return file;
   }
 
+  /** Commission statement export with optional field picker + selected bills/overrides. */
+  async createCommissionStatementExport(payload: any = {}, format: 'pdf' | 'excel' = 'excel') {
+    const filters = payload.filters || {};
+    const fields: string[] = Array.isArray(payload.fields) && payload.fields.length
+      ? payload.fields
+      : ['bill_no','bill_date','patient_name','bill_total','bill_discount','commission_total','commission_status','method_summary'];
+    const detailed = !!payload.detailed || fields.some((f: string) => ['item_name','price','qty','item_discount','net_amount','commission_amount','profile_name'].includes(f));
+    const data = this.db.listCommissionStatementBills({ ...filters, skipGenerate: true });
+    const selectedBillIds = new Set((payload.bill_ids || []).map((x: any) => Number(x)).filter(Boolean));
+    const selectedItemIds = new Set((payload.item_ids || []).map((x: any) => Number(x)).filter(Boolean));
+    const overrideMap = new Map<number, number>();
+    for (const o of (payload.overrides || [])) {
+      const id = Number(o.bill_item_id || o.id || 0);
+      if (id) overrideMap.set(id, Math.max(0, +Number(o.commission_amount ?? o.override_commission ?? 0).toFixed(2)));
+    }
+    let bills = data.bills || [];
+    if (selectedBillIds.size) bills = bills.filter((b: any) => selectedBillIds.has(Number(b.bill_id)));
+    bills = bills.map((b: any) => {
+      const items = (b.items || [])
+        .filter((it: any) => !selectedItemIds.size || selectedItemIds.has(Number(it.id)))
+        .map((it: any) => {
+          const payable = overrideMap.has(Number(it.id)) ? overrideMap.get(Number(it.id))! : Number(it.commission_amount || 0);
+          return { ...it, payable_commission: payable, override_commission: overrideMap.has(Number(it.id)) ? overrideMap.get(Number(it.id)) : null };
+        });
+      const commission_total = +items.reduce((s: number, it: any) => s + Number(it.payable_commission || 0), 0).toFixed(2);
+      return { ...b, items, commission_total };
+    });
+    const consultantName = bills[0]?.consultant_name || 'Consultant';
+    const period = `${filters.from || '-'} to ${filters.to || '-'}`;
+    const fieldLabel: Record<string, string> = {
+      bill_no: 'Bill No', bill_date: 'Date', patient_name: 'Patient', bill_total: 'Billed', bill_discount: 'Discount',
+      commission_total: 'Commission', commission_status: 'Status', method_summary: 'Method / Profile',
+      item_name: 'Item', qty: 'Qty', price: 'Billed Rate', item_discount: 'Item Discount', net_amount: 'Net',
+      commission_amount: 'Commission', profile_name: 'Profile', rule_source: 'Rule'
+    };
+
+    if (format === 'excel') {
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Statement');
+      const billFields = fields.filter(f => !['item_name','qty','price','item_discount','net_amount','commission_amount','profile_name','rule_source'].includes(f));
+      ws.columns = billFields.map(f => ({ header: fieldLabel[f] || f, key: f, width: 16 }));
+      for (const b of bills) {
+        const row: any = {};
+        for (const f of billFields) {
+          if (f === 'bill_date') row[f] = b.bill_date;
+          else if (f === 'commission_total') row[f] = b.commission_total;
+          else row[f] = b[f];
+        }
+        ws.addRow(row);
+      }
+      ws.addRow({
+        [billFields[0] || 'bill_no']: 'TOTAL',
+        bill_total: +bills.reduce((s: number, b: any) => s + Number(b.bill_total || 0), 0).toFixed(2),
+        bill_discount: +bills.reduce((s: number, b: any) => s + Number(b.bill_discount || 0), 0).toFixed(2),
+        commission_total: +bills.reduce((s: number, b: any) => s + Number(b.commission_total || 0), 0).toFixed(2)
+      });
+      if (detailed) {
+        const detail = wb.addWorksheet('Line Items');
+        const itemFields = ['bill_no','bill_date','patient_name','item_name','qty','price','item_discount','net_amount','profile_name','rule_source','commission_amount']
+          .filter(f => fields.includes(f) || ['bill_no','item_name','commission_amount'].includes(f));
+        detail.columns = itemFields.map(f => ({ header: fieldLabel[f] || f, key: f, width: 14 }));
+        for (const b of bills) {
+          for (const it of b.items || []) {
+            const row: any = {
+              bill_no: b.bill_no,
+              bill_date: b.bill_date,
+              patient_name: b.patient_name,
+              item_name: it.item_name,
+              qty: it.quantity,
+              price: it.price,
+              item_discount: +(Number(it.discount_amount || 0) + Number(it.bill_discount_share || 0)).toFixed(2),
+              net_amount: it.net_amount,
+              profile_name: it.commission_profile_name,
+              rule_source: it.commission_rule_source,
+              commission_amount: it.payable_commission
+            };
+            detail.addRow(row);
+          }
+        }
+      }
+      const meta = wb.addWorksheet('Meta');
+      meta.addRow(['Consultant', consultantName]);
+      meta.addRow(['Period', period]);
+      meta.addRow(['Bills', bills.length]);
+      const file = path.join(this.db.reportsDir, `commission-statement-${Date.now()}.xlsx`);
+      await wb.xlsx.writeFile(file);
+      return file;
+    }
+
+    const body: any[] = [[
+      { text: '#', bold: true },
+      { text: 'Bill No', bold: true },
+      { text: 'Bill Date / Time', bold: true },
+      { text: 'Patient', bold: true },
+      { text: 'Billed', bold: true, alignment: 'right' },
+      { text: 'Discount', bold: true, alignment: 'right' },
+      { text: 'Payable', bold: true, alignment: 'right' }
+    ]];
+    bills.forEach((b: any, idx: number) => {
+      body.push([
+        String(idx + 1),
+        b.bill_no || '-',
+        this.fmtStatementDateTimeIst(b.bill_date),
+        b.patient_name || '-',
+        { text: this.money(b.bill_total), alignment: 'right' },
+        { text: this.money(b.bill_discount), alignment: 'right' },
+        { text: this.money(b.commission_total), alignment: 'right' }
+      ]);
+      if (detailed) {
+        for (const it of b.items || []) {
+          body.push([
+            '',
+            { text: it.item_name || '-', colSpan: 2, fontSize: 8, color: '#444' }, '',
+            { text: `Qty ${it.quantity || 1} · Rate ${this.money(it.price)}`, colSpan: 2, fontSize: 8, color: '#444' }, '',
+            { text: this.money(it.payable_commission), alignment: 'right', fontSize: 8 }
+          ]);
+        }
+      }
+    });
+    body.push([
+      { text: 'TOTAL', bold: true, colSpan: 4 }, '', '', '',
+      { text: this.money(bills.reduce((s: number, b: any) => s + Number(b.bill_total || 0), 0)), bold: true, alignment: 'right' },
+      { text: this.money(bills.reduce((s: number, b: any) => s + Number(b.bill_discount || 0), 0)), bold: true, alignment: 'right' },
+      { text: this.money(bills.reduce((s: number, b: any) => s + Number(b.commission_total || 0), 0)), bold: true, alignment: 'right' }
+    ]);
+    const org = this.org();
+    const doc: any = {
+      pageOrientation: 'landscape',
+      pageMargins: [24, 28, 24, 36],
+      footer: (current: number, count: number) => ({
+        margin: [24, 0, 24, 12],
+        columns: [
+          { text: org.footer || 'Consultant statement', fontSize: 8 },
+          { text: `Page ${current} / ${count}`, alignment: 'right', fontSize: 8 }
+        ]
+      }),
+      content: [
+        { text: org.name, bold: true, fontSize: 16, alignment: 'center' },
+        { text: org.address, alignment: 'center', fontSize: 8, margin: [0, 0, 0, 6] },
+        { text: 'CONSULTANT STATEMENT', bold: true, alignment: 'center', fontSize: 12, margin: [0, 2, 0, 4] },
+        { text: `${consultantName} · Period: ${period}`, alignment: 'center', fontSize: 9, margin: [0, 0, 0, 10] },
+        { table: { headerRows: 1, widths: [24, 80, 110, '*', 65, 60, 75], body }, layout: 'lightHorizontalLines' }
+      ]
+    };
+    const file = path.join(this.db.reportsDir, `commission-statement-${Date.now()}.pdf`);
+    await this.writePdfFile(doc, file);
+    return file;
+  }
+
   async openFile(file:string) { await shell.openPath(file); return file; }
   async printReport(reportOrBillId:number, win:BrowserWindow, options:any = {}) { const file=await this.createReportPdf(reportOrBillId, options?.withBackground !== false, {...options, pdfOutputMode:'print'}); await shell.openPath(file); return file; }
+
+  /** Bill datetime for consultant statement PDF — IST wall clock with AM/PM. */
+  private fmtStatementDateTimeIst(value: any) {
+    const p = this.dateParts(value);
+    if (!p) return '-';
+    const date = this.fmtDateOnly(value);
+    const h = Number(p.h);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const hour12 = String((h % 12) || 12).padStart(2, '0');
+    return `${date} ${hour12}:${p.mi} ${ampm}`;
+  }
 }

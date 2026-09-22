@@ -12,6 +12,13 @@ export interface LimsApi {
   listUnits(): Promise<any[]>;
   saveUnit(item: any): Promise<any[]>;
   listTests(activeOnly?: boolean): Promise<any[]>;
+  searchMastersTests?(filters?: {
+    q?: string; search?: string; state?: string; status?: string; departmentId?: number | string;
+    page?: number; pageSize?: number;
+  }): Promise<{ rows: any[]; total: number; page: number; pageSize: number; counts?: any }>;
+  getTest?(id: number): Promise<any | null>;
+  searchBillingCatalog?(filters?: { q?: string; search?: string; limit?: number; recentKeys?: string[] }): Promise<any[]>;
+  getBillingCatalogItem?(type: string, id: number): Promise<any | null>;
   saveTest(item: any): Promise<any[]>;
   deleteTest?(id: number): Promise<any[]>;
   reorderTests?(items: any[]): Promise<any[]>;
@@ -19,6 +26,10 @@ export interface LimsApi {
   saveSpecimen(item: any): Promise<any[]>;
   listMethods(): Promise<any[]>;
   listProfiles(activeOnly?: boolean): Promise<any[]>;
+  searchMastersProfiles?(filters?: {
+    q?: string; search?: string; status?: string; page?: number; pageSize?: number;
+  }): Promise<{ rows: any[]; total: number; page: number; pageSize: number; counts?: any }>;
+  getProfile?(id: number): Promise<any | null>;
   saveProfile(item: any): Promise<any[]>;
   reorderProfiles?(items: any[]): Promise<any[]>;
   deleteProfile?(id: number): Promise<any[]>;
@@ -26,13 +37,31 @@ export interface LimsApi {
   saveEquipment?(item: any): Promise<any[]>;
   deleteEquipment?(id: number): Promise<any[]>;
   listConsultants(): Promise<any[]>;
+  searchConsultants?(filters?: {
+    q?: string; search?: string; activeOnly?: boolean | number | string;
+    status?: string; page?: number; pageSize?: number; limit?: number;
+  }): Promise<{ rows: any[]; total: number; page: number; pageSize: number }>;
+  getConsultant?(id: number): Promise<any | null>;
   saveConsultant(item: any): Promise<any[]>;
   deleteConsultant?(id: number): Promise<{action: string; consultants: any[]}>;
   calculateCommission?(payload: any): Promise<any>;
-  listCommissions?(filters?: any): Promise<{rows:any[]; totals:any}>;
+  saveConsultantCommissionConfig?(payload: any): Promise<any>;
+  listConsultantItemRates?(consultantId: number): Promise<any[]>;
+  saveConsultantItemRates?(payload: any): Promise<any[]>;
+  listCommissions?(filters?: any): Promise<{rows:any[]; totals:any; total?: number; page?: number; pageSize?: number}>;
+  listCommissionStatement?(filters?: any): Promise<{bills:any[]; totals:any; period?: any; total?: number; page?: number; pageSize?: number}>;
+  commissionStatementPeriodInfo?(filters?: any): Promise<any>;
+  resetCommissionStatementPeriod?(filters?: any): Promise<any>;
+  applyCommissionOverrides?(payload: any): Promise<{updated:number}>;
+  settleCommissionStatement?(payload: any): Promise<{settlementId:number; settlementNo:string; amount:number}>;
   updateCommissionStatus?(payload: any): Promise<any>;
   settleCommissions?(payload: any): Promise<any>;
   listCommissionSettlements?(filters?: any): Promise<any[]>;
+  getCommissionSettlement?(id: number): Promise<any>;
+  commissionStatementExcel?(payload?: any): Promise<string>;
+  commissionStatementPdf?(payload?: any): Promise<string>;
+  commissionSettlementPdf?(id: number, open?: boolean): Promise<string>;
+  commissionSettlementExcel?(id: number, open?: boolean): Promise<string>;
   listCommissionGroups?(): Promise<any[]>;
   saveCommissionGroup?(payload:any): Promise<any>;
   deleteCommissionGroup?(id:number): Promise<any[]>;
@@ -80,7 +109,11 @@ export interface LimsApi {
   deleteRejectedCollection?(collectionId: number): Promise<any>;
   recollectCollection?(collectionId: number): Promise<any>;
   reopenApprovedReportFromCollection?(ref: any, reason: string): Promise<any>;
-  listPatients(q?: string): Promise<any[]>;
+  listPatients(q?: string | { q?: string; searchField?: string }): Promise<any[]>;
+  searchPatients?(filters?: {
+    q?: string; search?: string; searchField?: string; search_field?: string;
+    page?: number; pageSize?: number; limit?: number;
+  }): Promise<{ rows: any[]; total: number; page: number; pageSize: number }>;
   savePatient(item: any): Promise<number>;
   patientHistory(id: number): Promise<any>;
   previewUnusedPatients?(): Promise<{ count: number; totalPatients: number; sample: any[] }>;
@@ -89,14 +122,20 @@ export interface LimsApi {
   updateBill(payload: any): Promise<any>;
   listBills(filters?: any): Promise<any[]>;
   analytics?(filters?: any): Promise<any>;
+  analyticsDetails?(filters?: any): Promise<{ rows: any[]; total?: number; page?: number; pageSize?: number; aggregate?: string }>;
   analyticsPdfOpen?(payload: any): Promise<string>;
-  analyticsXlsxOpen?(payload: any): Promise<string>;
+  analyticsXlsxOpen?(payload: any): Promise<string | { file: string; cancelled: boolean }>;
+  analyticsXlsxExportAll?(payload: any): Promise<{ file: string; cancelled: boolean; total: number; exported: number }>;
+  onAnalyticsExportProgress?(callback: (progress: { fetched: number; total: number; message: string }) => void): () => void;
   getBill(id: number): Promise<any>;
   cancelBill?(billId: number, payload: any): Promise<any>;
   deleteBill?(billId: number): Promise<any>;
   addReceipt(billId: number, amount: number, mode: string): Promise<string>;
   deleteReceipt?(billId: number, receiptId: number): Promise<any>;
-  listReports(status?: string): Promise<any[]>;
+  listReports(statusOrFilters?: any, filters?: {
+    status?: string; from?: string; to?: string; page?: number; pageSize?: number; all?: boolean;
+    search?: string; searchField?: string; searchExact?: boolean; view?: string;
+  }): Promise<{ rows: any[]; total: number; page: number; pageSize: number; counts?: Record<string, number> } | any[]>;
   listReportLogs?(filters?: any): Promise<any[]>;
   getReport(id: number): Promise<any>;
   saveReport(payload: any): Promise<any>;

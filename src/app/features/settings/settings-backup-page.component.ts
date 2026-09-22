@@ -3,7 +3,7 @@ import { Component, EventEmitter, HostListener, OnInit, Output, signal } from '@
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { DateTimeSettingsService } from '../../shared/date-time-settings.service';
-import { dateRangePresets, matchesDateRange, openNativeDatePicker, DATE_RANGE_FILTER_STYLES } from '../../shared/date-range-filters';
+import { dateRangeFilterError, dateRangePresets, matchesDateRange, openNativeDatePicker, DATE_RANGE_FILTER_STYLES } from '../../shared/date-range-filters';
 
 @Component({
   selector: 'app-settings-backup-page',
@@ -365,6 +365,7 @@ import { dateRangePresets, matchesDateRange, openNativeDatePicker, DATE_RANGE_FI
               <button type="button" [class.active]="isBackupLastYearRange()" (click)="setBackupDatePreset('lastYear')">Last Year</button>
               <button type="button" (click)="clearBackupRange()">All</button>
             </div>
+            <p class="date-range-error" *ngIf="backupDateError()">{{backupDateError()}}</p>
             <div class="backup-filter-actions">
               <button class="btn primary tiny" type="button" (click)="createBackup()" [disabled]="backupBusy()">{{backupBusy() ? 'Creating…' : 'Backup now'}}</button>
               <button class="btn secondary tiny backup-refresh" type="button" (click)="refreshBackups()" [disabled]="backupBusy()">↻ Refresh</button>
@@ -618,8 +619,15 @@ export class SettingsBackupPageComponent implements OnInit {
     this.backups.set(await api.listBackups());
     this.dataDir.set(await api.getDataDir());
     this.reportsDir.set(await api.getReportsDir());
-    this.consultants.set((await api.listConsultants()).filter((c:any)=>+c.active !== 0));
+    this.consultants.set(await this.loadActiveConsultants(api));
     await this.refreshUnusedPatients();
+  }
+  private async loadActiveConsultants(api: any) {
+    if (api.searchConsultants) {
+      const result = await api.searchConsultants({ status: 'ACTIVE', page: 1, pageSize: 100 });
+      return Array.isArray(result?.rows) ? result.rows : [];
+    }
+    return (await api.listConsultants()).filter((c: any) => +c.active !== 0);
   }
   private applyBackupDefaults(){
     if (this.settingsForm['backup.enabled'] == null || this.settingsForm['backup.enabled'] === '') this.settingsForm['backup.enabled'] = 'true';
@@ -707,7 +715,9 @@ export class SettingsBackupPageComponent implements OnInit {
   @HostListener('document:keydown.escape')
   closeBackupLogsOnEscape(){ if (this.backupLogsOpen() && !this.restoreCandidate()) this.closeBackupLogs(); }
   resetBackupPage(){ this.backupPage.set(1); }
+  backupDateError(){ return dateRangeFilterError(this.backupFrom, this.backupTo, { required: false }); }
   filteredBackups(){
+    if (this.backupDateError()) return [];
     const from = this.backupFrom ? new Date(`${this.backupFrom}T00:00:00`).getTime() : Number.NEGATIVE_INFINITY;
     const to = this.backupTo ? new Date(`${this.backupTo}T23:59:59.999`).getTime() : Number.POSITIVE_INFINITY;
     return (this.backups() || []).filter((b:any) => { const value = new Date(b?.modifiedAt || 0).getTime(); return Number.isFinite(value) && value >= from && value <= to; });
