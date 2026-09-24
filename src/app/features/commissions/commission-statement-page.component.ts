@@ -60,12 +60,12 @@ type Step = 1 | 2 | 3;
         <div class="grid-4">
           <label class="field"><span>Commission status</span>
             <select [(ngModel)]="filters.status">
+              <option value="ALL">All</option>
               <option value="UNSETTLED">Unsettled (pending + approved)</option>
               <option value="GENERATED">Pending review</option>
               <option value="APPROVED">Approved</option>
               <option value="PAID">Paid</option>
               <option value="HELD">Held</option>
-              <option value="ALL">All</option>
             </select>
           </label>
           <label class="field"><span>Bill payment</span>
@@ -275,12 +275,21 @@ type Step = 1 | 2 | 3;
   styles: [`
     :host{display:block;min-width:0}
     .master-panel{
-      border:1px solid color-mix(in srgb,var(--border) 82%,var(--accent) 10%);border-radius:20px;
-      background:linear-gradient(180deg,color-mix(in srgb,var(--panel) 92%,transparent),color-mix(in srgb,var(--row) 72%,transparent));
-      box-shadow:var(--shadow);padding:12px;overflow:hidden;padding-bottom:72px;
-      --accent:#3b82f6;--accent-soft:color-mix(in srgb,var(--accent) 10%,transparent);
-      --panel:rgba(15,23,42,.9);--row:rgba(15,23,42,.58);--input:#0b1220;
+      border:1px solid #dbe6f6;border-radius:20px;
+      background:#ffffff;box-shadow:0 14px 32px rgba(15,23,42,.08);padding:12px;overflow:hidden;padding-bottom:72px;
+      --accent:#2563eb;--accent-soft:rgba(37,99,235,.12);
+      --panel:#ffffff;--row:#f8fafc;--input:#ffffff;
+      --border:#dbe4f0;--text:#0f172a;--muted:#64748b;--shadow:0 14px 32px rgba(15,23,42,.08);
+      color:#0f172a;
+    }
+    :host-context(body.dark-theme) .master-panel{
+      border-color:rgba(96,165,250,.18);
+      background:linear-gradient(180deg,rgba(15,23,42,.96),rgba(8,13,24,.94));
+      box-shadow:0 18px 48px rgba(0,0,0,.34);
+      --accent:#3b82f6;--accent-soft:rgba(59,130,246,.15);
+      --panel:#101827;--row:#0b1220;--input:#0b1220;
       --border:rgba(148,163,184,.18);--text:#f8fafc;--muted:#94a3b8;--shadow:0 14px 40px rgba(0,0,0,.22);
+      color:#f8fafc;
     }
     .panel-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
     .panel-heading-left{display:flex;align-items:center;gap:10px}.panel-icon{width:32px;height:32px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 22%,transparent),color-mix(in srgb,var(--accent) 7%,transparent));color:var(--accent);font-size:15px;font-weight:950}
@@ -382,7 +391,7 @@ export class CommissionStatementPageComponent implements OnInit {
   exportPreset: 'summary' | 'detailed' | 'custom' = 'summary';
   exportFields = new Set<string>(['bill_no','bill_date','patient_name','bill_total','bill_discount','commission_total','commission_status','method_summary']);
   settlement: any = { payment_mode: 'Cash', reference_no: '', notes: '' };
-  filters: any = { consultant_id: 0, from: '', to: '', status: 'UNSETTLED', payment_status: 'PAID', bill_status: 'ACTIVE', search: '' };
+  filters: any = { consultant_id: 0, from: '', to: '', status: 'ALL', payment_status: 'PAID', bill_status: 'ACTIVE', search: '' };
 
   allExportFields = [
     { id: 'bill_no', label: 'Bill No' }, { id: 'bill_date', label: 'Date' }, { id: 'patient_name', label: 'Patient' },

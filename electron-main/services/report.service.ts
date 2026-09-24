@@ -888,6 +888,7 @@ export class ReportService extends ReportDocumentService {  async createBillPdf(
       { text: 'Bill No', bold: true },
       { text: 'Bill Date / Time', bold: true },
       { text: 'Patient', bold: true },
+      { text: 'Settlement', bold: true },
       { text: 'Billed', bold: true, alignment: 'right' },
       { text: 'Discount', bold: true, alignment: 'right' },
       { text: 'Payable', bold: true, alignment: 'right' }
@@ -898,6 +899,7 @@ export class ReportService extends ReportDocumentService {  async createBillPdf(
         b.bill_no || '-',
         this.fmtStatementDateTimeIst(b.bill_date),
         b.patient_name || '-',
+        this.commissionSettlementLabel(b.commission_status),
         { text: this.money(b.bill_total), alignment: 'right' },
         { text: this.money(b.bill_discount), alignment: 'right' },
         { text: this.money(b.commission_total), alignment: 'right' }
@@ -906,7 +908,8 @@ export class ReportService extends ReportDocumentService {  async createBillPdf(
         for (const it of b.items || []) {
           body.push([
             '',
-            { text: it.item_name || '-', colSpan: 2, fontSize: 8, color: '#444' }, '',
+            { text: it.item_name || '-', colSpan: 3, fontSize: 8, color: '#444' }, '', '',
+            { text: this.commissionSettlementLabel(it.commission_status), fontSize: 8, color: '#444' },
             { text: `Qty ${it.quantity || 1} · Rate ${this.money(it.price)}`, colSpan: 2, fontSize: 8, color: '#444' }, '',
             { text: this.money(it.payable_commission), alignment: 'right', fontSize: 8 }
           ]);
@@ -914,7 +917,7 @@ export class ReportService extends ReportDocumentService {  async createBillPdf(
       }
     });
     body.push([
-      { text: 'TOTAL', bold: true, colSpan: 4 }, '', '', '',
+      { text: 'TOTAL', bold: true, colSpan: 5 }, '', '', '', '',
       { text: this.money(bills.reduce((s: number, b: any) => s + Number(b.bill_total || 0), 0)), bold: true, alignment: 'right' },
       { text: this.money(bills.reduce((s: number, b: any) => s + Number(b.bill_discount || 0), 0)), bold: true, alignment: 'right' },
       { text: this.money(bills.reduce((s: number, b: any) => s + Number(b.commission_total || 0), 0)), bold: true, alignment: 'right' }
@@ -935,7 +938,7 @@ export class ReportService extends ReportDocumentService {  async createBillPdf(
         { text: org.address, alignment: 'center', fontSize: 8, margin: [0, 0, 0, 6] },
         { text: 'CONSULTANT STATEMENT', bold: true, alignment: 'center', fontSize: 12, margin: [0, 2, 0, 4] },
         { text: `${consultantName} · Period: ${period}`, alignment: 'center', fontSize: 9, margin: [0, 0, 0, 10] },
-        { table: { headerRows: 1, widths: [24, 80, 110, '*', 65, 60, 75], body }, layout: 'lightHorizontalLines' }
+        { table: { headerRows: 1, widths: [22, 72, 100, '*', 68, 58, 54, 64], body }, layout: 'lightHorizontalLines' }
       ]
     };
     const file = path.join(this.db.reportsDir, `commission-statement-${Date.now()}.pdf`);
@@ -945,6 +948,19 @@ export class ReportService extends ReportDocumentService {  async createBillPdf(
 
   async openFile(file:string) { await shell.openPath(file); return file; }
   async printReport(reportOrBillId:number, win:BrowserWindow, options:any = {}) { const file=await this.createReportPdf(reportOrBillId, options?.withBackground !== false, {...options, pdfOutputMode:'print'}); await shell.openPath(file); return file; }
+
+  private commissionSettlementLabel(status: any) {
+    const key = String(status || 'GENERATED').toUpperCase();
+    const labels: Record<string, string> = {
+      GENERATED: 'Pending',
+      APPROVED: 'Approved',
+      HELD: 'Held',
+      PAID: 'Paid',
+      CANCELLED: 'Cancelled',
+      REVERSAL_PENDING: 'Reversal'
+    };
+    return labels[key] || key;
+  }
 
   /** Bill datetime for consultant statement PDF — IST wall clock with AM/PM. */
   private fmtStatementDateTimeIst(value: any) {

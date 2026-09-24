@@ -3203,13 +3203,21 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     const whereSql = where.length ? ` WHERE ${where.join(' AND ')}` : '';
     const total = +((this.db.prepare(`SELECT COUNT(*) c FROM consultants c${whereSql}`).get(...args) as any)?.c || 0);
     const rows = this.db.prepare(`SELECT c.id, c.name, c.phone, c.clinic, c.active,
-      c.default_commission_type, c.default_commission_value, c.default_commission_profile_id
+      c.default_commission_type, c.default_commission_value, c.default_commission_profile_id,
+      (SELECT COUNT(*) FROM consultant_commission_profiles p
+        WHERE p.consultant_id=c.id AND COALESCE(p.active,1)<>0
+          AND (p.effective_from IS NULL OR TRIM(p.effective_from)='' OR date(p.effective_from)<=date('now','localtime'))
+          AND (p.effective_to IS NULL OR TRIM(p.effective_to)='' OR date(p.effective_to)>=date('now','localtime'))
+      ) AS commission_profile_count,
+      (SELECT COUNT(*) FROM consultant_commission_rules r WHERE r.consultant_id=c.id) AS commission_rule_count
       FROM consultants c${whereSql}
       ORDER BY c.name LIMIT ? OFFSET ?`).all(...args, pageSize, offset) as any[];
     return {
       rows: rows.map((c: any) => ({
         ...c,
         active: c.active !== 0 && c.active !== false,
+        commission_profile_count: Number(c.commission_profile_count || 0),
+        commission_rule_count: Number(c.commission_rule_count || 0),
         commission_profiles: [],
         commission_rules: [],
         commission_groups: [],
@@ -3864,7 +3872,7 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     const paymentStatus = String(filters.payment_status || 'ALL').toUpperCase();
     const includeZero = !!filters.include_zero;
     const params:any[] = [];
-    const where:string[] = includeZero ? ['1=1'] : ['COALESCE(bi.commission_amount,0) > 0'];
+    const where:string[] = includeZero ? ['1=1'] : ['(COALESCE(bi.commission_amount,0) > 0 OR COALESCE(b.total,0) = 0)'];
     if (from) { where.push("b.bill_date >= ?"); params.push(from); }
     if (to) { where.push("b.bill_date < date(?,'+1 day')"); params.push(to); }
     if (consultantId) { where.push('b.consultant_id=?'); params.push(consultantId); }
@@ -3976,7 +3984,6 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     const where = [
       "UPPER(COALESCE(b.status,'')) NOT IN ('CANCELLED','CANCELED')",
       'COALESCE(b.due,0) <= 0',
-      'COALESCE(b.total,0) > 0',
       'date(b.bill_date) >= date(?)',
       'date(b.bill_date) <= date(?)',
       'COALESCE(b.consultant_id,0) > 0'
@@ -4079,7 +4086,6 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
       JOIN bill_items bi ON bi.bill_id=b.id
       WHERE UPPER(COALESCE(b.status,'')) NOT IN ('CANCELLED','CANCELED')
         AND COALESCE(b.due,0) <= 0
-        AND COALESCE(b.total,0) > 0
         AND date(b.bill_date) >= date(?)
         AND date(b.bill_date) <= date(?)
         AND b.consultant_id=?
@@ -4132,7 +4138,6 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
         JOIN bills b ON b.id=bi.bill_id
         WHERE UPPER(COALESCE(b.status,'')) NOT IN ('CANCELLED','CANCELED')
           AND COALESCE(b.due,0) <= 0
-          AND COALESCE(b.total,0) > 0
           AND date(b.bill_date) >= date(?)
           AND date(b.bill_date) <= date(?)
           AND b.consultant_id=?
@@ -4193,7 +4198,7 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
     const paymentStatus = String(statementFilters.payment_status || 'PAID').toUpperCase();
     const includeZero = !!statementFilters.include_zero;
     const idParams: any[] = [];
-    const idWhere: string[] = includeZero ? ['1=1'] : ['COALESCE(bi.commission_amount,0) > 0'];
+    const idWhere: string[] = includeZero ? ['1=1'] : ['(COALESCE(bi.commission_amount,0) > 0 OR COALESCE(b.total,0) = 0)'];
     if (from) { idWhere.push("b.bill_date >= ?"); idParams.push(from); }
     if (to) { idWhere.push("b.bill_date < date(?,'+1 day')"); idParams.push(to); }
     if (consultantId) { idWhere.push('b.consultant_id=?'); idParams.push(consultantId); }
@@ -4933,6 +4938,26 @@ ALTER TABLE equipment_test_mappings_allow_duplicates RENAME TO equipment_test_ma
             : (profileIdMap.get(r.profileRef) || profileIdMap.get(String(r.profileRef)) || Number(r.profileRef) || null);
           ruleInsert.run(consultantId, r.item_type, r.item_id, r.action, commissionProfileId);
         }
+      }
+
+      const removeIds = [...new Set((payload.remove_profile_ids || []).map((x: any) => Number(x)).filter((id: number) => id > 0))];
+      if (removeIds.length) {
+        const owned = this.db.prepare('SELECT id, profile_name FROM consultant_commission_profiles WHERE id=? AND consultant_id=?');
+        const stillUsed = this.db.prepare('SELECT COUNT(*) c FROM consultant_commission_rules WHERE consultant_id=? AND commission_profile_id=?');
+        const del = this.db.prepare('DELETE FROM consultant_commission_profiles WHERE id=? AND consultant_id=?');
+        for (const id of removeIds) {
+          const row = owned.get(id, consultantId) as any;
+          if (!row) continue;
+          const used = Number((stillUsed.get(consultantId, id) as any)?.c || 0);
+          if (used) throw new Error(`“${row.profile_name}” is still assigned to items. Clear those assignments before deleting it.`);
+          del.run(id, consultantId);
+        }
+        this.db.prepare(`UPDATE consultants SET default_commission_profile_id=NULL
+          WHERE id=? AND default_commission_profile_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM consultant_commission_profiles p
+            WHERE p.id=consultants.default_commission_profile_id AND p.consultant_id=consultants.id
+          )`).run(consultantId);
       }
     });
     tx();

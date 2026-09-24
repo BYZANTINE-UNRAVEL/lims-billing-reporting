@@ -215,59 +215,61 @@ type ExitProgressState = {
     </app-confirm-dialog>
 
     <div class="shutdown-backdrop" *ngIf="shutdownSheet() as s" role="dialog" aria-modal="true" aria-labelledby="shutdown-title">
-      <section class="shutdown-sheet rich-output-modal" (click)="$event.stopPropagation()">
-        <header class="output-modal-header shutdown-header">
-          <div class="output-modal-heading">
-            <span class="output-modal-icon" [class.warn]="s.hasUnsavedBill">⏻</span>
+      <section class="shutdown-sheet" (click)="$event.stopPropagation()">
+        <header class="shutdown-header">
+          <div class="shutdown-heading">
+            <span class="shutdown-icon" [class.warn]="s.hasUnsavedBill">⏻</span>
             <div>
               <h3 id="shutdown-title">Exit LIMS</h3>
-              <p>{{ s.hasUnsavedBill ? 'Unsaved work detected — review before exiting' : 'Confirm shutdown and what will be closed' }}</p>
+              <p class="shutdown-sub">{{ s.hasUnsavedBill ? 'Unsaved work detected — review before exiting' : 'Confirm shutdown and what will be closed' }}</p>
             </div>
           </div>
-          <button class="output-modal-close" type="button" (click)="resolveShutdown(false)" aria-label="Stay here" title="Stay here">
+          <button class="shutdown-x" type="button" (click)="resolveShutdown(false)" aria-label="Stay here" title="Stay here">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
           </button>
         </header>
 
-        <div class="output-modal-meta shutdown-meta">
-          <div><span>Current screen</span><b>{{ s.currentTabLabel }}</b></div>
-          <div><span>Unsaved bill</span><b [class.danger-text]="s.hasUnsavedBill">{{ s.hasUnsavedBill ? 'Yes — will discard' : 'None' }}</b></div>
-          <div><span>Analyzer API</span><b>{{ s.analyzerRunning ? ('Running · ' + s.analyzerEndpoint) : 'Stopped' }}</b></div>
-          <div><span>Auto backup</span><b>{{ s.backupEnabled ? 'Enabled' : 'Off' }}</b></div>
-          <div><span>Exit backup</span><b>{{ s.backupOnClose ? 'Will run' : 'Skip' }}</b></div>
+        <div class="shutdown-meta">
+          <div><span>Current screen</span><strong>{{ s.currentTabLabel || '—' }}</strong></div>
+          <div><span>Unsaved bill</span><strong [class.danger-text]="s.hasUnsavedBill">{{ s.hasUnsavedBill ? 'Yes — will discard' : 'None' }}</strong></div>
+          <div><span>Analyzer API</span><strong>{{ s.analyzerRunning ? ('Running · ' + s.analyzerEndpoint) : 'Stopped' }}</strong></div>
+          <div><span>Auto backup</span><strong>{{ s.backupEnabled ? 'Enabled' : 'Off' }}</strong></div>
+          <div><span>Exit backup</span><strong>{{ s.backupOnClose ? 'Will run' : 'Skip' }}</strong></div>
         </div>
 
-        <div class="output-modal-body shutdown-body">
+        <div class="shutdown-body">
           <div class="shutdown-warning" *ngIf="s.hasUnsavedBill">
-            <b>Unfinished billing entry</b>
+            <strong>Unfinished billing entry</strong>
             <p>Closing now will discard the current billing entry. Stay here if you still need to finish or clear that bill.</p>
           </div>
-          <div class="shutdown-warning backup-exit-note" *ngIf="!s.hasUnsavedBill">
-            <b>Live shutdown status</b>
+          <div class="shutdown-warning backup-note" *ngIf="!s.hasUnsavedBill">
+            <strong>Live shutdown status</strong>
             <p>After you confirm, a progress screen stays open until backup (if enabled), services, and the database are fully stopped — then the app process exits.</p>
           </div>
 
           <div class="shutdown-section-head">
-            <div><h4>What will close</h4><p>These services and resources stop when you exit.</p></div>
+            <h4>What will close</h4>
+            <p>These services and resources stop when you exit.</p>
           </div>
+
           <div class="shutdown-list">
-            <article class="shutdown-item" *ngFor="let item of s.items" [class.active]="item.active" [class.warn]="item.warn">
-              <div class="shutdown-item-icon">{{ item.icon }}</div>
+            <div class="shutdown-item" *ngFor="let item of s.items" [class.active]="item.active" [class.warn]="item.warn">
+              <div class="shutdown-item-icon" aria-hidden="true">{{ item.icon }}</div>
               <div class="shutdown-item-copy">
-                <b>{{ item.title }}</b>
-                <small>{{ item.detail }}</small>
+                <strong>{{ item.title }}</strong>
+                <span>{{ item.detail }}</span>
               </div>
-              <em>{{ item.status }}</em>
-            </article>
+              <span class="shutdown-pill">{{ item.status }}</span>
+            </div>
           </div>
         </div>
 
-        <footer class="output-modal-footer shutdown-footer">
-          <div class="output-footer-summary">
-            <b>{{ s.hasUnsavedBill ? 'Exit will discard unfinished bill work' : 'Ready to shut down cleanly' }}</b>
-            <small>Live status stays on screen until backup (if enabled), services, and the database finish — then the process exits.</small>
+        <footer class="shutdown-footer">
+          <div class="shutdown-foot-copy">
+            <strong>{{ s.hasUnsavedBill ? 'Exit will discard unfinished bill work' : 'Ready to shut down cleanly' }}</strong>
+            <span>Live status stays on screen until backup (if enabled), services, and the database finish — then the process exits.</span>
           </div>
-          <div class="output-footer-actions">
+          <div class="shutdown-foot-actions">
             <button class="btn ghost" type="button" (click)="resolveShutdown(false)">Stay here</button>
             <button class="btn primary" [class.danger-exit]="s.hasUnsavedBill" type="button" (click)="resolveShutdown(true)">Exit app</button>
           </div>
@@ -276,37 +278,137 @@ type ExitProgressState = {
     </div>
   `,
   styles: [`
+    /* Exit modal: hardcoded contrast (no CSS vars) — vars were washing text/borders out on white panels. */
     .shutdown-backdrop {
       position: fixed; inset: 0; z-index: 2147483646;
       display: grid; place-items: center; padding: 28px; box-sizing: border-box;
-      background: rgba(15, 23, 42, 0.74);
-      -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+      background: rgba(15, 23, 42, 0.72);
     }
     .shutdown-sheet {
       width: min(760px, 94vw);
       max-height: min(820px, 92vh);
       overflow: hidden;
       display: flex; flex-direction: column;
-      border: 1px solid var(--border);
-      border-radius: 26px;
-      background: var(--panel);
-      color: var(--text);
+      border: 1px solid #dbe4f0;
+      border-radius: 22px;
+      background: #ffffff;
+      color: #0f172a;
       box-shadow: 0 28px 90px rgba(2, 6, 23, 0.45);
-      animation: shutdownPop 0.16s ease-out;
     }
-    .shutdown-header { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 24px; border-bottom: 1px solid var(--border); background: linear-gradient(135deg, color-mix(in srgb, var(--panel) 90%, var(--accent)), var(--panel)); }
-    .output-modal-heading { display: flex; align-items: center; gap: 12px; min-width: 0; }
-    .output-modal-heading > div { min-width: 0; }
-    .output-modal-heading h3 { margin: 0; font-size: 19px; }
-    .output-modal-heading p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
-    .output-modal-icon { width: 42px; height: 42px; min-width: 42px; border-radius: 14px; display: grid; place-items: center; background: var(--accent-gradient); color: #fff; font-size: 20px; box-shadow: var(--glow); }
-    .output-modal-icon.warn { background: linear-gradient(135deg, #ef4444, #f97316); }
-    .output-modal-close { width: 42px; height: 42px; min-width: 42px; border: 1px solid var(--border); border-radius: 14px; background: color-mix(in srgb, var(--panel) 92%, transparent); color: var(--text); display: grid; place-items: center; cursor: pointer; appearance: none; }
-    .output-modal-close svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
-    .output-modal-close:hover { background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.42); color: #f87171; }
-    .shutdown-meta { flex: 0 0 auto; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--panel) 96%, var(--row)); }
-    .backup-exit-note { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)) !important; background: color-mix(in srgb, var(--accent-soft) 70%, transparent) !important; }
-    .backup-exit-note b { color: var(--accent) !important; }
+    .shutdown-header {
+      flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 18px 22px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;
+    }
+    .shutdown-heading { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .shutdown-heading > div { min-width: 0; }
+    .shutdown-heading h3 { margin: 0; font-size: 18px; color: #0f172a; font-weight: 900; }
+    .shutdown-sub { margin: 4px 0 0; color: #64748b; font-size: 12px; font-weight: 650; }
+    .shutdown-icon {
+      width: 40px; height: 40px; min-width: 40px; border-radius: 12px; display: grid; place-items: center;
+      background: linear-gradient(135deg, #2563eb, #7c3aed); color: #fff; font-size: 18px;
+    }
+    .shutdown-icon.warn { background: linear-gradient(135deg, #ef4444, #f97316); }
+    .shutdown-x {
+      width: 40px; height: 40px; min-width: 40px; border: 1px solid #e2e8f0; border-radius: 12px;
+      background: #fff; color: #0f172a; display: grid; place-items: center; cursor: pointer;
+    }
+    .shutdown-x svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+    .shutdown-x:hover { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
+
+    .shutdown-meta {
+      flex: 0 0 auto; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+      border-bottom: 1px solid #e2e8f0; background: #f8fafc;
+    }
+    .shutdown-meta > div { padding: 12px 16px; border-right: 1px solid #e2e8f0; min-width: 0; }
+    .shutdown-meta > div:last-child { border-right: 0; }
+    .shutdown-meta span {
+      display: block; color: #64748b; font-size: 10px; text-transform: uppercase;
+      font-weight: 900; letter-spacing: 0.06em;
+    }
+    .shutdown-meta strong {
+      display: block; margin-top: 5px; font-size: 13px; color: #0f172a; font-weight: 850;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .danger-text { color: #dc2626 !important; }
+
+    .shutdown-body {
+      flex: 1 1 auto; min-height: 0; overflow: auto; padding: 16px 20px 18px;
+      display: flex; flex-direction: column; gap: 12px; background: #ffffff;
+    }
+    .shutdown-warning {
+      border: 1px solid #fecaca; background: #fef2f2; border-radius: 14px; padding: 12px 14px;
+    }
+    .shutdown-warning strong { display: block; margin-bottom: 4px; color: #b91c1c; font-size: 13px; }
+    .shutdown-warning p { margin: 0; color: #64748b; font-size: 13px; line-height: 1.45; }
+    .shutdown-warning.backup-note { border-color: #bfdbfe; background: #eff6ff; }
+    .shutdown-warning.backup-note strong { color: #2563eb; }
+
+    .shutdown-section-head h4 { margin: 0 0 3px; font-size: 14px; color: #0f172a; font-weight: 900; }
+    .shutdown-section-head p { margin: 0; color: #64748b; font-size: 12px; }
+
+    .shutdown-list { display: flex; flex-direction: column; gap: 8px; }
+    .shutdown-item {
+      display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 12px; align-items: center;
+      border: 1px solid #e2e8f0; border-radius: 14px; padding: 11px 13px; background: #f8fafc; color: #0f172a;
+    }
+    .shutdown-item.active { border-color: #93c5fd; background: #eff6ff; }
+    .shutdown-item.warn { border-color: #fca5a5; background: #fef2f2; }
+    .shutdown-item-icon {
+      width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+      background: #fff; border: 1px solid #e2e8f0; font-size: 16px;
+    }
+    .shutdown-item-copy { min-width: 0; }
+    .shutdown-item-copy strong { display: block; font-size: 13px; color: #0f172a; font-weight: 900; }
+    .shutdown-item-copy span { display: block; margin-top: 3px; color: #64748b; font-size: 12px; line-height: 1.35; }
+    .shutdown-pill {
+      font-size: 11px; font-weight: 900; color: #475569; border: 1px solid #e2e8f0;
+      border-radius: 999px; padding: 5px 9px; white-space: nowrap; background: #fff;
+    }
+    .shutdown-item.active .shutdown-pill { color: #2563eb; border-color: #93c5fd; background: #dbeafe; }
+    .shutdown-item.warn .shutdown-pill { color: #dc2626; border-color: #fca5a5; background: #fee2e2; }
+
+    .shutdown-footer {
+      flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 14px 22px; border-top: 1px solid #e2e8f0; background: #f8fafc;
+    }
+    .shutdown-foot-copy { min-width: 0; }
+    .shutdown-foot-copy strong { display: block; font-size: 13px; color: #0f172a; font-weight: 900; }
+    .shutdown-foot-copy span { display: block; margin-top: 2px; color: #64748b; font-size: 11px; line-height: 1.35; }
+    .shutdown-foot-actions { display: flex; align-items: center; gap: 9px; flex: 0 0 auto; }
+    .danger-exit { background: linear-gradient(135deg, #ef4444, #dc2626) !important; border-color: transparent !important; }
+
+    :host-context(body.dark-theme) .shutdown-sheet {
+      background: #101827; color: #f8fafc; border-color: rgba(148,163,184,.22);
+    }
+    :host-context(body.dark-theme) .shutdown-header,
+    :host-context(body.dark-theme) .shutdown-meta,
+    :host-context(body.dark-theme) .shutdown-footer { background: #0b1220; border-color: rgba(148,163,184,.18); }
+    :host-context(body.dark-theme) .shutdown-heading h3,
+    :host-context(body.dark-theme) .shutdown-meta strong,
+    :host-context(body.dark-theme) .shutdown-section-head h4,
+    :host-context(body.dark-theme) .shutdown-item-copy strong,
+    :host-context(body.dark-theme) .shutdown-foot-copy strong { color: #f8fafc; }
+    :host-context(body.dark-theme) .shutdown-sub,
+    :host-context(body.dark-theme) .shutdown-meta span,
+    :host-context(body.dark-theme) .shutdown-section-head p,
+    :host-context(body.dark-theme) .shutdown-item-copy span,
+    :host-context(body.dark-theme) .shutdown-foot-copy span,
+    :host-context(body.dark-theme) .shutdown-warning p { color: #94a3b8; }
+    :host-context(body.dark-theme) .shutdown-body { background: #101827; }
+    :host-context(body.dark-theme) .shutdown-item {
+      background: #0b1220; border-color: rgba(148,163,184,.18); color: #f8fafc;
+    }
+    :host-context(body.dark-theme) .shutdown-item-icon,
+    :host-context(body.dark-theme) .shutdown-pill,
+    :host-context(body.dark-theme) .shutdown-x { background: #101827; border-color: rgba(148,163,184,.22); color: #e2e8f0; }
+
+    @media (max-width: 720px) {
+      .shutdown-meta { grid-template-columns: 1fr 1fr; }
+      .shutdown-meta > div:nth-child(2) { border-right: 0; }
+      .shutdown-footer { flex-direction: column; align-items: stretch; }
+      .shutdown-foot-actions { justify-content: flex-end; }
+    }
+
     .backup-lifecycle-overlay { z-index: 2147483647; }
     .backup-lifecycle-steps { grid-template-columns: repeat(3, 1fr); }
     .exit-progress-steps { grid-template-columns: repeat(5, minmax(0, 1fr)); }
@@ -316,40 +418,6 @@ type ExitProgressState = {
     @keyframes backupIndeterminate {
       0% { transform: translateX(-40%); }
       100% { transform: translateX(180%); }
-    }
-    .shutdown-meta > div { padding: 13px 18px; border-right: 1px solid var(--border); min-width: 0; }
-    .shutdown-meta > div:last-child { border-right: 0; }
-    .shutdown-meta span { display: block; color: var(--muted); font-size: 10px; text-transform: uppercase; font-weight: 900; letter-spacing: 0.06em; }
-    .shutdown-meta b { display: block; margin-top: 5px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .danger-text { color: #f87171 !important; }
-    .shutdown-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 16px 20px 20px; display: grid; gap: 14px; }
-    .shutdown-warning { border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.10); border-radius: 16px; padding: 12px 14px; }
-    .shutdown-warning b { display: block; margin-bottom: 4px; color: #fca5a5; }
-    .shutdown-warning p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
-    .shutdown-section-head h4 { margin: 0 0 3px; font-size: 14px; }
-    .shutdown-section-head p { margin: 0; color: var(--muted); font-size: 12px; }
-    .shutdown-list { display: grid; gap: 8px; }
-    .shutdown-item { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 12px; align-items: center; border: 1px solid var(--border); border-radius: 16px; padding: 12px 14px; background: color-mix(in srgb, var(--panel) 88%, var(--row)); }
-    .shutdown-item.active { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
-    .shutdown-item.warn { border-color: rgba(239, 68, 68, 0.40); background: rgba(239, 68, 68, 0.06); }
-    .shutdown-item-icon { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; background: var(--row); border: 1px solid var(--border); font-size: 16px; }
-    .shutdown-item-copy b { display: block; font-size: 13px; }
-    .shutdown-item-copy small { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.35; }
-    .shutdown-item em { font-style: normal; font-size: 11px; font-weight: 900; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 5px 9px; white-space: nowrap; }
-    .shutdown-item.active em { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
-    .shutdown-item.warn em { color: #f87171; border-color: rgba(239, 68, 68, 0.35); }
-    .shutdown-footer { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 24px; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--panel) 96%, var(--row)); }
-    .output-footer-summary b, .output-footer-summary small { display: block; }
-    .output-footer-summary b { font-size: 13px; }
-    .output-footer-summary small { margin-top: 2px; color: var(--muted); font-size: 11px; }
-    .output-footer-actions { display: flex; align-items: center; gap: 9px; }
-    .danger-exit { background: linear-gradient(135deg, #ef4444, #dc2626) !important; border-color: transparent !important; }
-    @keyframes shutdownPop { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
-    @media (max-width: 720px) {
-      .shutdown-meta { grid-template-columns: 1fr 1fr; }
-      .shutdown-meta > div:nth-child(2) { border-right: 0; }
-      .shutdown-footer { flex-direction: column; align-items: stretch; }
-      .output-footer-actions { justify-content: flex-end; }
     }
   `]
 })
@@ -1221,8 +1289,11 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   private applyTheme(){
-    document.body.classList.toggle('light', this.theme()==='light');
-    document.body.classList.toggle('dark-theme', this.theme()==='dark');
+    const light = this.theme() === 'light';
+    document.body.classList.toggle('light', light);
+    document.body.classList.toggle('dark-theme', !light);
+    document.documentElement.classList.toggle('light', light);
+    document.documentElement.classList.toggle('dark-theme', !light);
   }
 
   private syncDirtyState(){

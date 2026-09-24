@@ -71,6 +71,130 @@ body {
 
 button { font-family: inherit; }
 
+/* App-wide click / press feel — real buttons only (never [role=button] / filter:
+   those were blanking list rows and modal body text in Electron light mode). */
+button,
+input[type='button'],
+input[type='submit'],
+input[type='reset'],
+.btn,
+.action-btn,
+.edit-btn,
+.icon-action,
+.icon-btn,
+.nav-button,
+.side-toggle,
+.theme-toggle,
+.theme-button,
+.primary-action,
+.catalog-btn,
+.formula-chip-action,
+.mini-status-action,
+.remove-btn,
+.mat-mdc-button,
+.mat-mdc-raised-button,
+.mat-mdc-outlined-button,
+.mat-mdc-unelevated-button,
+.mat-mdc-stroked-button,
+.mat-mdc-icon-button,
+.mat-mdc-fab,
+.mat-mdc-mini-fab {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition:
+    transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.12s ease,
+    border-color 0.16s ease,
+    background-color 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease;
+}
+
+button:not(:disabled):not([disabled]):active,
+input[type='button']:not(:disabled):active,
+input[type='submit']:not(:disabled):active,
+input[type='reset']:not(:disabled):active,
+.btn:not(:disabled):active,
+.action-btn:not(:disabled):active,
+.edit-btn:not(:disabled):active,
+.icon-action:not(:disabled):active,
+.icon-btn:not(:disabled):active,
+.nav-button:not(:disabled):active,
+.side-toggle:not(:disabled):active,
+.theme-toggle:not(:disabled):active,
+.theme-button:not(:disabled):active,
+.primary-action:not(:disabled):active,
+.catalog-btn:not(:disabled):active,
+.formula-chip-action:not(:disabled):active,
+.mini-status-action:not(:disabled):active,
+.remove-btn:not(:disabled):active,
+.mat-mdc-button:not(:disabled):active,
+.mat-mdc-raised-button:not(:disabled):active,
+.mat-mdc-outlined-button:not(:disabled):active,
+.mat-mdc-unelevated-button:not(:disabled):active,
+.mat-mdc-stroked-button:not(:disabled):active,
+.mat-mdc-icon-button:not(:disabled):active,
+.mat-mdc-fab:not(:disabled):active,
+.mat-mdc-mini-fab:not(:disabled):active {
+  transform: translateY(1px) scale(0.97);
+  box-shadow:
+    inset 0 2px 5px rgba(15, 23, 42, 0.18),
+    0 1px 2px rgba(15, 23, 42, 0.06) !important;
+}
+
+button:disabled,
+button[disabled],
+input[type='button']:disabled,
+input[type='submit']:disabled,
+.btn:disabled,
+.action-btn:disabled,
+.edit-btn:disabled,
+.primary-action:disabled,
+.mat-mdc-button:disabled,
+.mat-mdc-raised-button:disabled,
+.mat-mdc-outlined-button:disabled,
+.mat-mdc-icon-button:disabled {
+  transform: none !important;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button,
+  input[type='button'],
+  input[type='submit'],
+  input[type='reset'],
+  .btn,
+  .action-btn,
+  .edit-btn,
+  .icon-action,
+  .icon-btn,
+  .nav-button,
+  .side-toggle,
+  .theme-toggle,
+  .theme-button,
+  .primary-action,
+  .mat-mdc-button,
+  .mat-mdc-raised-button,
+  .mat-mdc-outlined-button,
+  .mat-mdc-unelevated-button,
+  .mat-mdc-icon-button,
+  .mat-mdc-fab,
+  .mat-mdc-mini-fab {
+    transition: none !important;
+  }
+
+  button:not(:disabled):not([disabled]):active,
+  .btn:not(:disabled):active,
+  .action-btn:not(:disabled):active,
+  .edit-btn:not(:disabled):active,
+  .nav-button:not(:disabled):active,
+  .primary-action:not(:disabled):active,
+  .mat-mdc-button:not(:disabled):active,
+  .mat-mdc-icon-button:not(:disabled):active {
+    transform: none !important;
+  }
+}
+
 .mat-mdc-button,
 .mat-mdc-raised-button,
 .mat-mdc-outlined-button,
@@ -374,8 +498,56 @@ button .ico,
 
 /* LIMS modular shell + rich billing stepper update */
 html, body { height: 100%; overflow: hidden; }
-body.light { --bg:#f3f6fb; --panel:#ffffff; --panel2:#f8fafc; --sidebar:#ffffff; --text:#0f172a; --muted:#64748b; --border:rgba(15,23,42,.12); --accent:#2563eb; --accent2:#7c3aed; --accent-soft:rgba(37,99,235,.12); --danger-soft:rgba(239,68,68,.12); }
-body.dark-theme, body:not(.light) { --bg:#07111f; --panel:#101827; --panel2:#0b1220; --sidebar:#0a1220; --text:#f8fafc; --muted:#94a3b8; --border:rgba(255,255,255,.10); --accent:#3b82f6; --accent2:#8b5cf6; --accent-soft:rgba(59,130,246,.15); --danger-soft:rgba(239,68,68,.14); }
+/* Full token sets — incomplete light vars left --row/--input on dark values and
+   blanked tables/modals (white-on-white or near-invisible borders). */
+body.light,
+html.light,
+.app.light,
+.pro-shell.light {
+  --bg:#f3f6fb;
+  --sidebar:#ffffff;
+  --topbar:#ffffff;
+  --panel:#ffffff;
+  --panel2:#f8fafc;
+  --row:#f8fafc;
+  --input:#ffffff;
+  --code:#f8fafc;
+  --text:#0f172a;
+  --muted:#64748b;
+  --border:rgba(15,23,42,.12);
+  --shadow:0 18px 55px rgba(15,23,42,.10);
+  --accent:#2563eb;
+  --accent2:#7c3aed;
+  --accent-soft:rgba(37,99,235,.12);
+  --accent-gradient:linear-gradient(135deg,#2563eb,#7c3aed);
+  --glow:0 16px 34px rgba(37,99,235,.28);
+  --danger-soft:rgba(239,68,68,.12);
+  --scroll:rgba(37,99,235,.35);
+  color:#0f172a;
+}
+body.dark-theme,
+html.dark-theme {
+  --bg:#07111f;
+  --sidebar:#0a1220;
+  --topbar:#0b1220;
+  --panel:#101827;
+  --panel2:#0b1220;
+  --row:#0b1220;
+  --input:#0b1220;
+  --code:#020617;
+  --text:#f8fafc;
+  --muted:#94a3b8;
+  --border:rgba(255,255,255,.10);
+  --shadow:0 18px 60px rgba(0,0,0,.42);
+  --accent:#3b82f6;
+  --accent2:#8b5cf6;
+  --accent-soft:rgba(59,130,246,.15);
+  --accent-gradient:linear-gradient(135deg,#6366f1,#a855f7);
+  --glow:0 16px 34px rgba(139,92,246,.35);
+  --danger-soft:rgba(239,68,68,.14);
+  --scroll:rgba(139,92,246,.45);
+  color:#f8fafc;
+}
 
 .lims-shell.app { height:100vh; width:100vw; display:grid; grid-template-columns:280px minmax(0,1fr); background:var(--bg); color:var(--text); overflow:hidden; }
 .lims-shell.side-collapsed { grid-template-columns:84px minmax(0,1fr); }
@@ -426,6 +598,7 @@ body.light .btn.danger-soft, body.light .danger-outline { color:#991b1b; }
 mat-card,.shell-card { background:var(--panel)!important; color:var(--text)!important; border:1px solid var(--border)!important; border-radius:24px!important; padding:22px!important; box-shadow:0 20px 55px rgba(0,0,0,.16)!important; }
 mat-card>b { display:block; font-size:30px; margin:8px 0; }
 input,select,textarea { box-sizing:border-box; width:100%; background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:14px; padding:12px 14px; min-width:0; outline:none; }
+input[type="checkbox"],input[type="radio"] { width:16px; height:16px; min-width:16px; max-width:16px; padding:0; border-radius:4px; flex:0 0 16px; }
 input:focus,select:focus,textarea:focus { border-color:#60a5fa; box-shadow:0 0 0 3px rgba(96,165,250,.15); }
 textarea { min-height:82px; resize:vertical; }
 .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:12px 0; }
@@ -1662,7 +1835,9 @@ body.light .top-search-results b.pay-cancelled { color: #e11d48 !important; }
   padding: 24px 28px 0 !important;
 }
 .pro-shell .pro-main:not(.billing-main-layout) .app-content-scroll {
-  display: contents;
+  display: block;
+  min-height: 0;
+  overflow: visible;
 }
 .pro-shell .pro-main.billing-main-layout > .fixed-billing-topbar {
   flex: 0 0 auto !important;
@@ -2693,7 +2868,7 @@ body:has(.quick-barcode-backdrop) .side-menu {
 @keyframes reportOrbit{to{transform:rotate(360deg)}}@keyframes reportShine{from{transform:translateX(-120%)}to{transform:translateX(120%)}}@keyframes reportOverlayIn{from{opacity:0}to{opacity:1}}@keyframes reportCardIn{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
 @media(max-width:620px){.report-process-card{padding:22px;border-radius:20px}.process-steps{grid-template-columns:repeat(2,1fr)}}
 
-/* Report Typing search autocomplete (CDK overlay � must be global) */
+/* Report Typing search autocomplete (CDK overlay  must be global) */
 .queue-search-ac-panel.mat-mdc-autocomplete-panel,
 .queue-search-ac-panel.mat-autocomplete-panel {
   background: var(--surface, var(--panel)) !important;
