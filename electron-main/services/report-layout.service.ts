@@ -618,14 +618,21 @@ export abstract class ReportLayoutService extends ReportCoreService {
       });
     }
     if (!stack.length) return { text: '' };
+    // Block top margin lives on this inner stack (inside the unbreakable row),
+    // so when the signature alone wraps to the next page the full margin moves
+    // with it instead of orphaning on the previous page.
+    const blockTopMarginPt = this.mmToPt(this.safeNumber(
+      rawSign?.blockTopMarginMm ?? rawSign?.blockTopOffsetMm ?? rawSign?.topOffsetMm,
+      0, 0, 200
+    ));
     return {
       stack,
       alignment: blockAlignment,
       margin: [
         this.mmToPt(this.safeNumber(rawSign?.blockLeftMarginMm ?? rawSign?.leftMarginMm, 0, -200, 200)),
-        this.mmToPt(this.safeNumber(rawSign?.blockTopOffsetMm ?? rawSign?.topOffsetMm, 0, -200, 200)),
+        blockTopMarginPt,
         this.mmToPt(this.safeNumber(rawSign?.blockRightMarginMm ?? rawSign?.rightMarginMm, 0, -200, 200)),
-        this.mmToPt(this.safeNumber(rawSign?.blockBottomOffsetMm ?? rawSign?.bottomOffsetMm, 0, -200, 200))
+        0
       ]
     };
   }
@@ -676,11 +683,16 @@ export abstract class ReportLayoutService extends ReportCoreService {
         stack: items.length ? items.map(sign => this.buildDynamicSignatureBlock(sign, align, rowImageZonePt)) : [{ text: ' ' }],
         alignment: align
       });
+      // Keep row top margin inside the unbreakable unit so a page wrap of the
+      // signature alone carries the full specified top margin (no orphan gap).
       out.push({
         unbreakable: true,
-        margin: [0, rowTop, 0, rowBottom],
-        columns: [makeSlot(slots.left, 'left'), makeSlot(slots.center, 'center'), makeSlot(slots.right, 'right')],
-        columnGap: this.mmToPt(this.reportNumber('report.simple.signatureColumnGapMm', 2, 0, 50))
+        margin: [0, 0, 0, rowBottom],
+        stack: [{
+          margin: [0, rowTop, 0, 0],
+          columns: [makeSlot(slots.left, 'left'), makeSlot(slots.center, 'center'), makeSlot(slots.right, 'right')],
+          columnGap: this.mmToPt(this.reportNumber('report.simple.signatureColumnGapMm', 2, 0, 50))
+        }]
       });
     });
     return out;
@@ -718,7 +730,12 @@ export abstract class ReportLayoutService extends ReportCoreService {
     const signBottomPt = this.mmToPt(this.reportNumber(key('MarginBottomMm'), 2, 0, 100), 5);
     const signOffsetXPt = this.mmToPt(this.reportNumber(key('OffsetXMm'), 0, -100, 100));
     const signOffsetYPt = this.mmToPt(this.reportNumber(key('OffsetYMm'), 0, -100, 100));
-    return [{ unbreakable: true, stack: signStack, margin: [signOffsetXPt, signTopPt + signOffsetYPt, -signOffsetXPt, signBottomPt] }];
+    // Top margin inside unbreakable so a wrap keeps the full gap on the new page.
+    return [{
+      unbreakable: true,
+      margin: [signOffsetXPt, 0, -signOffsetXPt, signBottomPt],
+      stack: [{ margin: [0, signTopPt + signOffsetYPt, 0, 0], stack: signStack }]
+    }];
   }
 
   protected buildReportLabSignatureBlock(options:any = {}): any[] {
