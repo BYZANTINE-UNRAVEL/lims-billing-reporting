@@ -618,11 +618,15 @@ export abstract class ReportLayoutService extends ReportCoreService {
       });
     }
     if (!stack.length) return { text: '' };
-    // Block top margin lives on this inner stack (inside the unbreakable row),
-    // so when the signature alone wraps to the next page the full margin moves
-    // with it instead of orphaning on the previous page.
+    // Block top/bottom margins live on this inner stack (inside the unbreakable
+    // row), so when the signature alone wraps to the next page the full margins
+    // move with it instead of orphaning on the previous page.
     const blockTopMarginPt = this.mmToPt(this.safeNumber(
       rawSign?.blockTopMarginMm ?? rawSign?.blockTopOffsetMm ?? rawSign?.topOffsetMm,
+      0, 0, 200
+    ));
+    const blockBottomMarginPt = this.mmToPt(this.safeNumber(
+      rawSign?.blockBottomMarginMm ?? rawSign?.blockBottomOffsetMm ?? rawSign?.bottomOffsetMm,
       0, 0, 200
     ));
     return {
@@ -632,7 +636,7 @@ export abstract class ReportLayoutService extends ReportCoreService {
         this.mmToPt(this.safeNumber(rawSign?.blockLeftMarginMm ?? rawSign?.leftMarginMm, 0, -200, 200)),
         blockTopMarginPt,
         this.mmToPt(this.safeNumber(rawSign?.blockRightMarginMm ?? rawSign?.rightMarginMm, 0, -200, 200)),
-        0
+        blockBottomMarginPt
       ]
     };
   }
